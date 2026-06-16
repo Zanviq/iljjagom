@@ -1,0 +1,49 @@
+# === 일짜곰 프로젝트 비공개 작업 공간 ===
+# for-claude 폴더는 GitHub에 올라가면 안 된다 (작업 기록/기획/지침 전체)
+documents/for-claude/
+
+# Obsidian 보관용 메타데이터
+.obsidian/
+documents/일짜곰 문서 폴더/
+
+# === 환경 변수 / 시크릿 ===
+.env
+.env.*
+!.env.example
+*.local
+
+# === Python (backend, FastAPI) ===
+__pycache__/
+*.py[cod]
+*.egg-info/
+.venv/
+venv/
+env/
+.pytest_cache/
+.mypy_cache/
+.ruff_cache/
+
+# === Node / Next.js (frontend) ===
+node_modules/
+.next/
+out/
+dist/
+build/
+*.tsbuildinfo
+.npm/
+.pnpm-store/
+
+# === Supabase ===
+.supabase/
+
+# === OS / 에디터 ===
+.DS_Store
+Thumbs.db
+.vscode/
+.idea/
+
+# === 로그 ===
+*.log
+npm-debug.log*
+yarn-debug.log*
+yarn-error.log*
