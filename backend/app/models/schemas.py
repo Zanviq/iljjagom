@@ -25,9 +25,10 @@ class Me(CamelModel):
 
 class OnboardingRequest(CamelModel):
     role: Literal["student", "teacher"]
-    class_code: str | None = None
+    # 학급 코드: 영숫자 4~12자만 허용(패턴 주입 방지). 대소문자 무시는 조회 시 정규화.
+    class_code: str | None = Field(default=None, pattern=r"^[A-Za-z0-9]{4,12}$")
     guardian_consent: bool = False
-    grade: int | None = None
+    grade: int | None = Field(default=None, ge=1, le=12)
 
 
 # --- 교사 / 발제 ---

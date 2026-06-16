@@ -39,7 +39,7 @@ def _bearer_token(request: Request) -> str:
 
 def _resolve_identity(token: str, settings: Settings) -> tuple[str, str]:
     """토큰에서 (user_id, email) 추출."""
-    if settings.dev_auth and token.startswith("dev:"):
+    if settings.dev_auth_enabled and token.startswith("dev:"):
         parts = token.split(":")
         if len(parts) < 2 or not parts[1]:
             raise unauthorized("개발 토큰 형식이 올바르지 않습니다. (dev:email:role)")
@@ -79,7 +79,7 @@ async def get_current_user(
 
     # 개발 토큰의 명시 역할(dev:email:role)
     dev_role = None
-    if settings.dev_auth and token.startswith("dev:"):
+    if settings.dev_auth_enabled and token.startswith("dev:"):
         parts = token.split(":")
         if len(parts) >= 3 and parts[2]:
             dev_role = parts[2].strip().lower()

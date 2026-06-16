@@ -10,6 +10,13 @@ from app.errors import register_exception_handlers
 
 def create_app() -> FastAPI:
     settings = get_settings()
+
+    # 보안: 운영 신호(JWT 시크릿)가 있는데 개발 인증이 켜져 있으면 기동 거부(설정 실수 차단).
+    if settings.dev_auth and settings.supabase_jwt_secret:
+        raise RuntimeError(
+            "DEV_AUTH 가 켜진 상태로 SUPABASE_JWT_SECRET 이 설정되어 있습니다. "
+            "운영 환경에서는 DEV_AUTH=false 로 두세요."
+        )
     app = FastAPI(
         title="일짜곰 백엔드",
         version="0.1.0",

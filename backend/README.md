@@ -50,8 +50,9 @@ cp .env.example .env   # 키가 없어도 동작 (인메모리 저장소 + mock 
 03-기능명세서의 API/SSE 계약이 그대로 동작한다(결정적 mock 응답).
 
 ## 인증 (개발)
-`.env` 의 `DEV_AUTH=true` 일 때, 토큰을 `Authorization: Bearer dev:<email>:<role>` 형식으로
-보내면 Supabase 없이 로그인 흐름을 검증할 수 있다. 운영에서는 `DEV_AUTH=false` + Supabase JWT.
+`.env` 의 `DEV_AUTH=true`(코드 기본값은 false) 일 때, 토큰을 `Authorization: Bearer dev:<email>:<role>`
+형식으로 보내면 Supabase 없이 로그인 흐름을 검증할 수 있다. 운영에서는 `DEV_AUTH=false` + Supabase JWT.
+보안상 `SUPABASE_JWT_SECRET` 이 설정되어 있으면 dev 토큰은 무시되고(fail-closed) 앱 기동도 거부된다.
 
 ## P1 범위
 로그인 → (교사)발제 → (학생)책 생성 → 기획 대화 → 설계(Bible) → 챕터 집필 SSE → 단어 도움.

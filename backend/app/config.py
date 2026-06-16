@@ -33,8 +33,8 @@ class Settings(BaseSettings):
     admin_emails: str = ""
     allowed_origins: str = "http://localhost:3000"
 
-    # 개발 인증
-    dev_auth: bool = True
+    # 개발 인증 — 보안 기본값은 False(opt-in). 운영에서는 절대 true 금지.
+    dev_auth: bool = False
 
     @property
     def admin_email_set(self) -> set[str]:
@@ -53,6 +53,14 @@ class Settings(BaseSettings):
     def use_real_ai(self) -> bool:
         """Google 키가 있으면 실제 Gemini/Imagen 호출, 없으면 mock."""
         return bool(self.google_api_key)
+
+    @property
+    def dev_auth_enabled(self) -> bool:
+        """개발 토큰(dev:*)은 명시적 opt-in(dev_auth)이고 실제 JWT 시크릿이 없을 때만 허용.
+
+        운영(시크릿 존재)에서는 DEV_AUTH 가 실수로 켜져도 우회 경로가 닫힌다(fail-closed).
+        """
+        return self.dev_auth and not self.supabase_jwt_secret
 
 
 @lru_cache

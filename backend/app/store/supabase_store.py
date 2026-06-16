@@ -76,8 +76,9 @@ class SupabaseStore(Store):
         return ClassroomRecord(**row) if row else None
 
     def get_classroom_by_code(self, code: str) -> ClassroomRecord | None:
+        # 리터럴 매칭(.eq). ilike 는 %/_ 가 와일드카드로 해석돼 패턴 주입 위험이 있다.
         row = self._one(
-            self.client.table("classrooms").select("*").ilike("code", code).limit(1).execute()
+            self.client.table("classrooms").select("*").eq("code", code.upper()).limit(1).execute()
         )
         return ClassroomRecord(**row) if row else None
 

@@ -204,6 +204,48 @@ async def test_onboarding_invalid_code(client):
     assert r.status_code == 400
 
 
+async def test_classcode_wildcard_rejected(client):
+    # ilike 패턴 주입 시도(%)는 계약 레벨에서 차단되어야 한다.
+    sh = auth("kid5@test", "student")
+    for bad in ["%", "_", "ABC%23", "' OR '1"]:
+        r = await client.post(
+            "/onboarding", headers=sh, json={"role": "student", "classCode": bad}
+        )
+        assert r.status_code == 400, bad
+
+
+async def test_reonboarding_cannot_change_role(client):
+    # 권한 상승 차단: 학생으로 온보딩한 뒤 교사로 재온보딩 → 403.
+    code, _, _ = await _teacher_makes_prompt(client)
+    sh = auth("kid6@test", "student")
+    r = await client.post(
+        "/onboarding", headers=sh, json={"role": "student", "classCode": code}
+    )
+    assert r.status_code == 200
+
+    r = await client.post("/onboarding", headers=sh, json={"role": "teacher"})
+    assert r.status_code == 403
+    assert r.json()["error"]["code"] == "forbidden"
+
+    # 같은 역할 재온보딩(동의 갱신 등)은 허용.
+    r = await client.post(
+        "/onboarding", headers=sh, json={"role": "student", "classCode": code, "guardianConsent": True}
+    )
+    assert r.status_code == 200
+
+
+def test_dev_auth_secure_defaults():
+    # 코드 기본값은 False(보안). (테스트 프로세스 env 는 DEV_AUTH=true 라 인스턴스가 아닌 필드 기본값을 본다.)
+    from app.config import Settings
+
+    assert Settings.model_fields["dev_auth"].default is False
+    # 시크릿이 있으면 DEV_AUTH 가 켜져도 fail-closed.
+    assert Settings(dev_auth=True, supabase_jwt_secret="x").dev_auth_enabled is False
+    # 시크릿이 없고 명시적으로 켰을 때만 dev 토큰 허용.
+    assert Settings(dev_auth=True, supabase_jwt_secret="").dev_auth_enabled is True
+    assert Settings(dev_auth=False, supabase_jwt_secret="").dev_auth_enabled is False
+
+
 async def _read_sse(client, url: str, headers: dict) -> list[tuple[str, dict]]:
     """SSE 응답을 (event, data) 목록으로 파싱."""
     events: list[tuple[str, dict]] = []

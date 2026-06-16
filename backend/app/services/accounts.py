@@ -1,14 +1,16 @@
 """계정/온보딩 서비스 — /me, /onboarding (FR-A1~A3)."""
 from __future__ import annotations
 
-import random
+import secrets
 import string
 
 from app.deps import CurrentUser
-from app.errors import validation_error
+from app.errors import forbidden, validation_error
 from app.models.schemas import Me, OnboardingRequest
 from app.store.base import Store
 from app.store.records import ProfileRecord
+
+CLASS_CODE_LEN = 8
 
 
 def build_me(user: CurrentUser) -> Me:
@@ -24,9 +26,10 @@ def build_me(user: CurrentUser) -> Me:
 
 
 def _generate_class_code(store: Store) -> str:
+    # CSPRNG(secrets) 로 추측 어려운 학급 코드 생성. 코드는 가입 권한 경계이므로 random 금지.
     alphabet = string.ascii_uppercase + string.digits
     for _ in range(20):
-        code = "".join(random.choices(alphabet, k=6))
+        code = "".join(secrets.choice(alphabet) for _ in range(CLASS_CODE_LEN))
         if not store.get_classroom_by_code(code):
             return code
     raise validation_error("학급 코드를 생성하지 못했습니다. 다시 시도해 주세요.")
@@ -34,6 +37,12 @@ def _generate_class_code(store: Store) -> str:
 
 def onboard(store: Store, user: CurrentUser, req: OnboardingRequest) -> Me:
     role = req.role  # student | teacher (admin 은 화이트리스트 전용)
+
+    # 권한 상승 차단: 이미 프로필이 있으면 재온보딩으로 역할을 바꿀 수 없다.
+    # (최초 역할 선택은 03-기능명세서 §4 계약. 역할 변경은 관리자/별도 절차로만.)
+    existing = user.profile or store.get_profile(user.id)
+    if existing and existing.role != role:
+        raise forbidden("역할은 변경할 수 없습니다. 관리자에게 문의하세요.")
 
     if role == "student":
         if not req.class_code:
