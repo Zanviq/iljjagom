@@ -18,6 +18,9 @@ export interface Me {
   grade: number | null;
   guardianConsent: boolean;
   needsOnboarding: boolean;
+  /** 학생이 가입한 학급(발제 진입점). 교사·관리자·미가입 학생은 null. (2026-06-16 계약 추가) */
+  classId: string | null;
+  className: string | null;
 }
 
 /** POST /onboarding 요청 */
