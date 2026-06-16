@@ -22,37 +22,64 @@ export function ChapterReader({ bookId, title, totalChaptersPlanned }: Props) {
   const [token, setToken] = useState<string | null | undefined>(undefined);
   const [chapterIdx, setChapterIdx] = useState(1);
 
+  useEffect(() => {
+    getClientAccessToken().then(setToken);
+  }, []);
+
+  return (
+    <section className="mx-auto max-w-2xl">
+      <div className="mb-4 flex items-center justify-between">
+        <h1 className="text-2xl font-extrabold">{title || "내 이야기"}</h1>
+        <span className="rounded-full bg-accent/40 px-3 py-1 text-sm font-bold">
+          {chapterIdx}
+          {totalChaptersPlanned ? ` / ${totalChaptersPlanned}` : ""} 장
+        </span>
+      </div>
+
+      {token === undefined ? (
+        <p className="rounded-card bg-surface p-6 text-muted ring-1 ring-border">
+          이야기를 준비하는 중이에요…
+        </p>
+      ) : (
+        // 챕터가 바뀌면 key 변경으로 스트림 컴포넌트를 새로 마운트(상태 초기화).
+        <ChapterStream
+          key={chapterIdx}
+          token={token}
+          bookId={bookId}
+          chapterIdx={chapterIdx}
+          onNext={() => setChapterIdx((i) => i + 1)}
+        />
+      )}
+    </section>
+  );
+}
+
+function ChapterStream({
+  token,
+  bookId,
+  chapterIdx,
+  onNext,
+}: {
+  token: string | null;
+  bookId: string;
+  chapterIdx: number;
+  onNext: () => void;
+}) {
   const [text, setText] = useState("");
   const [illustration, setIllustration] = useState<SSEIllustration | null>(null);
   const [activePrompt, setActivePrompt] = useState<string | null>(null);
   const [done, setDone] = useState<SSEDone | null>(null);
   const [streaming, setStreaming] = useState(true);
   const [streamError, setStreamError] = useState<string | null>(null);
-
-  // 단어 도움
   const [word, setWord] = useState<Word | null>(null);
   const [wordLoading, setWordLoading] = useState(false);
 
   const doneRef = useRef(false);
 
   useEffect(() => {
-    getClientAccessToken().then(setToken);
-  }, []);
-
-  useEffect(() => {
-    if (token === undefined) return;
-
     const controller = new AbortController();
     let cancelled = false;
     let offset = 0;
-
-    doneRef.current = false;
-    setText("");
-    setIllustration(null);
-    setActivePrompt(null);
-    setDone(null);
-    setStreamError(null);
-    setStreaming(true);
 
     async function run() {
       let attempts = 0;
@@ -60,7 +87,7 @@ export function ChapterReader({ bookId, title, totalChaptersPlanned }: Props) {
         let sawRetryable = false;
         try {
           await streamChapter({
-            token: token ?? null,
+            token,
             bookId,
             chapterIdx,
             fromOffset: offset,
@@ -87,7 +114,7 @@ export function ChapterReader({ bookId, title, totalChaptersPlanned }: Props) {
                   else {
                     setStreamError(evt.data.message);
                     setStreaming(false);
-                    doneRef.current = true; // 더 시도하지 않음
+                    doneRef.current = true;
                   }
                   break;
                 default:
@@ -96,16 +123,16 @@ export function ChapterReader({ bookId, title, totalChaptersPlanned }: Props) {
             },
           });
         } catch {
-          if (!cancelled) sawRetryable = true; // 네트워크 끊김 → 재연결
+          if (!cancelled) sawRetryable = true;
         }
 
         if (cancelled || doneRef.current) return;
         if (sawRetryable) {
           attempts++;
           await sleep(1000);
-          continue; // offset 부터 이어받기
+          continue;
         }
-        return; // done 없이 정상 종료
+        return;
       }
       if (!cancelled && !doneRef.current) {
         setStreaming(false);
@@ -127,14 +154,13 @@ export function ChapterReader({ bookId, title, totalChaptersPlanned }: Props) {
       setWordLoading(true);
       setWord(null);
       try {
-        const w = await getWord(token ?? null, bookId, clean);
+        const w = await getWord(token, bookId, clean);
         setWord(w);
       } catch (e) {
         setWord({
           term: clean,
           reading: clean,
-          meaning:
-            e instanceof ApiError ? e.message : "뜻을 찾지 못했어요.",
+          meaning: e instanceof ApiError ? e.message : "뜻을 찾지 못했어요.",
         });
       } finally {
         setWordLoading(false);
@@ -151,16 +177,7 @@ export function ChapterReader({ bookId, title, totalChaptersPlanned }: Props) {
   const canGoNext = done?.nextChapterAvailable ?? false;
 
   return (
-    <section className="mx-auto max-w-2xl">
-      <div className="mb-4 flex items-center justify-between">
-        <h1 className="text-2xl font-extrabold">{title || "내 이야기"}</h1>
-        <span className="rounded-full bg-accent/40 px-3 py-1 text-sm font-bold">
-          {chapterIdx}
-          {totalChaptersPlanned ? ` / ${totalChaptersPlanned}` : ""} 장
-        </span>
-      </div>
-
-      {/* 유도모드: 삽화 선노출 + 능동 질문 (P2 이벤트, 오면 표시) */}
+    <>
       {illustration && (
         // eslint-disable-next-line @next/next/no-img-element
         <img
@@ -213,15 +230,14 @@ export function ChapterReader({ bookId, title, totalChaptersPlanned }: Props) {
               </ul>
             </>
           )}
-          {canGoNext && (
+          {canGoNext ? (
             <button
-              onClick={() => setChapterIdx((i) => i + 1)}
+              onClick={onNext}
               className={buttonClass("primary", "lg", "mt-4 w-full")}
             >
               다음 장으로 →
             </button>
-          )}
-          {!canGoNext && (
+          ) : (
             <p className="mt-2 text-center font-bold text-success">
               🎉 이야기를 모두 읽었어요!
             </p>
@@ -236,6 +252,6 @@ export function ChapterReader({ bookId, title, totalChaptersPlanned }: Props) {
           onClose={() => setWord(null)}
         />
       )}
-    </section>
+    </>
   );
 }
