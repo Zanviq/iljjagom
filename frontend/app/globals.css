@@ -1,0 +1,81 @@
+@import "tailwindcss";
+
+/*
+  일짜곰 디자인 토큰 (동화풍, 저연령 UX 우선)
+  - 큰 글자 스케일, 부드러운 색상, 높은 명도 대비, 큰 터치 영역
+  - 폰트: Pretendard(한글 가독성) + 시스템 폴백
+*/
+
+:root {
+  --background: #fdf8f0; /* 따뜻한 크림 */
+  --surface: #ffffff;
+  --foreground: #3a2e22; /* 짙은 갈색 텍스트 */
+  --muted: #8a7a68;
+
+  --primary: #f5872e; /* 주황 (CTA) */
+  --primary-foreground: #ffffff;
+  --secondary: #6cb4a4; /* 청록 (보조) */
+  --accent: #ffd45e; /* 노랑 (강조) */
+
+  --border: #ecdfca;
+  --ring: #f5872e;
+
+  --danger: #e0594a;
+  --success: #4f9d69;
+
+  --radius: 1.25rem;
+}
+
+@theme inline {
+  --color-background: var(--background);
+  --color-surface: var(--surface);
+  --color-foreground: var(--foreground);
+  --color-muted: var(--muted);
+
+  --color-primary: var(--primary);
+  --color-primary-foreground: var(--primary-foreground);
+  --color-secondary: var(--secondary);
+  --color-accent: var(--accent);
+
+  --color-border: var(--border);
+  --color-ring: var(--ring);
+  --color-danger: var(--danger);
+  --color-success: var(--success);
+
+  --font-sans: "Pretendard Variable", "Pretendard", system-ui, -apple-system,
+    "Segoe UI", Roboto, "Apple SD Gothic Neo", "Noto Sans KR", sans-serif;
+
+  --radius-card: var(--radius);
+}
+
+html {
+  font-size: 18px; /* 저연령 가독성: 기본 폰트 크게 */
+}
+
+body {
+  background: var(--background);
+  color: var(--foreground);
+  font-family: var(--font-sans);
+  line-height: 1.7;
+  -webkit-font-smoothing: antialiased;
+}
+
+/* 본문 스트리밍 타이핑 커서 */
+.streaming-cursor::after {
+  content: "▍";
+  margin-left: 1px;
+  animation: blink 1s steps(1) infinite;
+  color: var(--primary);
+}
+
+@keyframes blink {
+  50% {
+    opacity: 0;
+  }
+}
+
+/* 포커스 접근성 (저연령·키보드 사용자) */
+:where(a, button, input, textarea, select):focus-visible {
+  outline: 3px solid var(--ring);
+  outline-offset: 2px;
+}
