@@ -193,6 +193,17 @@ export interface AdminUsage {
   safetyFlags: { open: number; total: number };
 }
 
+/** GET /health 응답 (백엔드 모드 배지용) */
+export interface Health {
+  status: string;
+  version: string;
+  env: string;
+  /** "supabase" | "memory" 등 */
+  storage: string;
+  /** "google" | "mock" 등 */
+  ai: string;
+}
+
 /** 공통 에러 규약 (§4.1) */
 export interface ApiErrorBody {
   error: {

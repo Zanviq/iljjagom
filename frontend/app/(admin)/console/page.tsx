@@ -7,8 +7,8 @@ export default async function AdminConsolePage() {
 
   return (
     <section>
-      <h1 className="text-3xl font-extrabold">운영 콘솔</h1>
-      <p className="mt-1 text-muted">사용량과 안전 신호를 모니터링해요.</p>
+      <h1 className="text-3xl font-extrabold">개요</h1>
+      <p className="mt-1 text-muted">사용량과 안전 신호를 한눈에 봐요.</p>
 
       <h2 className="mb-3 mt-8 text-lg font-bold">사용자</h2>
       <dl className="grid grid-cols-2 gap-3 sm:grid-cols-4">

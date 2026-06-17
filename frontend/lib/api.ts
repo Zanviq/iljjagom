@@ -16,6 +16,7 @@ import type {
   CreatePromptRequest,
   Dashboard,
   DesignStatus,
+  Health,
   Learning,
   LetterReply,
   Me,
@@ -236,4 +237,9 @@ export function postLetter(
 /** 관리자 사용량/안전 신호 (FR-M1). admin만. */
 export function getAdminUsage(token: string | null): Promise<AdminUsage> {
   return apiFetch<AdminUsage>("/admin/usage", { token });
+}
+
+/** 백엔드 상태/모드(저장소·AI). 인증 불필요. 관리자 콘솔 모드 배지용. */
+export function getHealth(): Promise<Health> {
+  return apiFetch<Health>("/health");
 }
