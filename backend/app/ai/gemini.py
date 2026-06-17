@@ -7,11 +7,37 @@ from __future__ import annotations
 
 import asyncio
 import hashlib
-from collections.abc import AsyncIterator
+import time
+from collections.abc import AsyncIterator, Callable
+from typing import TypeVar
 
 from app.config import Settings, get_settings
 
 EMBED_DIM = 768
+
+# 일시 오류(과부하/한도) 신호 — 짧은 백오프 후 재시도.
+_TRANSIENT_SIGNALS = ("503", "unavailable", "overloaded", "429", "resource_exhausted", "rate")
+_T = TypeVar("_T")
+
+
+def _is_transient(exc: Exception) -> bool:
+    msg = str(exc).lower()
+    return any(sig in msg for sig in _TRANSIENT_SIGNALS)
+
+
+def _retry_call(fn: Callable[[], _T], attempts: int = 3, base_delay: float = 1.0) -> _T:
+    """동기 호출을 일시 오류 시 지수 백오프로 재시도(to_thread 내부에서 실행)."""
+    last: Exception | None = None
+    for i in range(attempts):
+        try:
+            return fn()
+        except Exception as e:  # noqa: BLE001 — 일시 오류만 재시도, 그 외 재던짐
+            last = e
+            if not _is_transient(e) or i == attempts - 1:
+                raise
+            time.sleep(base_delay * (2 ** i))
+    assert last is not None
+    raise last
 
 
 def _deterministic_embedding(text: str, dim: int = EMBED_DIM) -> list[float]:
@@ -49,7 +75,7 @@ class GeminiClient:
             resp = self._client.models.generate_content(model=model, contents=prompt)
             return resp.text or ""
 
-        return await asyncio.to_thread(_call)
+        return await asyncio.to_thread(lambda: _retry_call(_call))
 
     async def stream_text(self, model: str, prompt: str) -> AsyncIterator[str]:
         """토큰(조각) 단위 비동기 스트림. mock 은 호출자가 조립한다(여기선 단일 반환)."""
@@ -60,7 +86,7 @@ class GeminiClient:
         def _iter():
             return self._client.models.generate_content_stream(model=model, contents=prompt)
 
-        stream = await asyncio.to_thread(_iter)
+        stream = await asyncio.to_thread(lambda: _retry_call(_iter))
         for chunk in stream:
             text = getattr(chunk, "text", None)
             if text:
@@ -72,31 +98,41 @@ class GeminiClient:
             return None
 
         def _call() -> bytes | None:
+            resp = self._client.models.generate_images(
+                model=self.settings.imagen_model, prompt=prompt
+            )
+            images = getattr(resp, "generated_images", None) or []
+            if not images:
+                return None
+            image = getattr(images[0], "image", None)
+            return getattr(image, "image_bytes", None)
+
+        def _safe() -> bytes | None:
+            # 일시 오류는 재시도하고, 그 외 실패는 None 으로 폴백(placeholder 사용).
             try:
-                resp = self._client.models.generate_images(
-                    model=self.settings.imagen_model, prompt=prompt
-                )
-                images = getattr(resp, "generated_images", None) or []
-                if not images:
-                    return None
-                image = getattr(images[0], "image", None)
-                return getattr(image, "image_bytes", None)
+                return _retry_call(_call)
             except Exception:
                 return None
 
-        return await asyncio.to_thread(_call)
+        return await asyncio.to_thread(_safe)
 
     async def embed(self, text: str) -> list[float]:
         if self.mock:
             return _deterministic_embedding(text)
 
         def _call() -> list[float]:
+            from google.genai import types
+
+            # gemini-embedding-001 기본 출력은 3072차원이라, DB 스키마/HNSW(vector(768))에
+            # 맞춰 output_dimensionality 로 768 로 줄인다(코사인 검색이라 별도 정규화 불필요).
             resp = self._client.models.embed_content(
-                model=self.settings.gemini_embed_model, contents=text
+                model=self.settings.gemini_embed_model,
+                contents=text,
+                config=types.EmbedContentConfig(output_dimensionality=EMBED_DIM),
             )
             return list(resp.embeddings[0].values)
 
-        return await asyncio.to_thread(_call)
+        return await asyncio.to_thread(lambda: _retry_call(_call))
 
 
 _client: GeminiClient | None = None

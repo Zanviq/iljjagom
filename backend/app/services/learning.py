@@ -42,7 +42,14 @@ async def build_learning(
         for w in c.words:
             if w not in terms:
                 terms.append(w)
-    vocab: list[Word] = [await words.lookup(gemini, t) for t in terms[:8]]
+    # 뜻풀이는 외부 AI 호출이라 일시 오류(503)가 날 수 있다 → 실패한 단어는 건너뛰고
+    # 나머지 학습 활동(quiz/essay/emotion)은 그대로 제공(부분 강등).
+    vocab: list[Word] = []
+    for t in terms[:8]:
+        try:
+            vocab.append(await words.lookup(gemini, t))
+        except Exception:
+            continue
 
     # 2) 퀴즈: 학습목표(이벤트별 objective, 없으면 발제 목표)에서 생성.
     objectives = [e.get("objective") for e in bible.get("events", []) if e.get("objective")]
