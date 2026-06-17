@@ -244,6 +244,44 @@ class AdminUsageResponse(CamelModel):
     safety_flags: SafetyStat = SafetyStat()
 
 
+# --- AI 세션 / ReAct 트레이스 (관리자 관측 · 03 §4.2) ---
+class AiStepView(CamelModel):
+    idx: int
+    thought: str | None = None
+    skill: str | None = None
+    args: dict[str, Any] = {}
+    observation: dict[str, Any] = {}
+    tokens_in: int = 0
+    tokens_out: int = 0
+    ms: int | None = None
+    created_at: str = ""
+
+
+class AiSessionView(CamelModel):
+    id: str
+    book_id: str | None = None
+    role: str
+    model: str | None = None
+    status: str  # running|awaiting_user|done|error
+    summary: str | None = None
+    error: str | None = None
+    started_at: str = ""
+    ended_at: str | None = None
+
+
+class AiSessionsResponse(CamelModel):
+    sessions: list[AiSessionView] = []
+
+
+class AiSessionDetail(AiSessionView):
+    steps: list[AiStepView] = []
+
+
+class AnswerRequest(CamelModel):
+    choice: str | None = None
+    text: str | None = None
+
+
 def serialize(model: CamelModel) -> dict[str, Any]:
     """응답 직렬화: camelCase alias 사용."""
     return model.model_dump(by_alias=True)

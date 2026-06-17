@@ -5,22 +5,34 @@
 """
 from __future__ import annotations
 
+import re
+from datetime import datetime, timedelta, timezone
 from typing import Any
 
 from app.config import Settings
 from app.store.base import Store
 from app.store.records import (
+    AiSessionRecord,
+    AiStepRecord,
+    AuditRecord,
     BibleRecord,
     BookRecord,
     ChapterRecord,
     ChunkRecord,
     ClassroomRecord,
+    MessageRecord,
+    NotificationRecord,
     PlanMessageRecord,
     ProfileRecord,
     PromptRecord,
     SafetyFlagRecord,
+    TokenUsageRecord,
 )
 from app.util import cosine_similarity, now_iso
+
+# PostgREST 필터 보간 전 검증용 — UUID 형식 / 허용 역할.
+_UUID_RE = re.compile(r"\A[0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{12}\Z")
+_VALID_ROLES = {"student", "teacher", "admin"}
 
 
 class SupabaseStore(Store):
@@ -414,3 +426,224 @@ class SupabaseStore(Store):
                 "total": self._count("safety_flags"),
             },
         }
+
+    # --- AI 세션 / ReAct 트레이스 ---
+    def create_ai_session(
+        self, book_id: str | None, role: str, model: str | None = None
+    ) -> AiSessionRecord:
+        row = self._one(
+            self.client.table("ai_sessions")
+            .insert({"book_id": book_id, "role": role, "model": model})
+            .execute()
+        )
+        return AiSessionRecord(**row)
+
+    def update_ai_session(self, session_id: str, **fields: Any) -> AiSessionRecord:
+        row = self._one(
+            self.client.table("ai_sessions").update(fields).eq("id", session_id).execute()
+        )
+        return AiSessionRecord(**row)
+
+    def get_ai_session(self, session_id: str) -> AiSessionRecord | None:
+        row = self._one(
+            self.client.table("ai_sessions").select("*").eq("id", session_id).limit(1).execute()
+        )
+        return AiSessionRecord(**row) if row else None
+
+    def list_ai_sessions(
+        self, book_id: str | None = None, status: str | None = None, limit: int = 50
+    ) -> list[AiSessionRecord]:
+        q = self.client.table("ai_sessions").select("*")
+        if book_id is not None:
+            q = q.eq("book_id", book_id)
+        if status is not None:
+            q = q.eq("status", status)
+        rows = self._rows(q.order("started_at", desc=True).limit(limit).execute())
+        return [AiSessionRecord(**r) for r in rows]
+
+    def add_ai_step(
+        self, session_id: str, idx: int, thought: str | None, skill: str | None,
+        args: dict[str, Any], observation: dict[str, Any],
+        tokens_in: int = 0, tokens_out: int = 0, ms: int | None = None,
+    ) -> AiStepRecord:
+        row = self._one(
+            self.client.table("ai_steps")
+            .insert({
+                "session_id": session_id, "idx": idx, "thought": thought, "skill": skill,
+                "args": args or {}, "observation": observation or {},
+                "tokens_in": tokens_in, "tokens_out": tokens_out, "ms": ms,
+            })
+            .execute()
+        )
+        return AiStepRecord(**row)
+
+    def list_ai_steps(self, session_id: str) -> list[AiStepRecord]:
+        rows = self._rows(
+            self.client.table("ai_steps")
+            .select("*").eq("session_id", session_id).order("idx").execute()
+        )
+        return [AiStepRecord(**r) for r in rows]
+
+    # --- messages ---
+    def add_message(
+        self, book_id: str | None, user_id: str | None, role: str, kind: str,
+        content: str, session_id: str | None = None,
+    ) -> MessageRecord:
+        row = self._one(
+            self.client.table("messages")
+            .insert({
+                "book_id": book_id, "user_id": user_id, "role": role,
+                "kind": kind, "content": content, "session_id": session_id,
+            })
+            .execute()
+        )
+        return MessageRecord(**row)
+
+    def list_messages(self, book_id: str, kind: str | None = None) -> list[MessageRecord]:
+        q = self.client.table("messages").select("*").eq("book_id", book_id)
+        if kind is not None:
+            q = q.eq("kind", kind)
+        rows = self._rows(q.order("created_at").execute())
+        return [MessageRecord(**r) for r in rows]
+
+    # --- token_usage ---
+    def add_token_usage(
+        self, session_id: str | None, model: str,
+        tokens_in: int = 0, tokens_out: int = 0, est_cost: float = 0.0,
+    ) -> TokenUsageRecord:
+        row = self._one(
+            self.client.table("token_usage")
+            .insert({
+                "session_id": session_id, "model": model,
+                "tokens_in": tokens_in, "tokens_out": tokens_out, "est_cost": est_cost,
+            })
+            .execute()
+        )
+        return self._token_usage_rec(row) if row else TokenUsageRecord(
+            id="", session_id=session_id, model=model,
+            tokens_in=tokens_in, tokens_out=tokens_out, est_cost=est_cost,
+        )
+
+    def _token_usage_rec(self, row: dict) -> TokenUsageRecord:
+        return TokenUsageRecord(
+            id=row["id"], session_id=row.get("session_id"), model=row["model"],
+            tokens_in=row.get("tokens_in") or 0, tokens_out=row.get("tokens_out") or 0,
+            est_cost=float(row.get("est_cost") or 0), created_at=row.get("created_at") or "",
+        )
+
+    def token_usage_summary(self, since: str | None = None) -> dict[str, Any]:
+        q = self.client.table("token_usage").select("model, tokens_in, tokens_out, est_cost")
+        if since is not None:
+            q = q.gte("created_at", since)
+        rows = self._rows(q.execute())
+        by_model: dict[str, dict[str, Any]] = {}
+        for r in rows:
+            m = by_model.setdefault(
+                r["model"], {"calls": 0, "tokens_in": 0, "tokens_out": 0, "est_cost": 0.0}
+            )
+            m["calls"] += 1
+            m["tokens_in"] += r.get("tokens_in") or 0
+            m["tokens_out"] += r.get("tokens_out") or 0
+            m["est_cost"] += float(r.get("est_cost") or 0)
+        return {
+            "calls": len(rows),
+            "tokens_in": sum(r.get("tokens_in") or 0 for r in rows),
+            "tokens_out": sum(r.get("tokens_out") or 0 for r in rows),
+            "est_cost": sum(float(r.get("est_cost") or 0) for r in rows),
+            "by_model": by_model,
+        }
+
+    # --- notifications ---
+    def create_notification(
+        self, title: str, body: str | None = None, level: str = "info",
+        target_user_id: str | None = None, target_role: str | None = None,
+        is_broadcast: bool = False,
+    ) -> NotificationRecord:
+        row = self._one(
+            self.client.table("notifications")
+            .insert({
+                "title": title, "body": body, "level": level,
+                "target_user_id": target_user_id, "target_role": target_role,
+                "is_broadcast": is_broadcast,
+            })
+            .execute()
+        )
+        return NotificationRecord(**row)
+
+    def list_notifications(
+        self, user_id: str, role: str, unread_only: bool = False, limit: int = 50
+    ) -> list[NotificationRecord]:
+        # PostgREST or_ 필터 주입 방지: 신뢰 못 할 값을 보간하기 전에 엄격 검증.
+        # 검증 실패 시 해당 절을 빼고(브로드캐스트만) 안전하게 동작.
+        clauses = ["is_broadcast.eq.true"]
+        if _UUID_RE.fullmatch(user_id):
+            clauses.append(f"target_user_id.eq.{user_id}")
+        if role in _VALID_ROLES:
+            clauses.append(f"target_role.eq.{role}")
+        q = self.client.table("notifications").select("*").or_(",".join(clauses))
+        if unread_only:
+            q = q.is_("read_at", "null")
+        rows = self._rows(q.order("created_at", desc=True).limit(limit).execute())
+        return [NotificationRecord(**r) for r in rows]
+
+    def mark_notification_read(self, notification_id: str, user_id: str) -> None:
+        self.client.table("notifications").update({"read_at": now_iso()}).eq(
+            "id", notification_id
+        ).is_("read_at", "null").execute()
+
+    # --- app_settings ---
+    def get_setting(self, key: str) -> Any | None:
+        row = self._one(
+            self.client.table("app_settings").select("value").eq("key", key).limit(1).execute()
+        )
+        return row["value"] if row else None
+
+    def set_setting(self, key: str, value: Any, updated_by: str | None = None) -> None:
+        self.client.table("app_settings").upsert({
+            "key": key, "value": value, "updated_by": updated_by, "updated_at": now_iso(),
+        }).execute()
+
+    def all_settings(self) -> dict[str, Any]:
+        rows = self._rows(self.client.table("app_settings").select("key, value").execute())
+        return {r["key"]: r["value"] for r in rows}
+
+    # --- audit_log ---
+    def add_audit(
+        self, admin_id: str | None, action: str, target: str | None = None,
+        detail: dict[str, Any] | None = None,
+    ) -> AuditRecord:
+        row = self._one(
+            self.client.table("audit_log")
+            .insert({
+                "admin_id": admin_id, "action": action,
+                "target": target, "detail": detail or {},
+            })
+            .execute()
+        )
+        return AuditRecord(**row)
+
+    def list_audit(self, limit: int = 100) -> list[AuditRecord]:
+        rows = self._rows(
+            self.client.table("audit_log")
+            .select("*").order("created_at", desc=True).limit(limit).execute()
+        )
+        return [AuditRecord(**r) for r in rows]
+
+    # --- rate limit (무상태, 멀티 워커 정합) ---
+    def rate_hit(self, bucket: str, user_id: str, window: float) -> int:
+        cutoff = (datetime.now(timezone.utc) - timedelta(seconds=window)).isoformat()
+        # 만료 행 정리(이 bucket/user) → 카운트가 곧 윈도 내 횟수가 된다.
+        self.client.table("rate_hits").delete().eq("bucket", bucket).eq(
+            "user_id", user_id
+        ).lt("created_at", cutoff).execute()
+        self.client.table("rate_hits").insert(
+            {"bucket": bucket, "user_id": user_id}
+        ).execute()
+        resp = (
+            self.client.table("rate_hits")
+            .select("id", count="exact", head=True)
+            .eq("bucket", bucket)
+            .eq("user_id", user_id)
+            .execute()
+        )
+        return resp.count or 0

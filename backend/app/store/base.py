@@ -5,15 +5,21 @@ from abc import ABC, abstractmethod
 from typing import Any
 
 from app.store.records import (
+    AiSessionRecord,
+    AiStepRecord,
+    AuditRecord,
     BibleRecord,
     BookRecord,
     ChapterRecord,
     ChunkRecord,
     ClassroomRecord,
+    MessageRecord,
+    NotificationRecord,
     PlanMessageRecord,
     ProfileRecord,
     PromptRecord,
     SafetyFlagRecord,
+    TokenUsageRecord,
 )
 
 
@@ -137,3 +143,120 @@ class Store(ABC):
     # --- 관리자 집계 ---
     @abstractmethod
     def usage_counts(self) -> dict[str, Any]: ...
+
+    # --- AI 세션 / ReAct 트레이스 (02·06 관측 가능성) ---
+    @abstractmethod
+    def create_ai_session(
+        self, book_id: str | None, role: str, model: str | None = None
+    ) -> AiSessionRecord: ...
+
+    @abstractmethod
+    def update_ai_session(self, session_id: str, **fields: Any) -> AiSessionRecord: ...
+
+    @abstractmethod
+    def get_ai_session(self, session_id: str) -> AiSessionRecord | None: ...
+
+    @abstractmethod
+    def list_ai_sessions(
+        self,
+        book_id: str | None = None,
+        status: str | None = None,
+        limit: int = 50,
+    ) -> list[AiSessionRecord]: ...
+
+    @abstractmethod
+    def add_ai_step(
+        self,
+        session_id: str,
+        idx: int,
+        thought: str | None,
+        skill: str | None,
+        args: dict[str, Any],
+        observation: dict[str, Any],
+        tokens_in: int = 0,
+        tokens_out: int = 0,
+        ms: int | None = None,
+    ) -> AiStepRecord: ...
+
+    @abstractmethod
+    def list_ai_steps(self, session_id: str) -> list[AiStepRecord]: ...
+
+    # --- messages (기획/편지/튜터 통합) ---
+    @abstractmethod
+    def add_message(
+        self,
+        book_id: str | None,
+        user_id: str | None,
+        role: str,
+        kind: str,
+        content: str,
+        session_id: str | None = None,
+    ) -> MessageRecord: ...
+
+    @abstractmethod
+    def list_messages(
+        self, book_id: str, kind: str | None = None
+    ) -> list[MessageRecord]: ...
+
+    # --- token_usage ---
+    @abstractmethod
+    def add_token_usage(
+        self,
+        session_id: str | None,
+        model: str,
+        tokens_in: int = 0,
+        tokens_out: int = 0,
+        est_cost: float = 0.0,
+    ) -> TokenUsageRecord: ...
+
+    @abstractmethod
+    def token_usage_summary(self, since: str | None = None) -> dict[str, Any]: ...
+
+    # --- notifications (00 §6) ---
+    @abstractmethod
+    def create_notification(
+        self,
+        title: str,
+        body: str | None = None,
+        level: str = "info",
+        target_user_id: str | None = None,
+        target_role: str | None = None,
+        is_broadcast: bool = False,
+    ) -> NotificationRecord: ...
+
+    @abstractmethod
+    def list_notifications(
+        self, user_id: str, role: str, unread_only: bool = False, limit: int = 50
+    ) -> list[NotificationRecord]: ...
+
+    @abstractmethod
+    def mark_notification_read(self, notification_id: str, user_id: str) -> None: ...
+
+    # --- app_settings (00 §7) ---
+    @abstractmethod
+    def get_setting(self, key: str) -> Any | None: ...
+
+    @abstractmethod
+    def set_setting(self, key: str, value: Any, updated_by: str | None = None) -> None: ...
+
+    @abstractmethod
+    def all_settings(self) -> dict[str, Any]: ...
+
+    # --- audit_log ---
+    @abstractmethod
+    def add_audit(
+        self,
+        admin_id: str | None,
+        action: str,
+        target: str | None = None,
+        detail: dict[str, Any] | None = None,
+    ) -> AuditRecord: ...
+
+    @abstractmethod
+    def list_audit(self, limit: int = 100) -> list[AuditRecord]: ...
+
+    # --- rate limit (무상태화, §3.4) ---
+    @abstractmethod
+    def rate_hit(self, bucket: str, user_id: str, window: float) -> int:
+        """이 (bucket, user) 호출을 1 기록하고, window 초 내 현재 카운트를 반환."""
+        ...

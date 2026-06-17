@@ -33,6 +33,15 @@ class Settings(BaseSettings):
     admin_emails: str = ""
     allowed_origins: str = "http://localhost:3000"
 
+    # 실행 모드 — dev | test | prod (env APP_ENV).
+    # prod 에서 Supabase 자격이 없으면 기동 거부(fail-closed). test/dev 는 인메모리 폴백 허용.
+    app_env: str = "dev"
+    # 테스트가 인메모리를 명시적으로 허용할 때만 true (conftest 가 켠다).
+    allow_in_memory: bool = False
+
+    # rate limit 확장(선택) — 비우면 Store(DB) 기반 폴백.
+    redis_url: str = ""
+
     # 개발 인증 — 보안 기본값은 False(opt-in). 운영에서는 절대 true 금지.
     dev_auth: bool = False
 
@@ -57,9 +66,26 @@ class Settings(BaseSettings):
         )
 
     @property
+    def is_prod(self) -> bool:
+        return self.app_env.strip().lower() == "prod"
+
+    @property
+    def is_test(self) -> bool:
+        return self.app_env.strip().lower() == "test"
+
+    @property
     def use_supabase(self) -> bool:
         """Supabase 자격이 충분하면 실 DB를, 아니면 인메모리 저장소를 쓴다."""
         return bool(self.supabase_url and self.supabase_service_role_key)
+
+    @property
+    def in_memory_allowed(self) -> bool:
+        """인메모리 폴백 허용 여부. test/ALLOW_IN_MEMORY 면 허용, prod 면 금지.
+
+        운영(prod)에서 Supabase 자격이 없으면 get_store()/main 기동이 거부된다(fail-closed).
+        dev 는 개발 편의로 한시 허용(경고 로그).
+        """
+        return self.is_test or self.allow_in_memory or not self.is_prod
 
     @property
     def use_real_ai(self) -> bool:

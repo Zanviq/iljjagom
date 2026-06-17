@@ -5,6 +5,8 @@ import os
 
 # 테스트는 .env(실키)와 무관하게 항상 인메모리 + mock + dev 인증으로 격리한다.
 # (os.environ 이 .env 파일보다 우선하므로 실키가 채워져 있어도 빈 값으로 덮는다.)
+os.environ["APP_ENV"] = "test"  # 인메모리 폴백 허용(get_store/get_storage 정책)
+os.environ["ALLOW_IN_MEMORY"] = "true"
 os.environ["DEV_AUTH"] = "true"
 os.environ["SUPABASE_URL"] = ""
 os.environ["SUPABASE_SERVICE_ROLE_KEY"] = ""

@@ -12,6 +12,8 @@ from collections.abc import AsyncIterator
 
 from app.ai import chat, editor, imagen, rag, writer
 from app.ai.gemini import GeminiClient
+from app.ai.skills.base import estimate_tokens
+from app.ai.trace import Trace
 from app.deps import CurrentUser
 from app.services.books import assert_can_access_book, get_book_or_404
 from app.store.base import Store
@@ -180,12 +182,31 @@ async def run_first_draft_review(
     if not bible_rec:
         return
     event = _find_event(bible_rec.data, idx) or {}
+    trace = Trace(store, gemini, gemini.settings, "editor", book_id, gemini.settings.gemini_model_flash)
+    objective = (event.get("objective") or "").strip()
+    trace.step(
+        "학습목표 도달도 점검",
+        "verify_objective",
+        {"objective": objective},
+        {"met": bool(objective and objective in chapter.body)},
+    )
     try:
         result = await editor.review_chapter(gemini, bible_rec.data, event, chapter.body)
     except Exception:
         # 편집 실패는 학생 흐름을 막지 않는다(초고 유지, 다음 기회에 재검수 가능).
+        trace.end(status="error", error="editor_failed")
         store.update_chapter(chapter.id, review_status="ok")
         return
+    trace.step(
+        "초고 검수·다듬기",
+        "generate_text",
+        {"role": "editor", "chapterIdx": idx},
+        {"changed": result.body != chapter.body, "reviewStatus": result.review_status, "notes": result.notes},
+        model=gemini.settings.gemini_model_flash,
+        tokens_in=estimate_tokens(chapter.body),
+        tokens_out=estimate_tokens(result.body),
+    )
+    trace.end(status="done", summary=f"{idx}장 검수 완료")
     if result.body != chapter.body:
         await rag.index_text(store, gemini, book_id, chapter.id, result.body)
         store.update_chapter(
@@ -214,20 +235,34 @@ async def run_revise(
     event = _find_event(bible, idx) or {}
 
     store.update_chapter(chapter.id, review_status="revising")
+    trace = Trace(store, gemini, gemini.settings, "writer", book_id, gemini.settings.gemini_model_flash)
     try:
         directive = await chat.interpret_revision(gemini, instruction)
+        trace.step("수정 요청 해석", "tutor_answer", {"instruction": instruction}, {"directive": directive},
+                   model=gemini.settings.gemini_model_flash_lite,
+                   tokens_in=estimate_tokens(instruction), tokens_out=estimate_tokens(directive))
         context = await rag.retrieve_context(
             store, gemini, book_id, event.get("summary", ""), k=5
         )
+        trace.step("관련 설정 인출", "retrieve_context", {"query": event.get("summary", ""), "k": 5},
+                   {"chars": len(context)})
         revised = await writer.revise_text(
             gemini, bible, event, context, chapter.body, directive
         )
+        trace.step("요청 반영해 재집필", "generate_text", {"role": "writer", "chapterIdx": idx},
+                   {"chars": len(revised)}, model=gemini.settings.gemini_model_flash,
+                   tokens_in=estimate_tokens(chapter.body), tokens_out=estimate_tokens(revised))
         result = await editor.review_chapter(gemini, bible, event, revised)
+        trace.step("수정본 검수", "generate_text", {"role": "editor"},
+                   {"reviewStatus": result.review_status}, model=gemini.settings.gemini_model_flash,
+                   tokens_in=estimate_tokens(revised), tokens_out=estimate_tokens(result.body))
     except Exception:
         # 실패 시 원본 유지 + 상태 복구.
+        trace.end(status="error", error="revise_failed")
         store.update_chapter(chapter.id, review_status="ok")
         return
 
+    trace.end(status="done", summary=f"{idx}장 수정 반영")
     await rag.index_text(store, gemini, book_id, chapter.id, result.body)
     store.update_chapter(
         chapter.id,

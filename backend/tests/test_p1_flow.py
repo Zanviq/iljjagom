@@ -12,8 +12,20 @@ async def test_health(client):
     r = await client.get("/health")
     assert r.status_code == 200
     body = r.json()
+    assert body["status"] == "ok"  # test 모드는 인메모리라도 degraded 아님
     assert body["storage"] == "in-memory"
     assert body["ai"] == "mock"
+    assert body["env"] == "test"
+    assert body["version"]
+
+
+async def test_health_ready(client):
+    # 테스트(인메모리)에서는 DB 핑을 건너뛰므로 항상 ready.
+    r = await client.get("/health/ready")
+    assert r.status_code == 200
+    body = r.json()
+    assert body["status"] == "ok"
+    assert body["checks"]["db"] is True
 
 
 async def test_me_needs_onboarding(client):
@@ -231,6 +243,28 @@ async def _design_and_write_ch1(client, headers, prompt_id):
     events = await _read_sse(client, f"/books/{book_id}/chapters/1/stream", headers)
     body = "".join(e[1]["text"] for e in events if e[0] == "token")
     return book_id, body
+
+
+async def test_design_records_ai_session_trace(client):
+    # 관측: 설계(design) 흐름이 designer ai_session + 스텝을 기록한다.
+    from app.store import get_store
+
+    code, _, prompt_id = await _teacher_makes_prompt(client)
+    sh = auth("kid_tr@test", "student")
+    await client.post("/onboarding", headers=sh, json={"role": "student", "classCode": code})
+    book_id = (await client.post("/books", headers=sh, json={"promptId": prompt_id})).json()["id"]
+    await client.post(f"/books/{book_id}/plan/messages", headers=sh, json={"message": "용감한 토끼"})
+    await client.post(f"/books/{book_id}/design", headers=sh)
+
+    store = get_store()
+    sessions = store.list_ai_sessions(book_id=book_id)
+    designer = [s for s in sessions if s.role == "designer"]
+    assert designer, "designer 세션이 기록되어야 함"
+    assert designer[0].status == "done"
+    steps = store.list_ai_steps(designer[0].id)
+    skills = [s.skill for s in steps]
+    assert "design_outline" in skills
+    assert "embed_store" in skills
 
 
 async def test_resubscribe_serves_stored_body(client):
