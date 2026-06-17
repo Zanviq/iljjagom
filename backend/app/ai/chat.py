@@ -69,3 +69,21 @@ async def interview_reply(
     )
     reply = await gemini.generate_text(gemini.settings.gemini_model_flash_lite, prompt)
     return PlanReply(reply=reply.strip(), character_draft=draft, ready_to_write=ready)
+
+
+async def interpret_revision(gemini: GeminiClient, instruction: str) -> str:
+    """학생의 자유로운 수정 요청을 집필 AI 가 쓸 한 줄 지시문으로 정리한다(FR-S6).
+
+    결말 변경/비밀 누설 요구는 그대로 전달하지 않고 장면 묘사 수준으로 좁힌다.
+    """
+    cleaned = " ".join(instruction.split()).strip()
+    if gemini.mock:
+        return cleaned
+
+    prompt = (
+        "너는 어린이 동화 편집 보조다. 아래는 독자(어린이)가 한 챕터에 대해 말한 수정 요청이다. "
+        "이를 작가가 실행할 수 있는 간결한 한 문장 지시로 바꿔라. "
+        "이야기의 결말을 바꾸거나 미리 드러내는 요구는 '이 장면을 더 생생하게' 수준으로 순화한다.\n"
+        f"수정 요청: {cleaned}\n\n한 문장 지시:"
+    )
+    return (await gemini.generate_text(gemini.settings.gemini_model_flash_lite, prompt)).strip()

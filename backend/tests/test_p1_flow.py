@@ -223,6 +223,78 @@ async def test_full_p1_vertical_slice(client):
     assert r.json()["term"] == "수증기"
 
 
+async def _design_and_write_ch1(client, headers, prompt_id):
+    """책 생성 → 기획 → design → 1챕터 집필. (book_id, 본문) 반환."""
+    book_id = (await client.post("/books", headers=headers, json={"promptId": prompt_id})).json()["id"]
+    await client.post(f"/books/{book_id}/plan/messages", headers=headers, json={"message": "용감한 토끼"})
+    await client.post(f"/books/{book_id}/design", headers=headers)
+    events = await _read_sse(client, f"/books/{book_id}/chapters/1/stream", headers)
+    body = "".join(e[1]["text"] for e in events if e[0] == "token")
+    return book_id, body
+
+
+async def test_resubscribe_serves_stored_body(client):
+    # 첫 집필 후 재구독하면 저장본을 그대로 흘린다(글자 동일).
+    code, _, prompt_id = await _teacher_makes_prompt(client)
+    sh = auth("kid_re@test", "student")
+    await client.post("/onboarding", headers=sh, json={"role": "student", "classCode": code})
+    book_id, body1 = await _design_and_write_ch1(client, sh, prompt_id)
+
+    events2 = await _read_sse(client, f"/books/{book_id}/chapters/1/stream", sh)
+    body2 = "".join(e[1]["text"] for e in events2 if e[0] == "token")
+    assert body2 == body1  # 저장본 재전송(재생성 아님)
+
+
+async def test_revise_chapter_reflected_on_restream(client):
+    # 자유모드 수정요청(P2-2): revise 202 → 재구독 시 수정 반영된 저장본.
+    code, _, prompt_id = await _teacher_makes_prompt(client)
+    sh = auth("kid_rev@test", "student")
+    await client.post("/onboarding", headers=sh, json={"role": "student", "classCode": code})
+    book_id, body1 = await _design_and_write_ch1(client, sh, prompt_id)
+
+    r = await client.post(
+        f"/books/{book_id}/chapters/1/revise",
+        headers=sh,
+        json={"instruction": "주인공을 더 씩씩하게 해줘"},
+    )
+    assert r.status_code == 202
+    assert r.json()["status"] == "revising"
+
+    events2 = await _read_sse(client, f"/books/{book_id}/chapters/1/stream", sh)
+    body2 = "".join(e[1]["text"] for e in events2 if e[0] == "token")
+    assert body2 != body1
+    assert "주인공을 더 씩씩하게" in body2  # 수정 지시 반영
+
+
+async def test_revise_requires_written_chapter(client):
+    # 집필 전 챕터 수정요청은 409.
+    code, _, prompt_id = await _teacher_makes_prompt(client)
+    sh = auth("kid_rev2@test", "student")
+    await client.post("/onboarding", headers=sh, json={"role": "student", "classCode": code})
+    book_id = (await client.post("/books", headers=sh, json={"promptId": prompt_id})).json()["id"]
+    await client.post(f"/books/{book_id}/plan/messages", headers=sh, json={"message": "용감한 토끼"})
+    await client.post(f"/books/{book_id}/design", headers=sh)
+    r = await client.post(
+        f"/books/{book_id}/chapters/1/revise", headers=sh, json={"instruction": "더 밝게"}
+    )
+    assert r.status_code == 409
+    assert r.json()["error"]["code"] == "conflict"
+
+
+async def test_revise_blocks_unsafe_instruction(client):
+    code, _, prompt_id = await _teacher_makes_prompt(client)
+    sh = auth("kid_rev3@test", "student")
+    await client.post("/onboarding", headers=sh, json={"role": "student", "classCode": code})
+    book_id, _ = await _design_and_write_ch1(client, sh, prompt_id)
+    r = await client.post(
+        f"/books/{book_id}/chapters/1/revise",
+        headers=sh,
+        json={"instruction": "다 죽여버릴거야"},
+    )
+    assert r.status_code == 400
+    assert r.json()["error"]["code"] == "validation_error"
+
+
 async def test_guided_chapter_has_illustration_first(client):
     code, class_id, prompt_id = await _teacher_makes_prompt(client)
     sh = auth("kid2@test", "student")

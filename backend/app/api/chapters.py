@@ -1,13 +1,16 @@
 """챕터 라우터 — 집필 SSE 스트림, 수정 요청(P2)."""
 from __future__ import annotations
 
-from fastapi import APIRouter, Depends, Query
+from fastapi import APIRouter, BackgroundTasks, Depends, Query
 from fastapi.responses import StreamingResponse
+from starlette.background import BackgroundTask
 
 from app.ai.gemini import GeminiClient, get_gemini
+from app.ai.safety import check_input
 from app.deps import CurrentUser, get_current_user, get_store_dep, require_role
+from app.errors import conflict, validation_error
 from app.models.schemas import ReviseRequest, ReviseResponse, serialize
-from app.services import chapters
+from app.services import books, chapters
 from app.store.base import Store
 
 router = APIRouter(tags=["chapters"])
@@ -31,6 +34,10 @@ async def stream_chapter(
             "Connection": "keep-alive",
             "X-Accel-Buffering": "no",  # nginx 버퍼링 비활성(스트림 즉시 전송)
         },
+        # 스트림 종료 후 Tier3 편집 검수(P2-3)를 비동기로 실행 — 학생 대기 미노출.
+        background=BackgroundTask(
+            chapters.run_first_draft_review, store, gemini, book_id, idx
+        ),
     )
 
 
@@ -39,8 +46,26 @@ async def revise_chapter(
     book_id: str,
     idx: int,
     req: ReviseRequest,
+    background: BackgroundTasks,
     user: CurrentUser = Depends(require_role("student", "admin")),
     store: Store = Depends(get_store_dep),
+    gemini: GeminiClient = Depends(get_gemini),
 ) -> dict:
-    # P2: 대화 AI → 집필 → 편집 검수 파이프라인. P1 에서는 계약 형태만 제공.
+    # 소유 학생만(또는 admin). 집필된 챕터만 수정 가능.
+    book = books.get_book_or_404(store, book_id)
+    if user.role != "admin":
+        books.assert_owner_student(user, book)
+    chapter = store.get_chapter(book_id, idx)
+    if not chapter or chapter.char_count == 0:
+        raise conflict("아직 집필되지 않은 챕터는 수정할 수 없습니다.")
+
+    # 입력 안전 게이트(기획 대화와 동일 규약).
+    safety = check_input(req.instruction)
+    if safety.risk:
+        store.add_safety_flag(book_id, user.id, "revise", "정서 위험 신호 감지")
+    if not safety.ok:
+        raise validation_error(safety.reason, {"suggestion": safety.suggestion})
+
+    # 해석→재생성→편집검수→반영은 백그라운드로. 완료는 stream 재구독 또는 book 폴링으로 확인(§4.2).
+    background.add_task(chapters.run_revise, store, gemini, book_id, idx, req.instruction)
     return serialize(ReviseResponse(status="revising"))
