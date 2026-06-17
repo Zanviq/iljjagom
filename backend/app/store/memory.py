@@ -8,15 +8,21 @@ from typing import Any
 
 from app.store.base import Store
 from app.store.records import (
+    AiSessionRecord,
+    AiStepRecord,
+    AuditRecord,
     BibleRecord,
     BookRecord,
     ChapterRecord,
     ChunkRecord,
     ClassroomRecord,
+    MessageRecord,
+    NotificationRecord,
     PlanMessageRecord,
     ProfileRecord,
     PromptRecord,
     SafetyFlagRecord,
+    TokenUsageRecord,
 )
 from app.util import cosine_similarity, new_id, now_iso
 
@@ -33,6 +39,14 @@ class InMemoryStore(Store):
         self.plan_messages: list[PlanMessageRecord] = []
         self.chunks: list[ChunkRecord] = []
         self.safety_flags: list[SafetyFlagRecord] = []
+        # 추가기능(03)
+        self.ai_sessions: dict[str, AiSessionRecord] = {}
+        self.ai_steps: list[AiStepRecord] = []
+        self.messages: list[MessageRecord] = []
+        self.token_usage: list[TokenUsageRecord] = []
+        self.notifications: list[NotificationRecord] = []
+        self.settings: dict[str, Any] = {}
+        self.audit: list[AuditRecord] = []
 
     # --- profiles ---
     def get_profile(self, user_id: str) -> ProfileRecord | None:
@@ -275,3 +289,167 @@ class InMemoryStore(Store):
                 "total": len(self.safety_flags),
             },
         }
+
+    # --- AI 세션 / ReAct 트레이스 ---
+    def create_ai_session(
+        self, book_id: str | None, role: str, model: str | None = None
+    ) -> AiSessionRecord:
+        rec = AiSessionRecord(
+            id=new_id(), book_id=book_id, role=role, model=model,
+            status="running", started_at=now_iso(),
+        )
+        self.ai_sessions[rec.id] = rec
+        return rec
+
+    def update_ai_session(self, session_id: str, **fields: Any) -> AiSessionRecord:
+        rec = self.ai_sessions[session_id]
+        for k, v in fields.items():
+            setattr(rec, k, v)
+        return rec
+
+    def get_ai_session(self, session_id: str) -> AiSessionRecord | None:
+        return self.ai_sessions.get(session_id)
+
+    def list_ai_sessions(
+        self, book_id: str | None = None, status: str | None = None, limit: int = 50
+    ) -> list[AiSessionRecord]:
+        rows = [
+            s for s in self.ai_sessions.values()
+            if (book_id is None or s.book_id == book_id)
+            and (status is None or s.status == status)
+        ]
+        rows.sort(key=lambda s: s.started_at, reverse=True)
+        return rows[:limit]
+
+    def add_ai_step(
+        self, session_id: str, idx: int, thought: str | None, skill: str | None,
+        args: dict[str, Any], observation: dict[str, Any],
+        tokens_in: int = 0, tokens_out: int = 0, ms: int | None = None,
+    ) -> AiStepRecord:
+        rec = AiStepRecord(
+            id=new_id(), session_id=session_id, idx=idx, thought=thought, skill=skill,
+            args=args or {}, observation=observation or {},
+            tokens_in=tokens_in, tokens_out=tokens_out, ms=ms, created_at=now_iso(),
+        )
+        self.ai_steps.append(rec)
+        return rec
+
+    def list_ai_steps(self, session_id: str) -> list[AiStepRecord]:
+        return sorted(
+            (s for s in self.ai_steps if s.session_id == session_id),
+            key=lambda s: s.idx,
+        )
+
+    # --- messages ---
+    def add_message(
+        self, book_id: str | None, user_id: str | None, role: str, kind: str,
+        content: str, session_id: str | None = None,
+    ) -> MessageRecord:
+        rec = MessageRecord(
+            id=new_id(), book_id=book_id, user_id=user_id, role=role, kind=kind,
+            content=content, session_id=session_id, created_at=now_iso(),
+        )
+        self.messages.append(rec)
+        return rec
+
+    def list_messages(self, book_id: str, kind: str | None = None) -> list[MessageRecord]:
+        return sorted(
+            (m for m in self.messages
+             if m.book_id == book_id and (kind is None or m.kind == kind)),
+            key=lambda m: m.created_at,
+        )
+
+    # --- token_usage ---
+    def add_token_usage(
+        self, session_id: str | None, model: str,
+        tokens_in: int = 0, tokens_out: int = 0, est_cost: float = 0.0,
+    ) -> TokenUsageRecord:
+        rec = TokenUsageRecord(
+            id=new_id(), session_id=session_id, model=model,
+            tokens_in=tokens_in, tokens_out=tokens_out, est_cost=est_cost,
+            created_at=now_iso(),
+        )
+        self.token_usage.append(rec)
+        return rec
+
+    def token_usage_summary(self, since: str | None = None) -> dict[str, Any]:
+        rows = [u for u in self.token_usage if since is None or u.created_at >= since]
+        by_model: dict[str, dict[str, Any]] = {}
+        for u in rows:
+            m = by_model.setdefault(
+                u.model, {"calls": 0, "tokens_in": 0, "tokens_out": 0, "est_cost": 0.0}
+            )
+            m["calls"] += 1
+            m["tokens_in"] += u.tokens_in
+            m["tokens_out"] += u.tokens_out
+            m["est_cost"] += u.est_cost
+        return {
+            "calls": len(rows),
+            "tokens_in": sum(u.tokens_in for u in rows),
+            "tokens_out": sum(u.tokens_out for u in rows),
+            "est_cost": sum(u.est_cost for u in rows),
+            "by_model": by_model,
+        }
+
+    # --- notifications ---
+    def create_notification(
+        self, title: str, body: str | None = None, level: str = "info",
+        target_user_id: str | None = None, target_role: str | None = None,
+        is_broadcast: bool = False,
+    ) -> NotificationRecord:
+        rec = NotificationRecord(
+            id=new_id(), target_user_id=target_user_id, target_role=target_role,
+            is_broadcast=is_broadcast, title=title, body=body, level=level,
+            created_at=now_iso(),
+        )
+        self.notifications.append(rec)
+        return rec
+
+    def list_notifications(
+        self, user_id: str, role: str, unread_only: bool = False, limit: int = 50
+    ) -> list[NotificationRecord]:
+        def visible(n: NotificationRecord) -> bool:
+            if n.target_user_id == user_id or n.is_broadcast:
+                return True
+            return n.target_role is not None and n.target_role == role
+
+        rows = [
+            n for n in self.notifications
+            if visible(n) and (not unread_only or n.read_at is None)
+        ]
+        rows.sort(key=lambda n: n.created_at, reverse=True)
+        return rows[:limit]
+
+    def mark_notification_read(self, notification_id: str, user_id: str) -> None:
+        for n in self.notifications:
+            if n.id == notification_id and (
+                n.target_user_id == user_id or n.is_broadcast or n.target_role
+            ):
+                if n.read_at is None:
+                    n.read_at = now_iso()
+                return
+
+    # --- app_settings ---
+    def get_setting(self, key: str) -> Any | None:
+        return self.settings.get(key)
+
+    def set_setting(self, key: str, value: Any, updated_by: str | None = None) -> None:
+        self.settings[key] = value
+
+    def all_settings(self) -> dict[str, Any]:
+        return dict(self.settings)
+
+    # --- audit_log ---
+    def add_audit(
+        self, admin_id: str | None, action: str, target: str | None = None,
+        detail: dict[str, Any] | None = None,
+    ) -> AuditRecord:
+        rec = AuditRecord(
+            id=new_id(), admin_id=admin_id, action=action, target=target,
+            detail=detail or {}, created_at=now_iso(),
+        )
+        self.audit.append(rec)
+        return rec
+
+    def list_audit(self, limit: int = 100) -> list[AuditRecord]:
+        return sorted(self.audit, key=lambda a: a.created_at, reverse=True)[:limit]
