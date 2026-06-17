@@ -19,7 +19,7 @@ create or replace function match_chunks(
   p_k int default 5
 )
 returns table (id uuid, book_id uuid, chapter_id uuid, content text, similarity float)
-language sql stable as $$
+language sql stable set search_path = public as $$
   select cc.id, cc.book_id, cc.chapter_id, cc.content,
          1 - (cc.embedding <=> p_query) as similarity
   from chapter_chunks cc
