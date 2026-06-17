@@ -99,6 +99,51 @@ async def test_me_class_fields(client):
     assert tme["className"] is None
 
 
+async def test_list_books(client):
+    # 03 §4.2 GET /books: 학생 자기 책만, 최근 활동 순, chaptersDone/updatedAt 포함.
+    code, class_id, prompt_id = await _teacher_makes_prompt(client)
+    sh = auth("kid_list@test", "student")
+    await client.post(
+        "/onboarding", headers=sh, json={"role": "student", "classCode": code}
+    )
+
+    # 책 없을 때 빈 목록
+    r = await client.get("/books", headers=sh)
+    assert r.status_code == 200
+    assert r.json()["books"] == []
+
+    # 책 2권 생성
+    b1 = (await client.post("/books", headers=sh, json={"promptId": prompt_id})).json()["id"]
+    b2 = (await client.post("/books", headers=sh, json={"promptId": prompt_id})).json()["id"]
+
+    r = await client.get("/books", headers=sh)
+    books_list = r.json()["books"]
+    assert len(books_list) == 2
+    item = books_list[0]
+    for key in ("id", "title", "status", "chaptersDone", "totalChaptersPlanned", "updatedAt"):
+        assert key in item
+    assert item["status"] == "planning"
+    assert item["chaptersDone"] == 0
+    assert item["totalChaptersPlanned"] is None
+
+    # b2 를 설계 + 1챕터 집필 → 최근 활동 순으로 맨 앞 + chaptersDone 증가
+    await client.post(f"/books/{b2}/plan/messages", headers=sh, json={"message": "용감한 토끼"})
+    await client.post(f"/books/{b2}/design", headers=sh)
+    await _read_sse(client, f"/books/{b2}/chapters/1/stream", sh)
+
+    r = await client.get("/books", headers=sh)
+    books_list = r.json()["books"]
+    assert books_list[0]["id"] == b2  # 가장 최근 활동
+    assert books_list[0]["chaptersDone"] == 1
+    assert books_list[0]["totalChaptersPlanned"] == 6
+
+    # 다른 학생은 이 책들을 보지 못한다(자기 책만).
+    other = auth("kid_other@test", "student")
+    await client.post("/onboarding", headers=other, json={"role": "student", "classCode": code})
+    r = await client.get("/books", headers=other)
+    assert r.json()["books"] == []
+
+
 async def test_full_p1_vertical_slice(client):
     # 1. 교사: 발제 생성
     code, class_id, prompt_id = await _teacher_makes_prompt(client)

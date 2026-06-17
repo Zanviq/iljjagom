@@ -115,13 +115,15 @@ class InMemoryStore(Store):
     def create_book(
         self, student_id: str, classroom_id: str | None, prompt_id: str | None
     ) -> BookRecord:
+        ts = now_iso()
         rec = BookRecord(
             id=new_id(),
             student_id=student_id,
             classroom_id=classroom_id,
             prompt_id=prompt_id,
             status="planning",
-            created_at=now_iso(),
+            created_at=ts,
+            updated_at=ts,
         )
         self.books[rec.id] = rec
         return rec
@@ -133,7 +135,15 @@ class InMemoryStore(Store):
         rec = self.books[book_id]
         for k, v in fields.items():
             setattr(rec, k, v)
+        rec.updated_at = now_iso()  # 모든 변경은 마지막 활동 시각을 갱신한다.
         return rec
+
+    def list_books_for_student(self, student_id: str) -> list[BookRecord]:
+        return sorted(
+            (b for b in self.books.values() if b.student_id == student_id),
+            key=lambda b: b.updated_at or b.created_at,
+            reverse=True,
+        )
 
     # --- bibles ---
     def upsert_bible(self, book_id: str, data: dict[str, Any]) -> BibleRecord:

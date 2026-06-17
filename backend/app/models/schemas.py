@@ -87,6 +87,20 @@ class Book(CamelModel):
     created_at: str
 
 
+class BookSummary(CamelModel):
+    # GET /books 목록 항목 (03 §4.2). 학생 "내 책/이어 읽기".
+    id: str
+    title: str | None = None
+    status: BookStatus
+    chapters_done: int = 0
+    total_chapters_planned: int | None = None
+    updated_at: str
+
+
+class BooksResponse(CamelModel):
+    books: list[BookSummary] = []
+
+
 class ChapterMeta(CamelModel):
     idx: int
     mode: ChapterMode

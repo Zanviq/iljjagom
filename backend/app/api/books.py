@@ -22,6 +22,15 @@ async def create_book(
     return serialize(book)
 
 
+@router.get("/books")
+async def list_books(
+    user: CurrentUser = Depends(require_role("student", "admin")),
+    store: Store = Depends(get_store_dep),
+) -> dict:
+    # 학생 "내 책/이어 읽기" 목록. 최근 활동 순.
+    return serialize(books.list_books(store, user))
+
+
 @router.get("/books/{book_id}")
 async def get_book(
     book_id: str,

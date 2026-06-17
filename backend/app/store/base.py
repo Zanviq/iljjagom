@@ -81,6 +81,9 @@ class Store(ABC):
     @abstractmethod
     def update_book(self, book_id: str, **fields: Any) -> BookRecord: ...
 
+    @abstractmethod
+    def list_books_for_student(self, student_id: str) -> list[BookRecord]: ...
+
     # --- bibles ---
     @abstractmethod
     def upsert_bible(self, book_id: str, data: dict[str, Any]) -> BibleRecord: ...

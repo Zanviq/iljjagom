@@ -189,10 +189,22 @@ class SupabaseStore(Store):
         return BookRecord(**row) if row else None
 
     def update_book(self, book_id: str, **fields: Any) -> BookRecord:
+        # 모든 변경은 마지막 활동 시각을 갱신한다(빈 변경=updated_at 만 갱신).
+        payload = {**fields, "updated_at": now_iso()}
         row = self._one(
-            self.client.table("books").update(fields).eq("id", book_id).execute()
+            self.client.table("books").update(payload).eq("id", book_id).execute()
         )
         return BookRecord(**row)
+
+    def list_books_for_student(self, student_id: str) -> list[BookRecord]:
+        rows = self._rows(
+            self.client.table("books")
+            .select("*")
+            .eq("student_id", student_id)
+            .order("updated_at", desc=True)
+            .execute()
+        )
+        return [BookRecord(**r) for r in rows]
 
     # --- bibles ---
     def upsert_bible(self, book_id: str, data: dict[str, Any]) -> BibleRecord:

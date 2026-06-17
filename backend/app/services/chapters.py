@@ -96,6 +96,8 @@ async def _produce(
         next_available = bool(total and idx < total)
         if not next_available:
             store.update_book(book_id, status="done")
+        else:
+            store.update_book(book_id)  # 집필 완료 → 마지막 활동 시각 갱신(이어 읽기 정렬)
 
         await queue.put(
             _sse(
