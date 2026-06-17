@@ -1,13 +1,29 @@
 """Imagen 4 삽화 생성 — 챕터마다 1장. Bible 인물 카드로 외형 일관성 유지.
 
-P1에서는 유도(guided) 모드의 `illustration` 이벤트 계약을 만족시키는 데 집중한다.
-키가 없으면 결정적 placeholder URL 을 반환한다(실제 업로드는 P2에서 Supabase Storage).
+실 모델 경로: Imagen 으로 이미지 생성 → Supabase Storage(illustrations 버킷) 업로드 → 공개 URL.
+키가 없거나 실패하면 결정적 placeholder URL 로 안전 폴백한다(계약/SSE 흐름 불변).
 """
 from __future__ import annotations
 
 import hashlib
 
 from app.ai.gemini import GeminiClient
+from app.storage import get_storage
+
+
+def _placeholder(book_id: str, chapter_idx: int) -> str:
+    seed = hashlib.sha256(f"{book_id}:{chapter_idx}".encode()).hexdigest()[:12]
+    return f"https://placehold.co/768x512?text=ch{chapter_idx}-{seed}"
+
+
+def _build_image_prompt(summary: str, characters: list[dict]) -> str:
+    who = "; ".join(
+        f"{c.get('name', '')}({c.get('appearance', '')})" for c in characters[:3]
+    )
+    return (
+        "어린이 동화책 삽화, 따뜻하고 부드러운 색감, 안전한 그림체. "
+        f"등장인물: {who}. 장면: {summary}"
+    )
 
 
 async def generate_illustration(
@@ -15,11 +31,14 @@ async def generate_illustration(
 ) -> tuple[str, str]:
     """(url, alt) 반환."""
     alt = f"{chapter_idx}장 삽화: {summary[:40]}"
-    if gemini.mock or not gemini.settings.use_real_ai:
-        seed = hashlib.sha256(f"{book_id}:{chapter_idx}".encode()).hexdigest()[:12]
-        url = f"https://placehold.co/768x512?text=ch{chapter_idx}-{seed}"
-        return url, alt
 
-    # 실 모델 경로(P2에서 Storage 업로드 연결). 현재는 alt 와 placeholder 로 안전 폴백.
-    seed = hashlib.sha256(f"{book_id}:{chapter_idx}".encode()).hexdigest()[:12]
-    return f"https://placehold.co/768x512?text=ch{chapter_idx}-{seed}", alt
+    if gemini.mock or not gemini.settings.use_real_ai:
+        return _placeholder(book_id, chapter_idx), alt
+
+    # 실 모델: Imagen 생성 → Storage 업로드. 어느 단계든 실패하면 placeholder.
+    data = await gemini.generate_image(_build_image_prompt(summary, characters))
+    if data:
+        url = get_storage().upload_illustration(f"{book_id}/{chapter_idx}.png", data)
+        if url:
+            return url, alt
+    return _placeholder(book_id, chapter_idx), alt

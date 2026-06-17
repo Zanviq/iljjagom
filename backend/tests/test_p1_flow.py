@@ -380,6 +380,24 @@ async def test_reonboarding_cannot_change_role(client):
     assert r.status_code == 200
 
 
+async def test_illustration_placeholder_in_keyless_mode(client):
+    # 키 없으면 삽화는 Storage 업로드 없이 placeholder 로 폴백(유도 챕터 illustration 이벤트).
+    from app.storage import NoopStorage, get_storage
+
+    assert isinstance(get_storage(), NoopStorage)
+    assert get_storage().upload_illustration("x/1.png", b"data") is None
+
+    code, _, prompt_id = await _teacher_makes_prompt(client)
+    sh = auth("kid_ill@test", "student")
+    await client.post("/onboarding", headers=sh, json={"role": "student", "classCode": code})
+    book_id = (await client.post("/books", headers=sh, json={"promptId": prompt_id})).json()["id"]
+    await client.post(f"/books/{book_id}/plan/messages", headers=sh, json={"message": "용감한 토끼"})
+    await client.post(f"/books/{book_id}/design", headers=sh)
+    events = await _read_sse(client, f"/books/{book_id}/chapters/4/stream", sh)
+    illus = next(e[1] for e in events if e[0] == "illustration")
+    assert illus["url"].startswith("https://placehold.co/")
+
+
 def test_dev_auth_secure_defaults():
     # 코드 기본값은 False(보안). (테스트 프로세스 env 는 DEV_AUTH=true 라 인스턴스가 아닌 필드 기본값을 본다.)
     from app.config import Settings

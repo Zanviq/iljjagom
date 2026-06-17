@@ -66,6 +66,26 @@ class GeminiClient:
             if text:
                 yield text
 
+    async def generate_image(self, prompt: str) -> bytes | None:
+        """Imagen 4 로 이미지 1장 생성 → PNG bytes. mock/실패 시 None(호출자가 폴백)."""
+        if self.mock:
+            return None
+
+        def _call() -> bytes | None:
+            try:
+                resp = self._client.models.generate_images(
+                    model=self.settings.imagen_model, prompt=prompt
+                )
+                images = getattr(resp, "generated_images", None) or []
+                if not images:
+                    return None
+                image = getattr(images[0], "image", None)
+                return getattr(image, "image_bytes", None)
+            except Exception:
+                return None
+
+        return await asyncio.to_thread(_call)
+
     async def embed(self, text: str) -> list[float]:
         if self.mock:
             return _deterministic_embedding(text)
