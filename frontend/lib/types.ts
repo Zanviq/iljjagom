@@ -128,6 +128,71 @@ export interface Word {
   meaning: string;
 }
 
+/** GET /classes/{id}/dashboard 의 학생별 진척 (FR-T2) */
+export interface DashboardStudent {
+  studentId: string;
+  studentEmail: string;
+  bookId: string | null;
+  title: string | null;
+  status: BookStatus | null;
+  chaptersDone: number;
+  totalChapters: number;
+}
+
+/** GET /classes/{id}/dashboard 의 요약 집계 */
+export interface DashboardSummary {
+  studentCount: number;
+  booksStarted: number;
+  booksDone: number;
+  /** 완독률 0~1 */
+  completionRate: number;
+  vocabCount: number;
+}
+
+/** GET /classes/{id}/dashboard 응답 (FR-T2) */
+export interface Dashboard {
+  students: DashboardStudent[];
+  summary: DashboardSummary;
+}
+
+/** GET /books/{id}/learning 응답 (FR-S8~S12) */
+export interface QuizItem {
+  question: string;
+  choices: string[];
+  answerIndex: number;
+}
+export interface EssayBlank {
+  prompt: string;
+  hints: string[];
+}
+export interface EmotionPoint {
+  chapterIdx: number;
+  label: string;
+  value: number;
+}
+export interface Learning {
+  vocab: Word[];
+  quiz: QuizItem[];
+  essayBlanks: EssayBlank[];
+  emotion: EmotionPoint[];
+}
+
+/** POST /books/{id}/letters 응답 (FR-S11) */
+export interface LetterReply {
+  status: "answered" | "held";
+  reply: string | null;
+}
+
+/** GET /admin/usage 응답 (FR-M1 최소) */
+export interface AdminUsage {
+  users: { total: number; students: number; teachers: number; admins: number };
+  classrooms: number;
+  prompts: number;
+  books: { total: number; planning: number; writing: number; done: number };
+  chaptersWritten: number;
+  safetyFlags: { open: number; total: number };
+}
+
 /** 공통 에러 규약 (§4.1) */
 export interface ApiErrorBody {
   error: {
