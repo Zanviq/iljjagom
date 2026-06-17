@@ -4,6 +4,8 @@ from __future__ import annotations
 from app.ai import chat, designer, rag
 from app.ai.gemini import GeminiClient
 from app.ai.safety import check_input
+from app.ai.skills.base import estimate_tokens
+from app.ai.trace import Trace
 from app.deps import CurrentUser
 from app.errors import forbidden, not_found, validation_error
 from app.models.schemas import (
@@ -150,8 +152,21 @@ async def design_book(
     student_messages = [m.content for m in store.list_plan_messages(book_id) if m.role == "student"]
     traits = chat._extract_draft(student_messages).traits
 
+    # 관측: 설계(designer) 세션 트레이스. 기록 실패는 흐름을 막지 않는다.
+    trace = Trace(store, gemini, gemini.settings, "designer", book_id, gemini.settings.gemini_model_pro)
+
     bible = await designer.build_bible(gemini, prompt, student_messages, traits)
     store.upsert_bible(book_id, bible)
+    trace.step(
+        "기획·학습목표로 Bible 설계",
+        "design_outline",
+        {"topic": prompt.topic if prompt else None, "objectives": prompt.learning_objectives if prompt else []},
+        {"title": bible.get("title"), "characters": len(bible.get("characters", [])),
+         "events": len(bible.get("events", []))},
+        model=gemini.settings.gemini_model_pro,
+        tokens_in=estimate_tokens(" ".join(student_messages)),
+        tokens_out=estimate_tokens(str(bible)),
+    )
 
     # 챕터 골격 생성(이벤트 분배 기준).
     events = bible.get("events", [])
@@ -171,6 +186,9 @@ async def design_book(
 
     # Bible 핵심 텍스트를 RAG 인덱스에 적재(설계 단계 분량).
     await _index_bible(store, gemini, book_id, bible)
+    trace.step("Bible 핵심을 RAG 인덱스에 적재", "embed_store", {"book_id": book_id},
+               {"totalChaptersPlanned": total})
+    trace.end(status="done", summary=f"'{bible.get('title')}' 설계 완료({total}장)")
 
     return DesignResponse(status="done", total_chapters_planned=total)
 

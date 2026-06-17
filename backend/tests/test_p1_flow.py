@@ -245,6 +245,28 @@ async def _design_and_write_ch1(client, headers, prompt_id):
     return book_id, body
 
 
+async def test_design_records_ai_session_trace(client):
+    # 관측: 설계(design) 흐름이 designer ai_session + 스텝을 기록한다.
+    from app.store import get_store
+
+    code, _, prompt_id = await _teacher_makes_prompt(client)
+    sh = auth("kid_tr@test", "student")
+    await client.post("/onboarding", headers=sh, json={"role": "student", "classCode": code})
+    book_id = (await client.post("/books", headers=sh, json={"promptId": prompt_id})).json()["id"]
+    await client.post(f"/books/{book_id}/plan/messages", headers=sh, json={"message": "용감한 토끼"})
+    await client.post(f"/books/{book_id}/design", headers=sh)
+
+    store = get_store()
+    sessions = store.list_ai_sessions(book_id=book_id)
+    designer = [s for s in sessions if s.role == "designer"]
+    assert designer, "designer 세션이 기록되어야 함"
+    assert designer[0].status == "done"
+    steps = store.list_ai_steps(designer[0].id)
+    skills = [s.skill for s in steps]
+    assert "design_outline" in skills
+    assert "embed_store" in skills
+
+
 async def test_resubscribe_serves_stored_body(client):
     # 첫 집필 후 재구독하면 저장본을 그대로 흘린다(글자 동일).
     code, _, prompt_id = await _teacher_makes_prompt(client)
