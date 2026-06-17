@@ -1,7 +1,9 @@
 """FastAPI 앱 진입점 — 라우터 등록, CORS, 예외 핸들러."""
 from __future__ import annotations
 
-from fastapi import FastAPI
+import asyncio
+
+from fastapi import FastAPI, Response
 from fastapi.middleware.cors import CORSMiddleware
 
 from app.config import get_settings
@@ -44,10 +46,42 @@ def create_app() -> FastAPI:
 
     @app.get("/health", tags=["meta"])
     async def health() -> dict:
+        """라이브니스 — 항상 빠르게 응답(외부 의존 없음). 호스팅 헬스체크용.
+
+        운영(prod)인데 인메모리/mock 로 떨어지면 status=degraded 로 표기(경보 가시화).
+        """
+        storage = "supabase" if settings.use_supabase else "in-memory"
+        ai = "google" if settings.use_real_ai else "mock"
+        degraded = settings.is_prod and (storage != "supabase" or ai != "google")
         return {
-            "status": "ok",
-            "storage": "supabase" if settings.use_supabase else "in-memory",
-            "ai": "google" if settings.use_real_ai else "mock",
+            "status": "degraded" if degraded else "ok",
+            "version": app.version,
+            "env": settings.app_env,
+            "storage": storage,
+            "ai": ai,
+        }
+
+    @app.get("/health/ready", tags=["meta"])
+    async def health_ready(response: Response) -> dict:
+        """레디니스 — Supabase 연결을 가벼운 쿼리로 1회 확인. 실패 시 503."""
+        from app.store import get_store
+
+        db_ok = True
+        if settings.use_supabase:
+            try:
+                # app_settings 단일 행 조회(가벼운 ping).
+                await asyncio.to_thread(get_store().get_setting, "safety_level")
+            except Exception:
+                db_ok = False
+        checks = {"db": db_ok, "ai_key": settings.use_real_ai}
+        ready = db_ok
+        if not ready:
+            response.status_code = 503
+        return {
+            "status": "ok" if ready else "unavailable",
+            "version": app.version,
+            "env": settings.app_env,
+            "checks": checks,
         }
 
     # 라우터 등록 (단계별로 추가)

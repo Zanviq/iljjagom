@@ -12,8 +12,20 @@ async def test_health(client):
     r = await client.get("/health")
     assert r.status_code == 200
     body = r.json()
+    assert body["status"] == "ok"  # test 모드는 인메모리라도 degraded 아님
     assert body["storage"] == "in-memory"
     assert body["ai"] == "mock"
+    assert body["env"] == "test"
+    assert body["version"]
+
+
+async def test_health_ready(client):
+    # 테스트(인메모리)에서는 DB 핑을 건너뛰므로 항상 ready.
+    r = await client.get("/health/ready")
+    assert r.status_code == 200
+    body = r.json()
+    assert body["status"] == "ok"
+    assert body["checks"]["db"] is True
 
 
 async def test_me_needs_onboarding(client):
