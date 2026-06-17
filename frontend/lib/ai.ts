@@ -19,9 +19,12 @@ export interface AskUserPrompt {
   allowText: boolean;
 }
 
-/** ask_user 응답 본문. choice(선택지 index) 또는 text(직접 입력) 중 하나. */
+/**
+ * ask_user 응답 본문(03-기능명세서 §7 AnswerRequest). choice(선택지 **값 문자열**) 또는
+ * text(직접 입력) 중 하나. 예: `{ "choice":"별이" }` (인덱스 아님).
+ */
 export interface AskUserAnswer {
-  choice?: number;
+  choice?: string;
   text?: string;
 }
 

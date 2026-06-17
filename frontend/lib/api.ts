@@ -9,6 +9,9 @@
  */
 import type {
   AdminUsage,
+  AiSession,
+  AiSessionDetail,
+  AiSessionStatus,
   Book,
   BookCreated,
   BookSummary,
@@ -242,4 +245,28 @@ export function getAdminUsage(token: string | null): Promise<AdminUsage> {
 /** 백엔드 상태/모드(저장소·AI). 인증 불필요. 관리자 콘솔 모드 배지용. */
 export function getHealth(): Promise<Health> {
   return apiFetch<Health>("/health");
+}
+
+/** AI 세션 목록(관측, §4.2). admin만. 최근순. */
+export function getAiSessions(
+  token: string | null,
+  params?: { bookId?: string; status?: AiSessionStatus; limit?: number },
+): Promise<{ sessions: AiSession[] }> {
+  const q = new URLSearchParams();
+  if (params?.bookId) q.set("bookId", params.bookId);
+  if (params?.status) q.set("status", params.status);
+  if (params?.limit) q.set("limit", String(params.limit));
+  const qs = q.toString();
+  return apiFetch<{ sessions: AiSession[] }>(
+    `/ai/sessions${qs ? `?${qs}` : ""}`,
+    { token },
+  );
+}
+
+/** AI 세션 상세 + 스텝 트레이스(§4.2). admin만. */
+export function getAiSession(
+  token: string | null,
+  id: string,
+): Promise<AiSessionDetail> {
+  return apiFetch<AiSessionDetail>(`/ai/sessions/${id}`, { token });
 }

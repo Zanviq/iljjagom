@@ -193,6 +193,43 @@ export interface AdminUsage {
   safetyFlags: { open: number; total: number };
 }
 
+/* ── AI 세션/트레이스 (추가기능 02, §4.2·§7) ── */
+export type AiRole = "designer" | "writer" | "editor" | "chat";
+export type AiSessionStatus = "running" | "awaiting_user" | "done" | "error";
+
+/** GET /ai/sessions 의 세션 항목 */
+export interface AiSession {
+  id: string;
+  bookId: string | null;
+  role: AiRole;
+  model: string;
+  status: AiSessionStatus;
+  summary: string | null;
+  error: string | null;
+  startedAt: string;
+  endedAt: string | null;
+}
+
+/** ReAct 스텝(트레이스 타임라인 1행) */
+export interface AiStep {
+  idx: number;
+  thought: string;
+  skill: string;
+  /** 스킬 입력(JSON) */
+  args: unknown;
+  /** 스킬 결과(JSON) */
+  observation: unknown;
+  tokensIn: number;
+  tokensOut: number;
+  ms: number;
+  createdAt: string;
+}
+
+/** GET /ai/sessions/{id} 응답 = 세션 + 스텝 */
+export interface AiSessionDetail extends AiSession {
+  steps: AiStep[];
+}
+
 /** GET /health 응답 (백엔드 모드 배지용) */
 export interface Health {
   status: string;

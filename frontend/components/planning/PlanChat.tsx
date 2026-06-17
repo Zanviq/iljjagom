@@ -79,9 +79,7 @@ export function PlanChat({ bookId }: { bookId: string }) {
     if (!ask || answering) return;
     setAskError(null);
     setAnswering(true);
-    const shown =
-      answer.text ??
-      (answer.choice !== undefined ? ask.choices[answer.choice] : "");
+    const shown = answer.text ?? answer.choice ?? "";
     try {
       const token = await getClientAccessToken();
       await answerAiSession(token, ask.sessionId, answer);

@@ -36,8 +36,9 @@ export function AskUserPanel({
 
   function submit() {
     if (!canSend) return;
+    // 계약(AnswerRequest)은 choice가 선택지 "값 문자열"이다(인덱스 아님).
     if (trimmed.length > 0) onAnswer({ text: trimmed });
-    else if (picked !== null) onAnswer({ choice: picked });
+    else if (picked !== null) onAnswer({ choice: prompt.choices[picked] });
   }
 
   return (
