@@ -7,7 +7,7 @@ import { WordPopover } from "@/components/reader/WordPopover";
 import { ApiError, getWord } from "@/lib/api";
 import { getClientAccessToken } from "@/lib/auth/client";
 import { streamChapter } from "@/lib/sse";
-import type { SSEDone, SSEIllustration, Word } from "@/lib/types";
+import type { ChapterMode, SSEDone, SSEIllustration, Word } from "@/lib/types";
 
 const sleep = (ms: number) => new Promise((r) => setTimeout(r, ms));
 const MAX_RECONNECT = 5;
@@ -66,6 +66,7 @@ function ChapterStream({
   onNext: () => void;
 }) {
   const [text, setText] = useState("");
+  const [mode, setMode] = useState<ChapterMode | null>(null);
   const [illustration, setIllustration] = useState<SSEIllustration | null>(null);
   const [activePrompt, setActivePrompt] = useState<string | null>(null);
   const [done, setDone] = useState<SSEDone | null>(null);
@@ -73,6 +74,9 @@ function ChapterStream({
   const [streamError, setStreamError] = useState<string | null>(null);
   const [word, setWord] = useState<Word | null>(null);
   const [wordLoading, setWordLoading] = useState(false);
+  // 유도(guided) 모드: 삽화+능동 질문을 먼저 보여주고, 아이가 탭하면 본문을 공개한다.
+  // 자유(free) 모드: 본문을 곧바로 공개(meta 수신 시 true). meta 수신 전 기본값은 false.
+  const [revealed, setRevealed] = useState(false);
 
   const doneRef = useRef(false);
 
@@ -94,6 +98,11 @@ function ChapterStream({
             signal: controller.signal,
             onEvent: (evt) => {
               switch (evt.type) {
+                case "meta":
+                  setMode(evt.data.mode);
+                  // 자유 모드는 본문 바로 공개. 유도 모드는 탭 전까지 숨김.
+                  if (evt.data.mode === "free") setRevealed(true);
+                  break;
                 case "illustration":
                   setIllustration(evt.data);
                   break;
@@ -175,6 +184,8 @@ function ChapterStream({
   }
 
   const canGoNext = done?.nextChapterAvailable ?? false;
+  // 유도 모드에서 아직 본문을 공개하지 않은 상태(삽화·질문 먼저 보는 단계).
+  const guidedGate = mode === "guided" && !revealed;
 
   return (
     <>
@@ -192,26 +203,58 @@ function ChapterStream({
         </p>
       )}
 
-      <article
-        onMouseUp={onTextMouseUp}
-        className="rounded-card bg-surface p-6 text-xl leading-loose ring-1 ring-border"
-      >
-        <span className="whitespace-pre-wrap">{text}</span>
-        {streaming && <span className="streaming-cursor" aria-hidden />}
-        {!text && streaming && (
-          <span className="text-muted">이야기를 펼치는 중이에요…</span>
-        )}
-      </article>
+      {/* 유도 모드: 삽화·질문을 먼저 보고, 탭하면 본문을 공개한다. */}
+      {guidedGate && (
+        <div className="rounded-card bg-surface p-6 text-center ring-1 ring-border">
+          {illustration || activePrompt ? (
+            <>
+              <p className="mb-4 text-lg font-bold">
+                그림을 보고 어떤 이야기일지 상상해 봐요.
+              </p>
+              <button
+                onClick={() => setRevealed(true)}
+                className={buttonClass("primary", "lg", "w-full")}
+              >
+                ▶ 이야기 읽어볼까요?
+              </button>
+            </>
+          ) : (
+            <p className="text-muted">그림을 준비하는 중이에요…</p>
+          )}
+        </div>
+      )}
 
-      <p className="mt-2 text-center text-sm text-muted">
-        모르는 낱말을 <strong>손가락으로 살짝 선택</strong>하면 뜻을 알려줘요.
-      </p>
+      {/* meta 수신 전(모드 미확정) 잠깐의 로딩 */}
+      {mode === null && !revealed && (
+        <p className="rounded-card bg-surface p-6 text-muted ring-1 ring-border">
+          이야기를 준비하는 중이에요…
+        </p>
+      )}
+
+      {revealed && (
+        <>
+          <article
+            onMouseUp={onTextMouseUp}
+            className="rounded-card bg-surface p-6 text-xl leading-loose ring-1 ring-border"
+          >
+            <span className="whitespace-pre-wrap">{text}</span>
+            {streaming && <span className="streaming-cursor" aria-hidden />}
+            {!text && streaming && (
+              <span className="text-muted">이야기를 펼치는 중이에요…</span>
+            )}
+          </article>
+
+          <p className="mt-2 text-center text-sm text-muted">
+            모르는 낱말을 <strong>손가락으로 살짝 선택</strong>하면 뜻을 알려줘요.
+          </p>
+        </>
+      )}
 
       {streamError && (
         <p className="mt-4 text-center font-bold text-danger">{streamError}</p>
       )}
 
-      {done && (
+      {revealed && done && (
         <div className="mt-6 rounded-card bg-surface p-5 ring-1 ring-border">
           {done.words.length > 0 && (
             <>
