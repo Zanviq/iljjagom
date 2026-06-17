@@ -10,6 +10,7 @@
 import type {
   Book,
   BookCreated,
+  BookSummary,
   ClassSummary,
   CreatePromptRequest,
   DesignStatus,
@@ -129,6 +130,12 @@ export function createPrompt(
     method: "POST",
     body,
   });
+}
+
+export function getBooks(
+  token: string | null,
+): Promise<{ books: BookSummary[] }> {
+  return apiFetch<{ books: BookSummary[] }>("/books", { token });
 }
 
 export function createBook(
