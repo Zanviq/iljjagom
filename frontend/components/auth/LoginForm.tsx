@@ -22,7 +22,11 @@ function GoogleLogin() {
     const supabase = createClient();
     const { error } = await supabase.auth.signInWithOAuth({
       provider: "google",
-      options: { redirectTo: `${location.origin}/auth/callback` },
+      options: {
+        redirectTo: `${location.origin}/auth/callback`,
+        // 공유 기기(학교) 대비 + 자동 재로그인 방지: 항상 Google 계정 선택을 띄운다.
+        queryParams: { prompt: "select_account" },
+      },
     });
     if (error) setLoading(false);
   }
