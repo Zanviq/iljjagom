@@ -111,7 +111,7 @@ function StepCard({ step }: { step: AiStep }) {
         <span className="rounded-full bg-black/5 px-2 py-0.5 text-xs font-bold text-muted">
           #{step.idx}
         </span>
-        <span className="rounded-full bg-primary/10 px-2.5 py-0.5 text-sm font-bold text-primary">
+        <span className="rounded-full bg-primary/10 px-2.5 py-0.5 text-sm font-bold text-primary-strong">
           {step.skill}
         </span>
         <span className="ml-auto text-xs text-muted">

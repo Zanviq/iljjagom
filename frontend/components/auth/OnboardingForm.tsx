@@ -22,7 +22,7 @@ export function OnboardingForm() {
               key={r}
               className={`flex cursor-pointer items-center justify-center gap-2 rounded-xl border-2 px-4 py-4 text-lg font-bold transition ${
                 role === r
-                  ? "border-primary bg-primary/10 text-primary"
+                  ? "border-primary bg-primary/10 text-primary-strong"
                   : "border-border bg-surface"
               }`}
             >

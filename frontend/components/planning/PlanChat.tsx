@@ -123,7 +123,7 @@ export function PlanChat({ bookId }: { bookId: string }) {
   }
 
   return (
-    <div className="grid gap-6 lg:grid-cols-[1fr_18rem]">
+    <div className="grid gap-6 md:grid-cols-[1fr_18rem]">
       <div className="flex min-h-[60vh] flex-col rounded-card bg-surface ring-1 ring-border">
         <div className="flex-1 space-y-4 overflow-y-auto p-5">
           {messages.map((m, i) => (

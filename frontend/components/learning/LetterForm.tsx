@@ -70,7 +70,7 @@ export function LetterForm({ bookId }: { bookId: string }) {
       {reply && (
         <div className="mt-4 rounded-xl bg-accent/20 p-4">
           {reply.status === "held" ? (
-            <p className="font-bold text-secondary">
+            <p className="font-bold text-secondary-strong">
               💌 편지를 잘 받았어요. 선생님이 확인한 뒤 답장을 줄 거예요.
             </p>
           ) : (

@@ -131,7 +131,7 @@ function EssayBlankCard({ blank }: { blank: EssayBlank }) {
           {blank.hints.map((h, i) => (
             <li
               key={i}
-              className="rounded-full bg-secondary/15 px-2.5 py-0.5 text-sm text-secondary"
+              className="rounded-full bg-secondary/15 px-2.5 py-0.5 text-sm text-secondary-strong"
             >
               {h}
             </li>

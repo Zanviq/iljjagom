@@ -2,9 +2,9 @@ import { cn } from "@/lib/cn";
 import type { AiSessionStatus } from "@/lib/types";
 
 const STATUS: Record<AiSessionStatus, { label: string; cls: string }> = {
-  running: { label: "동작 중", cls: "bg-secondary/15 text-secondary" },
+  running: { label: "동작 중", cls: "bg-secondary/15 text-secondary-strong" },
   awaiting_user: { label: "응답 대기", cls: "bg-accent/50 text-foreground" },
-  done: { label: "완료", cls: "bg-success/15 text-success" },
+  done: { label: "완료", cls: "bg-success/15 text-success-strong" },
   error: { label: "오류", cls: "bg-danger/10 text-danger" },
 };
 

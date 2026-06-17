@@ -47,7 +47,7 @@ export function SafetyFlagList({ flags }: { flags: SafetyFlag[] }) {
                 "ml-auto rounded-full px-2.5 py-0.5 text-xs font-bold",
                 f.status === "open"
                   ? "bg-danger/10 text-danger"
-                  : "bg-success/15 text-success",
+                  : "bg-success/15 text-success-strong",
               )}
             >
               {f.status === "open" ? "미처리" : "종결"}

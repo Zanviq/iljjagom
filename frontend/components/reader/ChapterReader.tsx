@@ -262,7 +262,7 @@ function ChapterStream({
         />
       )}
       {activePrompt && (
-        <p className="mb-4 rounded-card bg-secondary/15 p-4 text-lg font-bold text-secondary">
+        <p className="mb-4 rounded-card bg-secondary/15 p-4 text-lg font-bold text-secondary-strong">
           💬 {activePrompt}
         </p>
       )}
@@ -354,7 +354,7 @@ function ChapterStream({
               <p
                 role="status"
                 aria-live="polite"
-                className="text-lg font-bold text-success"
+                className="text-lg font-bold text-success-strong"
               >
                 🎉 이야기를 모두 읽었어요!
               </p>
@@ -390,7 +390,7 @@ function ChapterStream({
             <p
               role="status"
               aria-live="polite"
-              className="text-center font-bold text-secondary"
+              className="text-center font-bold text-secondary-strong"
             >
               <span className="streaming-cursor" aria-hidden /> 이야기를 고치고
               있어요… 잠시만 기다려 주세요.

@@ -94,7 +94,7 @@ function SummaryCard({
     <div className="rounded-card bg-surface p-4 ring-1 ring-border">
       <dt className="text-xs font-bold text-muted">{label}</dt>
       <dd className="mt-1 text-2xl font-extrabold">{value}</dd>
-      {sub && <dd className="text-xs text-secondary">{sub}</dd>}
+      {sub && <dd className="text-xs text-secondary-strong">{sub}</dd>}
     </div>
   );
 }

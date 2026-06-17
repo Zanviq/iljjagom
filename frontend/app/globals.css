@@ -10,18 +10,22 @@
   --background: #fdf8f0; /* 따뜻한 크림 */
   --surface: #ffffff;
   --foreground: #3a2e22; /* 짙은 갈색 텍스트 */
-  --muted: #8a7a68;
+  --muted: #726252; /* 보조 텍스트 (WCAG AA: bg 5.5:1) */
 
-  --primary: #f5872e; /* 주황 (CTA) */
+  --primary: #f5872e; /* 주황 (CTA 채움용) */
   --primary-foreground: #ffffff;
-  --secondary: #6cb4a4; /* 청록 (보조) */
+  /* 밝은 색을 "텍스트"로 쓸 때(연한 배경 위) AA 충족용 진한 변형 */
+  --primary-strong: #a84d0e; /* 주황 텍스트/링크 (bg 5.3:1) */
+  --secondary: #6cb4a4; /* 청록 (보조 채움용) */
+  --secondary-strong: #2b7263; /* 청록 텍스트 (bg 5.4:1) */
   --accent: #ffd45e; /* 노랑 (강조) */
 
   --border: #ecdfca;
   --ring: #f5872e;
 
-  --danger: #e0594a;
-  --success: #4f9d69;
+  --danger: #c4392b; /* 빨강 — 텍스트로도 쓰여 AA(surf 5.3:1)로 진하게 */
+  --success: #4f9d69; /* 초록 (채움용) */
+  --success-strong: #37794e; /* 초록 텍스트 (surf 5.2:1) */
 
   --radius: 1.25rem;
 }
@@ -34,13 +38,16 @@
 
   --color-primary: var(--primary);
   --color-primary-foreground: var(--primary-foreground);
+  --color-primary-strong: var(--primary-strong);
   --color-secondary: var(--secondary);
+  --color-secondary-strong: var(--secondary-strong);
   --color-accent: var(--accent);
 
   --color-border: var(--border);
   --color-ring: var(--ring);
   --color-danger: var(--danger);
   --color-success: var(--success);
+  --color-success-strong: var(--success-strong);
 
   --font-sans: "Pretendard Variable", "Pretendard", system-ui, -apple-system,
     "Segoe UI", Roboto, "Apple SD Gothic Neo", "Noto Sans KR", sans-serif;

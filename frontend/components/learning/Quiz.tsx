@@ -56,7 +56,7 @@ function QuizCard({ item, index }: { item: QuizItem; index: number }) {
         <p
           className={cn(
             "mt-3 text-sm font-bold",
-            correct ? "text-success" : "text-danger",
+            correct ? "text-success-strong" : "text-danger",
           )}
         >
           {correct ? "정답이에요! 🎉" : "다시 한 번 생각해 볼까요?"}

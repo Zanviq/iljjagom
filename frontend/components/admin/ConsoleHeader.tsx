@@ -61,7 +61,7 @@ function Badge({
   tone: "ok" | "warn" | "neutral" | "danger";
 }) {
   const tones: Record<typeof tone, string> = {
-    ok: "bg-success/15 text-success",
+    ok: "bg-success/15 text-success-strong",
     warn: "bg-accent/40 text-foreground",
     neutral: "bg-black/5 text-muted",
     danger: "bg-danger/10 text-danger",

@@ -63,7 +63,7 @@ export default async function ConsoleSessionsPage() {
                   <td className="p-3 font-bold">
                     <Link
                       href={`/console/sessions/${s.id}`}
-                      className="text-primary hover:underline"
+                      className="text-primary-strong hover:underline"
                     >
                       {ROLE_LABEL[s.role] ?? s.role}
                     </Link>

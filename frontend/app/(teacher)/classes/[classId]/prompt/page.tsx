@@ -36,7 +36,7 @@ export default async function PromptPage({
         주제와 학습 목표를 정하면, 학생이 그 안에서 자기 이야기를 만들어요.
       </p>
 
-      <div className="mt-6 grid gap-8 lg:grid-cols-[1fr_20rem]">
+      <div className="mt-6 grid gap-8 md:grid-cols-[1fr_20rem]">
         <PromptForm classId={classId} />
 
         <aside>
@@ -56,7 +56,7 @@ export default async function PromptPage({
                       {p.learningObjectives.map((o, i) => (
                         <li
                           key={i}
-                          className="rounded-full bg-secondary/15 px-2.5 py-0.5 text-xs text-secondary"
+                          className="rounded-full bg-secondary/15 px-2.5 py-0.5 text-xs text-secondary-strong"
                         >
                           {o}
                         </li>

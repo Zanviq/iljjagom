@@ -28,7 +28,7 @@ export function ConsoleNav() {
             className={cn(
               "-mb-px whitespace-nowrap border-b-2 px-4 py-2 text-sm font-bold transition",
               active
-                ? "border-primary text-primary"
+                ? "border-primary text-primary-strong"
                 : "border-transparent text-muted hover:bg-black/5",
             )}
           >
