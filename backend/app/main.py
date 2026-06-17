@@ -11,10 +11,11 @@ from app.errors import register_exception_handlers
 def create_app() -> FastAPI:
     settings = get_settings()
 
-    # 보안: 운영 신호(JWT 시크릿)가 있는데 개발 인증이 켜져 있으면 기동 거부(설정 실수 차단).
-    if settings.dev_auth and settings.supabase_jwt_secret:
+    # 보안: 운영 신호(JWT 시크릿 또는 Supabase URL=실 토큰 검증 경로)가 있는데
+    # 개발 인증이 켜져 있으면 기동 거부(설정 실수 차단, fail-closed).
+    if settings.dev_auth and (settings.supabase_jwt_secret or settings.supabase_url):
         raise RuntimeError(
-            "DEV_AUTH 가 켜진 상태로 SUPABASE_JWT_SECRET 이 설정되어 있습니다. "
+            "DEV_AUTH 가 켜진 상태로 SUPABASE_JWT_SECRET/SUPABASE_URL 이 설정되어 있습니다. "
             "운영 환경에서는 DEV_AUTH=false 로 두세요."
         )
     app = FastAPI(

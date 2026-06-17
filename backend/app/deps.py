@@ -1,16 +1,20 @@
 """공통 의존성 — 인증된 현재 유저, 저장소, 역할 가드.
 
 인증: `Authorization: Bearer <token>`.
-- 운영: Supabase JWT(HS256, SUPABASE_JWT_SECRET) 검증.
-- 개발(DEV_AUTH=true): `dev:<email>:<role>` 형식 허용(키 없이 계약 검증용).
+- 운영(기본): Supabase 사용자 JWT를 **ES256(비대칭, JWKS)** 로 검증.
+  현 Supabase 프로젝트는 비대칭 서명(kid 포함, alg=ES256)을 발급한다.
+- 과도기: 레거시 **HS256**(공유 시크릿 `SUPABASE_JWT_SECRET`) 토큰도 함께 허용.
+- 개발(DEV_AUTH=true, 실 토큰 검증 경로 없을 때만): `dev:<email>:<role>` 허용(fail-closed).
 """
 from __future__ import annotations
 
+import asyncio
 import uuid
 from dataclasses import dataclass
 
 import jwt
 from fastapi import Depends, Request
+from jwt import PyJWKClient
 
 from app.config import Settings, get_settings
 from app.errors import forbidden, unauthorized
@@ -19,6 +23,19 @@ from app.store.base import Store
 from app.store.records import ProfileRecord
 
 _DEV_NAMESPACE = uuid.UUID("00000000-0000-0000-0000-00000000d39e")
+_SUPABASE_AUD = "authenticated"
+_ASYM_ALGS = ("ES256", "RS256", "EdDSA")
+
+# JWKS 클라이언트(키 캐시) — URL 당 1개. JWKS 는 거의 변하지 않아 캐시 효율적.
+_jwks_clients: dict[str, PyJWKClient] = {}
+
+
+def _jwks_client(jwks_url: str) -> PyJWKClient:
+    client = _jwks_clients.get(jwks_url)
+    if client is None:
+        client = PyJWKClient(jwks_url, cache_keys=True)
+        _jwks_clients[jwks_url] = client
+    return client
 
 
 @dataclass
@@ -47,22 +64,48 @@ def _resolve_identity(token: str, settings: Settings) -> tuple[str, str]:
         user_id = str(uuid.uuid5(_DEV_NAMESPACE, email))
         return user_id, email
 
-    if not settings.supabase_jwt_secret:
-        raise unauthorized("서버에 JWT 검증 설정이 없습니다.")
-    try:
-        payload = jwt.decode(
-            token,
-            settings.supabase_jwt_secret,
-            algorithms=["HS256"],
-            options={"verify_aud": False},
-        )
-    except jwt.PyJWTError:
-        raise unauthorized("토큰이 유효하지 않거나 만료되었습니다.")
+    payload = _verify_supabase_jwt(token, settings)
     user_id = payload.get("sub")
     email = (payload.get("email") or "").lower()
     if not user_id:
         raise unauthorized("토큰에 사용자 정보가 없습니다.")
     return user_id, email
+
+
+def _verify_supabase_jwt(token: str, settings: Settings) -> dict:
+    """Supabase 사용자 JWT 검증. 헤더 alg 로 ES256(JWKS)/HS256(레거시) 분기."""
+    try:
+        header = jwt.get_unverified_header(token)
+    except jwt.PyJWTError:
+        raise unauthorized("토큰 형식이 올바르지 않습니다.")
+    alg = header.get("alg")
+
+    try:
+        if alg in _ASYM_ALGS:
+            if not settings.supabase_jwks_url:
+                raise unauthorized("서버에 JWKS 설정이 없습니다.")
+            signing_key = _jwks_client(settings.supabase_jwks_url).get_signing_key_from_jwt(token)
+            return jwt.decode(
+                token,
+                signing_key.key,
+                algorithms=list(_ASYM_ALGS),
+                audience=_SUPABASE_AUD,
+                issuer=settings.supabase_issuer or None,
+                options={"verify_aud": True, "verify_iss": bool(settings.supabase_issuer)},
+            )
+        if alg == "HS256":
+            if not settings.supabase_jwt_secret:
+                raise unauthorized("서버에 HS256 시크릿 설정이 없습니다.")
+            return jwt.decode(
+                token,
+                settings.supabase_jwt_secret,
+                algorithms=["HS256"],
+                audience=_SUPABASE_AUD,
+                options={"verify_aud": True},
+            )
+        raise unauthorized("지원하지 않는 토큰 서명 방식입니다.")
+    except jwt.PyJWTError:
+        raise unauthorized("토큰이 유효하지 않거나 만료되었습니다.")
 
 
 def get_store_dep() -> Store:
@@ -75,7 +118,8 @@ async def get_current_user(
     store: Store = Depends(get_store_dep),
 ) -> CurrentUser:
     token = _bearer_token(request)
-    user_id, email = _resolve_identity(token, settings)
+    # JWKS 조회가 네트워크를 탈 수 있어 이벤트 루프를 막지 않도록 스레드로 오프로드.
+    user_id, email = await asyncio.to_thread(_resolve_identity, token, settings)
 
     # 개발 토큰의 명시 역할(dev:email:role)
     dev_role = None

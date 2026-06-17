@@ -45,6 +45,18 @@ class Settings(BaseSettings):
         return [o.strip() for o in self.allowed_origins.split(",") if o.strip()]
 
     @property
+    def supabase_issuer(self) -> str:
+        return f"{self.supabase_url}/auth/v1" if self.supabase_url else ""
+
+    @property
+    def supabase_jwks_url(self) -> str:
+        return (
+            f"{self.supabase_url}/auth/v1/.well-known/jwks.json"
+            if self.supabase_url
+            else ""
+        )
+
+    @property
     def use_supabase(self) -> bool:
         """Supabase 자격이 충분하면 실 DB를, 아니면 인메모리 저장소를 쓴다."""
         return bool(self.supabase_url and self.supabase_service_role_key)
@@ -58,9 +70,10 @@ class Settings(BaseSettings):
     def dev_auth_enabled(self) -> bool:
         """개발 토큰(dev:*)은 명시적 opt-in(dev_auth)이고 실제 JWT 시크릿이 없을 때만 허용.
 
-        운영(시크릿 존재)에서는 DEV_AUTH 가 실수로 켜져도 우회 경로가 닫힌다(fail-closed).
+        운영(시크릿 또는 Supabase URL 존재)에서는 DEV_AUTH 가 실수로 켜져도 우회 경로가 닫힌다(fail-closed).
+        실 토큰 검증 경로(HS256 시크릿 또는 ES256 JWKS=supabase_url)가 하나라도 있으면 dev 토큰 비활성.
         """
-        return self.dev_auth and not self.supabase_jwt_secret
+        return self.dev_auth and not self.supabase_jwt_secret and not self.supabase_url
 
 
 @lru_cache
