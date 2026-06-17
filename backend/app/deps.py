@@ -17,7 +17,7 @@ from fastapi import Depends, Request
 from jwt import PyJWKClient
 
 from app.config import Settings, get_settings
-from app.errors import forbidden, unauthorized
+from app.errors import consent_required, forbidden, unauthorized
 from app.store import get_store
 from app.store.base import Store
 from app.store.records import ProfileRecord
@@ -152,6 +152,25 @@ def require_role(*roles: str):
     async def _guard(user: CurrentUser = Depends(get_current_user)) -> CurrentUser:
         if user.role not in roles:
             raise forbidden(f"이 작업은 {'/'.join(roles)} 역할만 가능합니다.")
+        return user
+
+    return _guard
+
+
+def require_guardian_consent():
+    """학생의 AI 자유텍스트 기능 게이트 — 보호자 미동의 시 403 consent_required.
+
+    교사/관리자는 면제. 추가기능 03 §5(보호자 동의 실효화).
+    """
+
+    async def _guard(user: CurrentUser = Depends(get_current_user)) -> CurrentUser:
+        if user.role == "student":
+            consented = bool(user.profile and user.profile.guardian_consent)
+            if not consented:
+                raise consent_required(
+                    "보호자 동의가 있어야 사용할 수 있어요.",
+                    {"reason": "guardian_consent"},
+                )
         return user
 
     return _guard

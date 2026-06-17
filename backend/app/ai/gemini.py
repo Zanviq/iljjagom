@@ -19,6 +19,16 @@ EMBED_DIM = 768
 _TRANSIENT_SIGNALS = ("503", "unavailable", "overloaded", "429", "resource_exhausted", "rate")
 _T = TypeVar("_T")
 
+# 미성년 전제 콘텐츠 안전 — 텍스트 생성에 적용(추가기능 03 §3.3).
+_HARM_CATEGORIES = (
+    "HARM_CATEGORY_HARASSMENT",
+    "HARM_CATEGORY_HATE_SPEECH",
+    "HARM_CATEGORY_SEXUALLY_EXPLICIT",
+    "HARM_CATEGORY_DANGEROUS_CONTENT",
+)
+# strict(기본): 낮은 확률부터 차단. normal: 중간 이상 차단.
+_THRESHOLDS = {"strict": "BLOCK_LOW_AND_ABOVE", "normal": "BLOCK_MEDIUM_AND_ABOVE"}
+
 
 def _is_transient(exc: Exception) -> bool:
     msg = str(exc).lower()
@@ -58,6 +68,8 @@ class GeminiClient:
     def __init__(self, settings: Settings | None = None) -> None:
         self.settings = settings or get_settings()
         self._client = None
+        # 미성년 전제 — 기본 strict. (관리자 app_settings.safety_level 연동은 후속.)
+        self.safety_level = "strict"
         if self.settings.use_real_ai:
             from google import genai
 
@@ -67,12 +79,31 @@ class GeminiClient:
     def mock(self) -> bool:
         return self._client is None
 
+    def _gen_config(self):
+        """텍스트 생성 config — 콘텐츠 안전 설정 포함. 실패 시 None(설정 없이 호출)."""
+        try:
+            from google.genai import types
+
+            threshold = _THRESHOLDS.get(self.safety_level, _THRESHOLDS["strict"])
+            return types.GenerateContentConfig(
+                safety_settings=[
+                    types.SafetySetting(category=cat, threshold=threshold)
+                    for cat in _HARM_CATEGORIES
+                ]
+            )
+        except Exception:
+            return None
+
     async def generate_text(self, model: str, prompt: str) -> str:
         if self.mock:
             return f"[mock:{model}] {prompt[:60]}"
 
+        config = self._gen_config()
+
         def _call() -> str:
-            resp = self._client.models.generate_content(model=model, contents=prompt)
+            resp = self._client.models.generate_content(
+                model=model, contents=prompt, config=config
+            )
             return resp.text or ""
 
         return await asyncio.to_thread(lambda: _retry_call(_call))
@@ -83,8 +114,12 @@ class GeminiClient:
             yield f"[mock:{model}] {prompt[:60]}"
             return
 
+        config = self._gen_config()
+
         def _iter():
-            return self._client.models.generate_content_stream(model=model, contents=prompt)
+            return self._client.models.generate_content_stream(
+                model=model, contents=prompt, config=config
+            )
 
         stream = await asyncio.to_thread(lambda: _retry_call(_iter))
         for chunk in stream:

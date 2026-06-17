@@ -10,7 +10,7 @@ import asyncio
 import json
 from collections.abc import AsyncIterator
 
-from app.ai import chat, editor, imagen, rag, writer
+from app.ai import chat, editor, imagen, rag, safety, writer
 from app.ai.gemini import GeminiClient
 from app.ai.skills.base import estimate_tokens
 from app.ai.trace import Trace
@@ -206,6 +206,21 @@ async def run_first_draft_review(
         tokens_in=estimate_tokens(chapter.body),
         tokens_out=estimate_tokens(result.body),
     )
+    # 출력 안전: 무거운 장면 신호는 교사 사후 확인용으로 기록(학생 흐름은 막지 않음).
+    try:
+        level = store.get_setting("safety_level") or "strict"
+        out = safety.filter_output(result.body, safety_level=str(level))
+        if out.flags:
+            book = store.get_book(book_id)
+            store.add_safety_flag(
+                book_id, book.student_id if book else None, "output",
+                f"무거운 장면 신호: {', '.join(out.flags)}",
+                category="heavy_scene",
+            )
+            trace.step("출력 안전 점검", "check_safety",
+                       {"kind": "output"}, {"flags": out.flags, "softened": out.softened})
+    except Exception:
+        pass
     trace.end(status="done", summary=f"{idx}장 검수 완료")
     if result.body != chapter.body:
         await rag.index_text(store, gemini, book_id, chapter.id, result.body)

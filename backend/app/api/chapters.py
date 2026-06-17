@@ -7,7 +7,13 @@ from starlette.background import BackgroundTask
 
 from app.ai.gemini import GeminiClient, get_gemini
 from app.ai.safety import check_input
-from app.deps import CurrentUser, get_current_user, get_store_dep, require_role
+from app.deps import (
+    CurrentUser,
+    get_current_user,
+    get_store_dep,
+    require_guardian_consent,
+    require_role,
+)
 from app.errors import conflict, validation_error
 from app.models.schemas import ReviseRequest, ReviseResponse, serialize
 from app.ratelimit import rate_limit
@@ -52,6 +58,7 @@ async def revise_chapter(
     store: Store = Depends(get_store_dep),
     gemini: GeminiClient = Depends(get_gemini),
     _rl: None = Depends(rate_limit("revise", 20)),
+    _consent: CurrentUser = Depends(require_guardian_consent()),
 ) -> dict:
     # 소유 학생만(또는 admin). 집필된 챕터만 수정 가능.
     book = books.get_book_or_404(store, book_id)

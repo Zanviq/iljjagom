@@ -1,7 +1,35 @@
 """안전·교사검토 루프 테스트 — 보류 편지 영속화 → 교사 승인/반려 → 플래그 종결."""
 from __future__ import annotations
 
+from app.ai import safety as safety_gate
 from tests.conftest import auth
+
+
+def test_input_categorization():
+    r = safety_gate.check_input("죽여 버릴거야")
+    assert r.ok is False
+    assert r.category == "violence"
+    r2 = safety_gate.check_input("씨   발")  # 공백 정규화 우회 차단
+    assert r2.ok is False
+    assert r2.category == "profanity"
+    ok = safety_gate.check_input("오늘은 즐거운 하루였어")
+    assert ok.ok is True
+    assert ok.category is None
+
+
+def test_input_risk_signal_not_blocked():
+    r = safety_gate.check_input("혼자라서 너무 외로워")
+    assert r.ok is True  # 차단 아님(보류 대상)
+    assert r.risk is True
+
+
+def test_filter_output_flags_heavy_scene():
+    out = safety_gate.filter_output("주인공이 죽었어요.", safety_level="strict")
+    assert out.ok is True  # 학생 흐름 막지 않음
+    assert out.flags
+    assert out.softened is True
+    clean = safety_gate.filter_output("주인공이 신나게 뛰어놀았어요.")
+    assert not clean.flags
 
 
 async def _setup(client):
@@ -21,6 +49,26 @@ async def _setup(client):
     await client.post(f"/books/{book_id}/plan/messages", headers=sh, json={"message": "용감한 토끼"})
     await client.post(f"/books/{book_id}/design", headers=sh)
     return class_id, code, prompt_id, sh, th, book_id
+
+
+async def test_consent_required_blocks_book_creation(client):
+    # 보호자 미동의 학생은 책 생성이 consent_required(403)로 차단된다.
+    th = auth("teacher@test", "teacher")
+    await client.post("/onboarding", headers=th, json={"role": "teacher", "guardianConsent": False})
+    classes = (await client.get("/classes", headers=th)).json()["classes"]
+    class_id, code = classes[0]["id"], classes[0]["code"]
+    await client.post(
+        f"/classes/{class_id}/prompts", headers=th,
+        json={"topic": "우정", "learningObjectives": ["배려"], "assessment": {}},
+    )
+    prompt_id = (await client.get(f"/classes/{class_id}/prompts", headers=th)).json()["prompts"][0]["id"]
+
+    sh = auth("kid_noconsent@test", "student")
+    # 동의 없이 온보딩
+    await client.post("/onboarding", headers=sh, json={"role": "student", "classCode": code})
+    r = await client.post("/books", headers=sh, json={"promptId": prompt_id})
+    assert r.status_code == 403
+    assert r.json()["error"]["code"] == "consent_required"
 
 
 async def test_answered_letter_persisted(client):

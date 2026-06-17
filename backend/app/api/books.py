@@ -4,7 +4,13 @@ from __future__ import annotations
 from fastapi import APIRouter, Depends, Query
 
 from app.ai.gemini import GeminiClient, get_gemini
-from app.deps import CurrentUser, get_current_user, get_store_dep, require_role
+from app.deps import (
+    CurrentUser,
+    get_current_user,
+    get_store_dep,
+    require_guardian_consent,
+    require_role,
+)
 from app.models.schemas import CreateBookRequest, LetterRequest, serialize
 from app.ratelimit import rate_limit
 from app.services import books, learning, words
@@ -19,6 +25,7 @@ async def create_book(
     req: CreateBookRequest,
     user: CurrentUser = Depends(require_role("student", "admin")),
     store: Store = Depends(get_store_dep),
+    _consent: CurrentUser = Depends(require_guardian_consent()),
 ) -> dict:
     book = books.create_book(store, user, req.prompt_id)
     return serialize(book)
@@ -89,6 +96,7 @@ async def post_letter(
     store: Store = Depends(get_store_dep),
     gemini: GeminiClient = Depends(get_gemini),
     _rl: None = Depends(rate_limit("letters", 20)),
+    _consent: CurrentUser = Depends(require_guardian_consent()),
 ) -> dict:
     # 인물에게 편지 → 페르소나 답장(정서 위험 시 보류). FR-S11.
     result = await learning.write_letter(store, gemini, user, book_id, req.to, req.body)
