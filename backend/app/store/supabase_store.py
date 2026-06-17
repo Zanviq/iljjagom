@@ -20,6 +20,7 @@ from app.store.records import (
     ChapterRecord,
     ChunkRecord,
     ClassroomRecord,
+    LetterRecord,
     MessageRecord,
     NotificationRecord,
     PlanMessageRecord,
@@ -369,7 +370,14 @@ class SupabaseStore(Store):
 
     # --- safety ---
     def add_safety_flag(
-        self, book_id: str | None, student_id: str | None, source: str, reason: str
+        self,
+        book_id: str | None,
+        student_id: str | None,
+        source: str,
+        reason: str,
+        category: str | None = None,
+        severity: str = "normal",
+        letter_id: str | None = None,
     ) -> SafetyFlagRecord:
         row = self._one(
             self.client.table("safety_flags")
@@ -380,14 +388,113 @@ class SupabaseStore(Store):
                     "source": source,
                     "reason": reason,
                     "status": "open",
+                    "category": category,
+                    "severity": severity,
+                    "letter_id": letter_id,
                 }
             )
             .execute()
         )
         return SafetyFlagRecord(**row) if row else SafetyFlagRecord(
             id="", book_id=book_id, student_id=student_id, source=source, reason=reason,
-            created_at=now_iso(),
+            category=category, severity=severity, letter_id=letter_id, created_at=now_iso(),
         )
+
+    def _class_book_ids(self, class_id: str) -> list[str]:
+        rows = self._rows(
+            self.client.table("books").select("id").eq("classroom_id", class_id).execute()
+        )
+        return [r["id"] for r in rows]
+
+    def get_safety_flag(self, flag_id: str) -> SafetyFlagRecord | None:
+        row = self._one(
+            self.client.table("safety_flags").select("*").eq("id", flag_id).limit(1).execute()
+        )
+        return SafetyFlagRecord(**row) if row else None
+
+    def list_safety_flags(
+        self,
+        class_id: str | None = None,
+        book_id: str | None = None,
+        status: str | None = None,
+        source: str | None = None,
+        limit: int = 100,
+    ) -> list[SafetyFlagRecord]:
+        q = self.client.table("safety_flags").select("*")
+        if book_id is not None:
+            q = q.eq("book_id", book_id)
+        if class_id is not None:
+            ids = self._class_book_ids(class_id)
+            if not ids:
+                return []
+            q = q.in_("book_id", ids)
+        if status is not None:
+            q = q.eq("status", status)
+        if source is not None:
+            q = q.eq("source", source)
+        rows = self._rows(q.order("created_at", desc=True).limit(limit).execute())
+        return [SafetyFlagRecord(**r) for r in rows]
+
+    def update_safety_flag(self, flag_id: str, **fields: Any) -> SafetyFlagRecord:
+        row = self._one(
+            self.client.table("safety_flags").update(fields).eq("id", flag_id).execute()
+        )
+        return SafetyFlagRecord(**row)
+
+    # --- letters ---
+    def add_letter(
+        self,
+        book_id: str,
+        student_id: str | None,
+        recipient: str,
+        body: str,
+        status: str = "pending",
+        reply: str | None = None,
+        reply_source: str | None = None,
+    ) -> LetterRecord:
+        row = self._one(
+            self.client.table("letters")
+            .insert(
+                {
+                    "book_id": book_id, "student_id": student_id, "recipient": recipient,
+                    "body": body, "status": status, "reply": reply, "reply_source": reply_source,
+                }
+            )
+            .execute()
+        )
+        return LetterRecord(**row)
+
+    def get_letter(self, letter_id: str) -> LetterRecord | None:
+        row = self._one(
+            self.client.table("letters").select("*").eq("id", letter_id).limit(1).execute()
+        )
+        return LetterRecord(**row) if row else None
+
+    def list_letters(
+        self,
+        class_id: str | None = None,
+        book_id: str | None = None,
+        status: str | None = None,
+        limit: int = 100,
+    ) -> list[LetterRecord]:
+        q = self.client.table("letters").select("*")
+        if book_id is not None:
+            q = q.eq("book_id", book_id)
+        if class_id is not None:
+            ids = self._class_book_ids(class_id)
+            if not ids:
+                return []
+            q = q.in_("book_id", ids)
+        if status is not None:
+            q = q.eq("status", status)
+        rows = self._rows(q.order("created_at", desc=True).limit(limit).execute())
+        return [LetterRecord(**r) for r in rows]
+
+    def update_letter(self, letter_id: str, **fields: Any) -> LetterRecord:
+        row = self._one(
+            self.client.table("letters").update(fields).eq("id", letter_id).execute()
+        )
+        return LetterRecord(**row)
 
     # --- 관리자 집계 ---
     def _count(self, table: str, **eq: Any) -> int:

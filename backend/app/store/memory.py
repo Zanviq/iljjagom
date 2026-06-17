@@ -18,6 +18,7 @@ from app.store.records import (
     ChapterRecord,
     ChunkRecord,
     ClassroomRecord,
+    LetterRecord,
     MessageRecord,
     NotificationRecord,
     PlanMessageRecord,
@@ -41,6 +42,7 @@ class InMemoryStore(Store):
         self.plan_messages: list[PlanMessageRecord] = []
         self.chunks: list[ChunkRecord] = []
         self.safety_flags: list[SafetyFlagRecord] = []
+        self.letters: list[LetterRecord] = []
         # 추가기능(03)
         self.ai_sessions: dict[str, AiSessionRecord] = {}
         self.ai_steps: list[AiStepRecord] = []
@@ -246,7 +248,14 @@ class InMemoryStore(Store):
 
     # --- safety ---
     def add_safety_flag(
-        self, book_id: str | None, student_id: str | None, source: str, reason: str
+        self,
+        book_id: str | None,
+        student_id: str | None,
+        source: str,
+        reason: str,
+        category: str | None = None,
+        severity: str = "normal",
+        letter_id: str | None = None,
     ) -> SafetyFlagRecord:
         rec = SafetyFlagRecord(
             id=new_id(),
@@ -255,9 +264,92 @@ class InMemoryStore(Store):
             source=source,
             reason=reason,
             status="open",
+            category=category,
+            severity=severity,
+            letter_id=letter_id,
             created_at=now_iso(),
         )
         self.safety_flags.append(rec)
+        return rec
+
+    def _book_ids_for_class(self, class_id: str) -> set[str]:
+        return {b.id for b in self.books.values() if b.classroom_id == class_id}
+
+    def get_safety_flag(self, flag_id: str) -> SafetyFlagRecord | None:
+        return next((f for f in self.safety_flags if f.id == flag_id), None)
+
+    def list_safety_flags(
+        self,
+        class_id: str | None = None,
+        book_id: str | None = None,
+        status: str | None = None,
+        source: str | None = None,
+        limit: int = 100,
+    ) -> list[SafetyFlagRecord]:
+        class_books = self._book_ids_for_class(class_id) if class_id else None
+        rows = [
+            f for f in self.safety_flags
+            if (book_id is None or f.book_id == book_id)
+            and (class_books is None or f.book_id in class_books)
+            and (status is None or f.status == status)
+            and (source is None or f.source == source)
+        ]
+        rows.sort(key=lambda f: f.created_at, reverse=True)
+        return rows[:limit]
+
+    def update_safety_flag(self, flag_id: str, **fields: Any) -> SafetyFlagRecord:
+        rec = self.get_safety_flag(flag_id)
+        if rec is None:
+            raise KeyError(flag_id)
+        for k, v in fields.items():
+            setattr(rec, k, v)
+        return rec
+
+    # --- letters ---
+    def add_letter(
+        self,
+        book_id: str,
+        student_id: str | None,
+        recipient: str,
+        body: str,
+        status: str = "pending",
+        reply: str | None = None,
+        reply_source: str | None = None,
+    ) -> LetterRecord:
+        rec = LetterRecord(
+            id=new_id(), book_id=book_id, student_id=student_id, recipient=recipient,
+            body=body, status=status, reply=reply, reply_source=reply_source,
+            created_at=now_iso(),
+        )
+        self.letters.append(rec)
+        return rec
+
+    def get_letter(self, letter_id: str) -> LetterRecord | None:
+        return next((m for m in self.letters if m.id == letter_id), None)
+
+    def list_letters(
+        self,
+        class_id: str | None = None,
+        book_id: str | None = None,
+        status: str | None = None,
+        limit: int = 100,
+    ) -> list[LetterRecord]:
+        class_books = self._book_ids_for_class(class_id) if class_id else None
+        rows = [
+            m for m in self.letters
+            if (book_id is None or m.book_id == book_id)
+            and (class_books is None or m.book_id in class_books)
+            and (status is None or m.status == status)
+        ]
+        rows.sort(key=lambda m: m.created_at, reverse=True)
+        return rows[:limit]
+
+    def update_letter(self, letter_id: str, **fields: Any) -> LetterRecord:
+        rec = self.get_letter(letter_id)
+        if rec is None:
+            raise KeyError(letter_id)
+        for k, v in fields.items():
+            setattr(rec, k, v)
         return rec
 
     # --- 관리자 집계 ---

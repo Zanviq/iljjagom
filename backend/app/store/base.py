@@ -13,6 +13,7 @@ from app.store.records import (
     ChapterRecord,
     ChunkRecord,
     ClassroomRecord,
+    LetterRecord,
     MessageRecord,
     NotificationRecord,
     PlanMessageRecord,
@@ -137,8 +138,59 @@ class Store(ABC):
     # --- safety ---
     @abstractmethod
     def add_safety_flag(
-        self, book_id: str | None, student_id: str | None, source: str, reason: str
+        self,
+        book_id: str | None,
+        student_id: str | None,
+        source: str,
+        reason: str,
+        category: str | None = None,
+        severity: str = "normal",
+        letter_id: str | None = None,
     ) -> SafetyFlagRecord: ...
+
+    @abstractmethod
+    def get_safety_flag(self, flag_id: str) -> SafetyFlagRecord | None: ...
+
+    @abstractmethod
+    def list_safety_flags(
+        self,
+        class_id: str | None = None,
+        book_id: str | None = None,
+        status: str | None = None,
+        source: str | None = None,
+        limit: int = 100,
+    ) -> list[SafetyFlagRecord]: ...
+
+    @abstractmethod
+    def update_safety_flag(self, flag_id: str, **fields: Any) -> SafetyFlagRecord: ...
+
+    # --- letters (교사 검토 루프) ---
+    @abstractmethod
+    def add_letter(
+        self,
+        book_id: str,
+        student_id: str | None,
+        recipient: str,
+        body: str,
+        status: str = "pending",
+        reply: str | None = None,
+        reply_source: str | None = None,
+    ) -> LetterRecord: ...
+
+    @abstractmethod
+    def get_letter(self, letter_id: str) -> LetterRecord | None: ...
+
+    @abstractmethod
+    def list_letters(
+        self,
+        class_id: str | None = None,
+        book_id: str | None = None,
+        status: str | None = None,
+        limit: int = 100,
+    ) -> list[LetterRecord]: ...
+
+    @abstractmethod
+    def update_letter(self, letter_id: str, **fields: Any) -> LetterRecord: ...
 
     # --- 관리자 집계 ---
     @abstractmethod

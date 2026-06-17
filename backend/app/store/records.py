@@ -101,9 +101,30 @@ class SafetyFlagRecord:
     id: str
     book_id: str | None
     student_id: str | None
-    source: str
+    source: str  # letter|revise|plan|output|image
     reason: str
-    status: str = "open"
+    status: str = "open"  # open|reviewed|resolved
+    category: str | None = None  # violence|hate|sexual|self_harm|profanity ...
+    severity: str = "normal"  # normal|high
+    letter_id: str | None = None
+    reviewed_by: str | None = None
+    reviewed_at: str | None = None
+    note: str | None = None
+    created_at: str = ""
+
+
+@dataclass
+class LetterRecord:
+    id: str
+    book_id: str
+    student_id: str | None
+    recipient: str
+    body: str
+    status: str = "pending"  # pending|answered|held|approved|rejected
+    reply: str | None = None
+    reply_source: str | None = None  # ai|teacher
+    reviewed_by: str | None = None
+    reviewed_at: str | None = None
     created_at: str = ""
 
 
