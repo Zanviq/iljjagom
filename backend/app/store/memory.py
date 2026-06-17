@@ -78,6 +78,9 @@ class InMemoryStore(Store):
     def count_students(self, classroom_id: str) -> int:
         return sum(1 for (cid, _) in self.enrollments if cid == classroom_id)
 
+    def list_student_ids(self, classroom_id: str) -> list[str]:
+        return [sid for (cid, sid) in self.enrollments if cid == classroom_id]
+
     def enroll(self, classroom_id: str, student_id: str) -> None:
         self.enrollments.add((classroom_id, student_id))
 
@@ -141,6 +144,13 @@ class InMemoryStore(Store):
     def list_books_for_student(self, student_id: str) -> list[BookRecord]:
         return sorted(
             (b for b in self.books.values() if b.student_id == student_id),
+            key=lambda b: b.updated_at or b.created_at,
+            reverse=True,
+        )
+
+    def list_books_for_class(self, classroom_id: str) -> list[BookRecord]:
+        return sorted(
+            (b for b in self.books.values() if b.classroom_id == classroom_id),
             key=lambda b: b.updated_at or b.created_at,
             reverse=True,
         )

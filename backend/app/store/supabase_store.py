@@ -112,6 +112,15 @@ class SupabaseStore(Store):
         )
         return resp.count or 0
 
+    def list_student_ids(self, classroom_id: str) -> list[str]:
+        rows = self._rows(
+            self.client.table("enrollments")
+            .select("student_id")
+            .eq("classroom_id", classroom_id)
+            .execute()
+        )
+        return [r["student_id"] for r in rows]
+
     def enroll(self, classroom_id: str, student_id: str) -> None:
         self.client.table("enrollments").upsert(
             {"classroom_id": classroom_id, "student_id": student_id}
@@ -201,6 +210,16 @@ class SupabaseStore(Store):
             self.client.table("books")
             .select("*")
             .eq("student_id", student_id)
+            .order("updated_at", desc=True)
+            .execute()
+        )
+        return [BookRecord(**r) for r in rows]
+
+    def list_books_for_class(self, classroom_id: str) -> list[BookRecord]:
+        rows = self._rows(
+            self.client.table("books")
+            .select("*")
+            .eq("classroom_id", classroom_id)
             .order("updated_at", desc=True)
             .execute()
         )

@@ -47,6 +47,9 @@ class Store(ABC):
     def count_students(self, classroom_id: str) -> int: ...
 
     @abstractmethod
+    def list_student_ids(self, classroom_id: str) -> list[str]: ...
+
+    @abstractmethod
     def enroll(self, classroom_id: str, student_id: str) -> None: ...
 
     @abstractmethod
@@ -83,6 +86,9 @@ class Store(ABC):
 
     @abstractmethod
     def list_books_for_student(self, student_id: str) -> list[BookRecord]: ...
+
+    @abstractmethod
+    def list_books_for_class(self, classroom_id: str) -> list[BookRecord]: ...
 
     # --- bibles ---
     @abstractmethod

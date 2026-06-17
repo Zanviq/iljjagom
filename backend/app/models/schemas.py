@@ -73,6 +73,30 @@ class PromptsResponse(CamelModel):
     prompts: list[Prompt]
 
 
+# --- 교사 대시보드 (FR-T2) ---
+class DashboardStudent(CamelModel):
+    student_id: str
+    student_email: str
+    book_id: str | None = None
+    title: str | None = None
+    status: BookStatus | None = None
+    chapters_done: int = 0
+    total_chapters: int | None = None
+
+
+class DashboardSummary(CamelModel):
+    student_count: int = 0
+    books_started: int = 0
+    books_done: int = 0
+    completion_rate: float = 0.0
+    vocab_count: int = 0
+
+
+class DashboardResponse(CamelModel):
+    students: list[DashboardStudent] = []
+    summary: DashboardSummary = DashboardSummary()
+
+
 # --- 책 ---
 class CreateBookRequest(CamelModel):
     prompt_id: str

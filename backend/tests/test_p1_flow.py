@@ -317,6 +317,36 @@ async def test_guided_chapter_has_illustration_first(client):
     assert types.index("prompt") < types.index("token")
 
 
+async def test_teacher_dashboard(client):
+    # FR-T2: 학급 학생별 진척 + 요약 집계. 담당 교사만.
+    code, class_id, prompt_id = await _teacher_makes_prompt(client)
+
+    # 학생 2명 가입, 1명만 책 생성·설계·1챕터 집필.
+    s1 = auth("dash_s1@test", "student")
+    s2 = auth("dash_s2@test", "student")
+    await client.post("/onboarding", headers=s1, json={"role": "student", "classCode": code})
+    await client.post("/onboarding", headers=s2, json={"role": "student", "classCode": code})
+    book_id, _ = await _design_and_write_ch1(client, s1, prompt_id)
+
+    th = auth("teacher@test", "teacher")
+    r = await client.get(f"/classes/{class_id}/dashboard", headers=th)
+    assert r.status_code == 200
+    body = r.json()
+    assert body["summary"]["studentCount"] == 2
+    assert body["summary"]["booksStarted"] == 1
+    rows = {row["studentEmail"]: row for row in body["students"]}
+    assert rows["dash_s1@test"]["bookId"] == book_id
+    assert rows["dash_s1@test"]["chaptersDone"] == 1
+    assert rows["dash_s1@test"]["totalChapters"] == 6
+    assert rows["dash_s2@test"]["bookId"] is None
+
+    # 담당이 아닌 다른 교사는 접근 불가(403).
+    other = auth("teacher_other@test", "teacher")
+    await client.post("/onboarding", headers=other, json={"role": "teacher"})
+    r = await client.get(f"/classes/{class_id}/dashboard", headers=other)
+    assert r.status_code == 403
+
+
 async def test_role_guard_student_cannot_make_prompt(client):
     sh = auth("kid@test", "student")
     r = await client.post(

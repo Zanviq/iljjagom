@@ -7,10 +7,13 @@ from app.models.schemas import (
     Assessment,
     ClassSummary,
     CreatePromptRequest,
+    DashboardResponse,
+    DashboardStudent,
+    DashboardSummary,
     Prompt,
 )
 from app.store.base import Store
-from app.store.records import PromptRecord
+from app.store.records import BookRecord, PromptRecord
 
 
 def list_classes(store: Store, user: CurrentUser) -> list[ClassSummary]:
@@ -59,6 +62,56 @@ def create_prompt(
         language=req.language,
     )
     return _to_prompt(rec)
+
+
+def class_dashboard(store: Store, user: CurrentUser, class_id: str) -> DashboardResponse:
+    # 담당 교사(또는 admin)만. 학급 학생별 진척 + 요약 집계 (FR-T2).
+    _assert_teacher_owns_class(store, user, class_id)
+
+    student_ids = store.list_student_ids(class_id)
+    # 학생별 대표 책 = 그 학급에서 가장 최근 활동 책(목록은 updated_at desc 정렬).
+    rep: dict[str, BookRecord] = {}
+    for b in store.list_books_for_class(class_id):
+        rep.setdefault(b.student_id, b)
+
+    students: list[DashboardStudent] = []
+    books_done = 0
+    vocab_count = 0
+    for sid in student_ids:
+        profile = store.get_profile(sid)
+        email = profile.email if profile else ""
+        book = rep.get(sid)
+        if not book:
+            students.append(DashboardStudent(student_id=sid, student_email=email))
+            continue
+        chapters = store.list_chapters(book.id)
+        done = sum(1 for c in chapters if c.char_count > 0)
+        vocab_count += sum(len(c.words) for c in chapters)
+        if book.status == "done":
+            books_done += 1
+        students.append(
+            DashboardStudent(
+                student_id=sid,
+                student_email=email,
+                book_id=book.id,
+                title=book.title,
+                status=book.status,
+                chapters_done=done,
+                total_chapters=book.total_chapters_planned,
+            )
+        )
+
+    student_count = len(student_ids)
+    books_started = sum(1 for sid in student_ids if sid in rep)
+    completion_rate = round(books_done / student_count, 2) if student_count else 0.0
+    summary = DashboardSummary(
+        student_count=student_count,
+        books_started=books_started,
+        books_done=books_done,
+        completion_rate=completion_rate,
+        vocab_count=vocab_count,
+    )
+    return DashboardResponse(students=students, summary=summary)
 
 
 def list_prompts(store: Store, user: CurrentUser, class_id: str) -> list[Prompt]:
