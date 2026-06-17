@@ -175,6 +175,19 @@ export function postDesign(
   });
 }
 
+/** 자유모드 수정요청 (FR-S6). 202 {status:"revising"}. 완료는 stream 재구독 + reviewStatus 폴링. */
+export function reviseChapter(
+  token: string | null,
+  bookId: string,
+  chapterIdx: number,
+  instruction: string,
+): Promise<{ status: string }> {
+  return apiFetch<{ status: string }>(
+    `/books/${bookId}/chapters/${chapterIdx}/revise`,
+    { token, method: "POST", body: { instruction } },
+  );
+}
+
 export function getWord(
   token: string | null,
   bookId: string,
