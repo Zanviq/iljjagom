@@ -73,6 +73,30 @@ class PromptsResponse(CamelModel):
     prompts: list[Prompt]
 
 
+# --- 교사 대시보드 (FR-T2) ---
+class DashboardStudent(CamelModel):
+    student_id: str
+    student_email: str
+    book_id: str | None = None
+    title: str | None = None
+    status: BookStatus | None = None
+    chapters_done: int = 0
+    total_chapters: int | None = None
+
+
+class DashboardSummary(CamelModel):
+    student_count: int = 0
+    books_started: int = 0
+    books_done: int = 0
+    completion_rate: float = 0.0
+    vocab_count: int = 0
+
+
+class DashboardResponse(CamelModel):
+    students: list[DashboardStudent] = []
+    summary: DashboardSummary = DashboardSummary()
+
+
 # --- 책 ---
 class CreateBookRequest(CamelModel):
     prompt_id: str
@@ -85,6 +109,20 @@ class Book(CamelModel):
     status: BookStatus
     title: str | None = None
     created_at: str
+
+
+class BookSummary(CamelModel):
+    # GET /books 목록 항목 (03 §4.2). 학생 "내 책/이어 읽기".
+    id: str
+    title: str | None = None
+    status: BookStatus
+    chapters_done: int = 0
+    total_chapters_planned: int | None = None
+    updated_at: str
+
+
+class BooksResponse(CamelModel):
+    books: list[BookSummary] = []
 
 
 class ChapterMeta(CamelModel):
@@ -140,6 +178,70 @@ class ReviseRequest(CamelModel):
 
 class ReviseResponse(CamelModel):
     status: Literal["revising"]
+
+
+# --- 학습 활동(P3) — FR-S8~S12 ---
+class QuizItem(CamelModel):
+    question: str
+    choices: list[str]
+    answer_index: int = 0
+
+
+class EssayBlank(CamelModel):
+    prompt: str
+    hints: list[str] = []
+
+
+class EmotionPoint(CamelModel):
+    chapter_idx: int
+    label: str
+    value: float
+
+
+class LearningResponse(CamelModel):
+    vocab: list[Word] = []
+    quiz: list[QuizItem] = []
+    essay_blanks: list[EssayBlank] = []
+    emotion: list[EmotionPoint] = []
+
+
+class LetterRequest(CamelModel):
+    to: str = Field(min_length=1)
+    body: str = Field(min_length=1)
+
+
+class LetterResponse(CamelModel):
+    status: Literal["answered", "held"]
+    reply: str | None = None
+
+
+# --- 관리자(FR-M1, 최소) ---
+class UsersStat(CamelModel):
+    total: int = 0
+    students: int = 0
+    teachers: int = 0
+    admins: int = 0
+
+
+class BooksStat(CamelModel):
+    total: int = 0
+    planning: int = 0
+    writing: int = 0
+    done: int = 0
+
+
+class SafetyStat(CamelModel):
+    open: int = 0
+    total: int = 0
+
+
+class AdminUsageResponse(CamelModel):
+    users: UsersStat = UsersStat()
+    classrooms: int = 0
+    prompts: int = 0
+    books: BooksStat = BooksStat()
+    chapters_written: int = 0
+    safety_flags: SafetyStat = SafetyStat()
 
 
 def serialize(model: CamelModel) -> dict[str, Any]:

@@ -78,6 +78,9 @@ class InMemoryStore(Store):
     def count_students(self, classroom_id: str) -> int:
         return sum(1 for (cid, _) in self.enrollments if cid == classroom_id)
 
+    def list_student_ids(self, classroom_id: str) -> list[str]:
+        return [sid for (cid, sid) in self.enrollments if cid == classroom_id]
+
     def enroll(self, classroom_id: str, student_id: str) -> None:
         self.enrollments.add((classroom_id, student_id))
 
@@ -115,13 +118,15 @@ class InMemoryStore(Store):
     def create_book(
         self, student_id: str, classroom_id: str | None, prompt_id: str | None
     ) -> BookRecord:
+        ts = now_iso()
         rec = BookRecord(
             id=new_id(),
             student_id=student_id,
             classroom_id=classroom_id,
             prompt_id=prompt_id,
             status="planning",
-            created_at=now_iso(),
+            created_at=ts,
+            updated_at=ts,
         )
         self.books[rec.id] = rec
         return rec
@@ -133,7 +138,22 @@ class InMemoryStore(Store):
         rec = self.books[book_id]
         for k, v in fields.items():
             setattr(rec, k, v)
+        rec.updated_at = now_iso()  # 모든 변경은 마지막 활동 시각을 갱신한다.
         return rec
+
+    def list_books_for_student(self, student_id: str) -> list[BookRecord]:
+        return sorted(
+            (b for b in self.books.values() if b.student_id == student_id),
+            key=lambda b: b.updated_at or b.created_at,
+            reverse=True,
+        )
+
+    def list_books_for_class(self, classroom_id: str) -> list[BookRecord]:
+        return sorted(
+            (b for b in self.books.values() if b.classroom_id == classroom_id),
+            key=lambda b: b.updated_at or b.created_at,
+            reverse=True,
+        )
 
     # --- bibles ---
     def upsert_bible(self, book_id: str, data: dict[str, Any]) -> BibleRecord:
@@ -222,3 +242,36 @@ class InMemoryStore(Store):
         )
         self.safety_flags.append(rec)
         return rec
+
+    # --- 관리자 집계 ---
+    def usage_counts(self) -> dict[str, Any]:
+        profiles = list(self.profiles.values())
+        books = list(self.books.values())
+
+        def role_n(r: str) -> int:
+            return sum(1 for p in profiles if p.role == r)
+
+        def status_n(s: str) -> int:
+            return sum(1 for b in books if b.status == s)
+
+        return {
+            "users": {
+                "total": len(profiles),
+                "students": role_n("student"),
+                "teachers": role_n("teacher"),
+                "admins": role_n("admin"),
+            },
+            "classrooms": len(self.classrooms),
+            "prompts": len(self.prompts),
+            "books": {
+                "total": len(books),
+                "planning": status_n("planning"),
+                "writing": status_n("writing"),
+                "done": status_n("done"),
+            },
+            "chapters_written": sum(1 for c in self.chapters.values() if c.char_count > 0),
+            "safety_flags": {
+                "open": sum(1 for f in self.safety_flags if f.status == "open"),
+                "total": len(self.safety_flags),
+            },
+        }

@@ -53,6 +53,7 @@ class BookRecord:
     title: str | None = None
     total_chapters_planned: int | None = None
     created_at: str = ""
+    updated_at: str = ""  # 마지막 활동 시각(이어 읽기 정렬용). GET /books.updatedAt.
 
 
 @dataclass

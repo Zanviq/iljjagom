@@ -47,6 +47,9 @@ class Store(ABC):
     def count_students(self, classroom_id: str) -> int: ...
 
     @abstractmethod
+    def list_student_ids(self, classroom_id: str) -> list[str]: ...
+
+    @abstractmethod
     def enroll(self, classroom_id: str, student_id: str) -> None: ...
 
     @abstractmethod
@@ -80,6 +83,12 @@ class Store(ABC):
 
     @abstractmethod
     def update_book(self, book_id: str, **fields: Any) -> BookRecord: ...
+
+    @abstractmethod
+    def list_books_for_student(self, student_id: str) -> list[BookRecord]: ...
+
+    @abstractmethod
+    def list_books_for_class(self, classroom_id: str) -> list[BookRecord]: ...
 
     # --- bibles ---
     @abstractmethod
@@ -124,3 +133,7 @@ class Store(ABC):
     def add_safety_flag(
         self, book_id: str | None, student_id: str | None, source: str, reason: str
     ) -> SafetyFlagRecord: ...
+
+    # --- 관리자 집계 ---
+    @abstractmethod
+    def usage_counts(self) -> dict[str, Any]: ...

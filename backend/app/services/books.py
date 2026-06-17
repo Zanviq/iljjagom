@@ -9,6 +9,8 @@ from app.errors import forbidden, not_found, validation_error
 from app.models.schemas import (
     Book,
     BookDetail,
+    BooksResponse,
+    BookSummary,
     ChapterMeta,
     DesignResponse,
     PlanReply,
@@ -65,6 +67,27 @@ def create_book(store: Store, user: CurrentUser, prompt_id: str) -> Book:
         student_id=user.id, classroom_id=prompt.classroom_id, prompt_id=prompt_id
     )
     return _to_book(rec)
+
+
+# --- GET /books (내 책 목록/이어 읽기) ---
+def list_books(store: Store, user: CurrentUser) -> BooksResponse:
+    # 학생은 자기 책만. (교사/관리자 목록은 교사 대시보드 §T2 별도 제공.)
+    records = store.list_books_for_student(user.id)
+    summaries: list[BookSummary] = []
+    for rec in records:
+        # chaptersDone = 본문이 작성된(char_count>0) 챕터 수.
+        done = sum(1 for c in store.list_chapters(rec.id) if c.char_count > 0)
+        summaries.append(
+            BookSummary(
+                id=rec.id,
+                title=rec.title,
+                status=rec.status,
+                chapters_done=done,
+                total_chapters_planned=rec.total_chapters_planned,
+                updated_at=rec.updated_at or rec.created_at,
+            )
+        )
+    return BooksResponse(books=summaries)
 
 
 # --- GET /books/{id} ---

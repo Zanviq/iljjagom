@@ -75,3 +75,38 @@ async def stream_chapter(
     prompt = build_prompt(bible, event, rag_context)
     async for chunk in gemini.stream_text(gemini.settings.gemini_model_flash, prompt):
         yield chunk
+
+
+async def revise_text(
+    gemini: GeminiClient,
+    bible: dict[str, Any],
+    event: dict[str, Any],
+    rag_context: str,
+    current_body: str,
+    directive: str,
+) -> str:
+    """수정 요청(해석된 directive)을 반영해 챕터 전체 본문을 재생성한다(비스트림).
+
+    자유모드 수정요청(FR-S6) 파이프라인의 집필 단계. 결말은 새로 만들지 않는다.
+    """
+    if gemini.mock:
+        hero = "주인공"
+        chars = bible.get("characters", [])
+        if chars:
+            hero = chars[0].get("name", "주인공")
+        # 결정적 재생성: 기존 본문 + 수정 directive 를 반영한 단락을 덧붙인다.
+        return (
+            current_body.rstrip()
+            + f"\n\n{hero}은(는) 마음을 고쳐먹었어요. ({directive}) "
+            f"그러자 이야기는 한결 또렷해졌답니다."
+        )
+
+    prompt = (
+        "너는 어린이 동화 작가다. 아래 본문을 독자의 요청에 맞게 자연스럽게 고쳐 쓴다. "
+        "결말을 새로 만들지 말고, 이 장면의 흐름은 유지한 채 요청만 반영한다. "
+        "고친 전체 본문만 출력한다.\n"
+        f"분위기 참고: {bible.get('world', {}).get('tone', '따뜻한')}\n"
+        f"설정 참고:\n{rag_context}\n\n"
+        f"독자 요청: {directive}\n\n현재 본문:\n{current_body}\n\n고친 본문:"
+    )
+    return (await gemini.generate_text(gemini.settings.gemini_model_flash, prompt)).strip()
