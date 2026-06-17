@@ -61,6 +61,7 @@ class SupabaseStore(Store):
         return ProfileRecord(**row) if row else None
 
     def upsert_profile(self, profile: ProfileRecord) -> ProfileRecord:
+        # status 는 보내지 않아 기존 값/DB 기본(active) 보존(관리자 deactivate 덮어쓰기 방지).
         payload = {
             "id": profile.id,
             "email": profile.email,
@@ -70,6 +71,27 @@ class SupabaseStore(Store):
         }
         row = self._one(self.client.table("profiles").upsert(payload).execute())
         return ProfileRecord(**row) if row else profile
+
+    def list_profiles(
+        self, query: str | None = None, role: str | None = None, limit: int = 200
+    ) -> list[ProfileRecord]:
+        q = self.client.table("profiles").select("*")
+        if role is not None:
+            q = q.eq("role", role)
+        if query:
+            # ilike 값(패턴)은 PostgREST 가 파라미터로 처리. %/_ 는 와일드카드.
+            q = q.ilike("email", f"%{query}%")
+        rows = self._rows(q.order("created_at", desc=True).limit(limit).execute())
+        return [ProfileRecord(**r) for r in rows]
+
+    def update_profile_fields(self, user_id: str, **fields: Any) -> ProfileRecord:
+        row = self._one(
+            self.client.table("profiles").update(fields).eq("id", user_id).execute()
+        )
+        return ProfileRecord(**row)
+
+    def count_profiles_by_role(self, role: str) -> int:
+        return self._count("profiles", role=role)
 
     # --- classrooms / enrollments ---
     def create_classroom(
@@ -666,13 +688,25 @@ class SupabaseStore(Store):
         return AiSessionRecord(**row) if row else None
 
     def list_ai_sessions(
-        self, book_id: str | None = None, status: str | None = None, limit: int = 50
+        self,
+        book_id: str | None = None,
+        status: str | None = None,
+        role: str | None = None,
+        since: str | None = None,
+        until: str | None = None,
+        limit: int = 50,
     ) -> list[AiSessionRecord]:
         q = self.client.table("ai_sessions").select("*")
         if book_id is not None:
             q = q.eq("book_id", book_id)
         if status is not None:
             q = q.eq("status", status)
+        if role is not None:
+            q = q.eq("role", role)
+        if since is not None:
+            q = q.gte("started_at", since)
+        if until is not None:
+            q = q.lte("started_at", until)
         rows = self._rows(q.order("started_at", desc=True).limit(limit).execute())
         return [AiSessionRecord(**r) for r in rows]
 
@@ -719,6 +753,29 @@ class SupabaseStore(Store):
         if kind is not None:
             q = q.eq("kind", kind)
         rows = self._rows(q.order("created_at").execute())
+        return [MessageRecord(**r) for r in rows]
+
+    def list_messages_admin(
+        self,
+        user_id: str | None = None,
+        book_id: str | None = None,
+        kind: str | None = None,
+        since: str | None = None,
+        until: str | None = None,
+        limit: int = 100,
+    ) -> list[MessageRecord]:
+        q = self.client.table("messages").select("*")
+        if user_id is not None:
+            q = q.eq("user_id", user_id)
+        if book_id is not None:
+            q = q.eq("book_id", book_id)
+        if kind is not None:
+            q = q.eq("kind", kind)
+        if since is not None:
+            q = q.gte("created_at", since)
+        if until is not None:
+            q = q.lte("created_at", until)
+        rows = self._rows(q.order("created_at", desc=True).limit(limit).execute())
         return [MessageRecord(**r) for r in rows]
 
     # --- token_usage ---

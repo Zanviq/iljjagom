@@ -12,6 +12,7 @@ class ProfileRecord:
     role: str = "student"
     guardian_consent: bool = False
     grade: int | None = None
+    status: str = "active"  # active|deactivated (추가기능 06)
     created_at: str = ""
 
 

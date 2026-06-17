@@ -354,6 +354,43 @@ class LearningResultsStat(CamelModel):
     letter: int = 0
 
 
+class AdminUser(CamelModel):
+    id: str
+    email: str
+    role: str
+    class_id: str | None = None
+    class_name: str | None = None
+    grade: int | None = None
+    guardian_consent: bool = False
+    status: str = "active"
+    created_at: str = ""
+
+
+class AdminUsersResponse(CamelModel):
+    users: list[AdminUser] = []
+
+
+class AdminUserPatch(CamelModel):
+    role: Role | None = None
+    class_id: str | None = None
+    guardian_consent: bool | None = None
+
+
+class AdminMessage(CamelModel):
+    id: str
+    book_id: str | None = None
+    user_id: str | None = None
+    role: str
+    kind: str
+    content: str
+    session_id: str | None = None
+    created_at: str = ""
+
+
+class AdminMessagesResponse(CamelModel):
+    messages: list[AdminMessage] = []
+
+
 class AdminUsageResponse(CamelModel):
     users: UsersStat = UsersStat()
     classrooms: int = 0
@@ -391,6 +428,12 @@ class AiSessionView(CamelModel):
     error: str | None = None
     started_at: str = ""
     ended_at: str | None = None
+    # 추가기능 06 — 관리자 콘솔 enrich(목록)
+    user_id: str | None = None
+    user_email: str | None = None
+    step_count: int | None = None
+    tokens_in: int | None = None
+    tokens_out: int | None = None
 
 
 class AiSessionsResponse(CamelModel):

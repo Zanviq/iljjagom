@@ -44,12 +44,38 @@ def _step_view(s: AiStepRecord) -> AiStepView:
 async def list_sessions(
     book_id: str | None = Query(default=None, alias="bookId"),
     status: str | None = Query(default=None),
+    role: str | None = Query(default=None),
+    user_id: str | None = Query(default=None, alias="userId"),
+    since: str | None = Query(default=None, alias="from"),
+    until: str | None = Query(default=None, alias="to"),
     limit: int = Query(default=50, ge=1, le=200),
     user: CurrentUser = Depends(require_role("admin")),
     store: Store = Depends(get_store_dep),
 ) -> dict:
-    sessions = store.list_ai_sessions(book_id=book_id, status=status, limit=limit)
-    return serialize(AiSessionsResponse(sessions=[_session_view(s) for s in sessions]))
+    sessions = store.list_ai_sessions(
+        book_id=book_id, status=status, role=role, since=since, until=until, limit=limit
+    )
+    views = [_enrich_session(store, s) for s in sessions]
+    # userId 필터(세션의 책 소유 학생 기준).
+    if user_id:
+        views = [v for v in views if v.user_id == user_id]
+    return serialize(AiSessionsResponse(sessions=views))
+
+
+def _enrich_session(store: Store, s: AiSessionRecord) -> AiSessionView:
+    view = _session_view(s)
+    # 책 소유 학생 → userId/userEmail.
+    if s.book_id:
+        book = store.get_book(s.book_id)
+        if book:
+            view.user_id = book.student_id
+            prof = store.get_profile(book.student_id) if book.student_id else None
+            view.user_email = prof.email if prof else None
+    steps = store.list_ai_steps(s.id)
+    view.step_count = len(steps)
+    view.tokens_in = sum(st.tokens_in for st in steps)
+    view.tokens_out = sum(st.tokens_out for st in steps)
+    return view
 
 
 @router.get("/ai/sessions/{session_id}")

@@ -34,6 +34,17 @@ class Store(ABC):
     @abstractmethod
     def upsert_profile(self, profile: ProfileRecord) -> ProfileRecord: ...
 
+    @abstractmethod
+    def list_profiles(
+        self, query: str | None = None, role: str | None = None, limit: int = 200
+    ) -> list[ProfileRecord]: ...
+
+    @abstractmethod
+    def update_profile_fields(self, user_id: str, **fields: Any) -> ProfileRecord: ...
+
+    @abstractmethod
+    def count_profiles_by_role(self, role: str) -> int: ...
+
     # --- classrooms / enrollments ---
     @abstractmethod
     def create_classroom(
@@ -246,6 +257,9 @@ class Store(ABC):
         self,
         book_id: str | None = None,
         status: str | None = None,
+        role: str | None = None,
+        since: str | None = None,
+        until: str | None = None,
         limit: int = 50,
     ) -> list[AiSessionRecord]: ...
 
@@ -281,6 +295,17 @@ class Store(ABC):
     @abstractmethod
     def list_messages(
         self, book_id: str, kind: str | None = None
+    ) -> list[MessageRecord]: ...
+
+    @abstractmethod
+    def list_messages_admin(
+        self,
+        user_id: str | None = None,
+        book_id: str | None = None,
+        kind: str | None = None,
+        since: str | None = None,
+        until: str | None = None,
+        limit: int = 100,
     ) -> list[MessageRecord]: ...
 
     # --- token_usage ---

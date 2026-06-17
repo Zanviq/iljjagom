@@ -64,8 +64,33 @@ class InMemoryStore(Store):
     def upsert_profile(self, profile: ProfileRecord) -> ProfileRecord:
         if not profile.created_at:
             profile.created_at = now_iso()
+        # 기존 status 보존(없던 프로필이면 active 기본).
+        existing = self.profiles.get(profile.id)
+        if existing and not profile.status:
+            profile.status = existing.status
         self.profiles[profile.id] = profile
         return profile
+
+    def list_profiles(
+        self, query: str | None = None, role: str | None = None, limit: int = 200
+    ) -> list[ProfileRecord]:
+        q = (query or "").lower()
+        rows = [
+            p for p in self.profiles.values()
+            if (not q or q in p.email.lower())
+            and (role is None or p.role == role)
+        ]
+        rows.sort(key=lambda p: p.created_at, reverse=True)
+        return rows[:limit]
+
+    def update_profile_fields(self, user_id: str, **fields: Any) -> ProfileRecord:
+        rec = self.profiles[user_id]
+        for k, v in fields.items():
+            setattr(rec, k, v)
+        return rec
+
+    def count_profiles_by_role(self, role: str) -> int:
+        return sum(1 for p in self.profiles.values() if p.role == role)
 
     # --- classrooms / enrollments ---
     def create_classroom(
@@ -497,12 +522,21 @@ class InMemoryStore(Store):
         return self.ai_sessions.get(session_id)
 
     def list_ai_sessions(
-        self, book_id: str | None = None, status: str | None = None, limit: int = 50
+        self,
+        book_id: str | None = None,
+        status: str | None = None,
+        role: str | None = None,
+        since: str | None = None,
+        until: str | None = None,
+        limit: int = 50,
     ) -> list[AiSessionRecord]:
         rows = [
             s for s in self.ai_sessions.values()
             if (book_id is None or s.book_id == book_id)
             and (status is None or s.status == status)
+            and (role is None or s.role == role)
+            and (since is None or s.started_at >= since)
+            and (until is None or s.started_at <= until)
         ]
         rows.sort(key=lambda s: s.started_at, reverse=True)
         return rows[:limit]
@@ -544,6 +578,26 @@ class InMemoryStore(Store):
              if m.book_id == book_id and (kind is None or m.kind == kind)),
             key=lambda m: m.created_at,
         )
+
+    def list_messages_admin(
+        self,
+        user_id: str | None = None,
+        book_id: str | None = None,
+        kind: str | None = None,
+        since: str | None = None,
+        until: str | None = None,
+        limit: int = 100,
+    ) -> list[MessageRecord]:
+        rows = [
+            m for m in self.messages
+            if (user_id is None or m.user_id == user_id)
+            and (book_id is None or m.book_id == book_id)
+            and (kind is None or m.kind == kind)
+            and (since is None or m.created_at >= since)
+            and (until is None or m.created_at <= until)
+        ]
+        rows.sort(key=lambda m: m.created_at, reverse=True)
+        return rows[:limit]
 
     # --- token_usage ---
     def add_token_usage(
