@@ -71,6 +71,19 @@ export interface ChapterSummary {
   hasIllustration: boolean;
 }
 
+/** GET /books 의 책 항목 (내 책 목록/이어 읽기, §4.2) */
+export interface BookSummary {
+  id: string;
+  title: string | null;
+  status: BookStatus;
+  /** 본문이 작성된(char_count>0) 챕터 수 */
+  chaptersDone: number;
+  /** 설계 전이면 null */
+  totalChaptersPlanned: number | null;
+  /** 마지막 활동 시각(ISO8601). 목록은 이 값 내림차순 */
+  updatedAt: string;
+}
+
 /** POST /books 응답 */
 export interface BookCreated {
   id: string;

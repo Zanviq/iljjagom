@@ -1,9 +1,12 @@
+import Link from "next/link";
+
+import { buttonClass } from "@/components/ui/Button";
 import { SubmitButton } from "@/components/ui/SubmitButton";
-import { getPrompts } from "@/lib/api";
+import { getBooks, getPrompts } from "@/lib/api";
 import { getCurrentMe } from "@/lib/auth/guard";
 import { getAccessToken } from "@/lib/auth/server";
 import { startBook } from "@/lib/books/actions";
-import type { Prompt } from "@/lib/types";
+import type { BookStatus, BookSummary, Prompt } from "@/lib/types";
 
 export default async function StudentHomePage() {
   const me = await getCurrentMe();
@@ -25,11 +28,29 @@ export default async function StudentHomePage() {
     );
   }
 
-  const { prompts } = await getPrompts(token, me.classId);
+  // 발제(새 책 시작)와 내 책 목록(이어 읽기)을 함께 가져온다.
+  const [{ prompts }, { books }] = await Promise.all([
+    getPrompts(token, me.classId),
+    getBooks(token),
+  ]);
 
   return (
     <section>
       <Header className={me.className} />
+
+      {books.length > 0 && (
+        <>
+          <h2 className="mb-4 mt-8 text-xl font-bold">
+            이어 읽던 이야기{" "}
+            <span className="font-normal text-muted">— 만들던 책을 이어가요</span>
+          </h2>
+          <ul className="grid gap-4 sm:grid-cols-2">
+            {books.map((b) => (
+              <BookCard key={b.id} book={b} />
+            ))}
+          </ul>
+        </>
+      )}
 
       <h2 className="mb-4 mt-8 text-xl font-bold">
         새 이야기 시작하기{" "}
@@ -86,6 +107,68 @@ function PromptCard({ prompt }: { prompt: Prompt }) {
           이 주제로 새 책 만들기
         </SubmitButton>
       </form>
+    </li>
+  );
+}
+
+const STATUS_META: Record<
+  BookStatus,
+  { label: string; cta: string; href: (id: string) => string }
+> = {
+  planning: {
+    label: "기획 중",
+    cta: "기획 이어가기",
+    href: (id) => `/books/${id}/plan`,
+  },
+  writing: {
+    label: "읽는 중",
+    cta: "이어 읽기",
+    href: (id) => `/books/${id}/read`,
+  },
+  done: {
+    label: "다 읽음",
+    cta: "다시 읽기",
+    href: (id) => `/books/${id}/read`,
+  },
+};
+
+function BookCard({ book }: { book: BookSummary }) {
+  const meta = STATUS_META[book.status];
+  const total = book.totalChaptersPlanned;
+  const progress =
+    total && total > 0 ? Math.round((book.chaptersDone / total) * 100) : 0;
+
+  return (
+    <li className="flex flex-col rounded-card bg-surface p-5 ring-1 ring-border">
+      <div className="flex items-start justify-between gap-2">
+        <h3 className="text-lg font-bold">{book.title || "제목 짓는 중인 이야기"}</h3>
+        <span className="shrink-0 rounded-full bg-accent/40 px-3 py-1 text-sm font-bold">
+          {meta.label}
+        </span>
+      </div>
+
+      {total && total > 0 ? (
+        <div className="mt-3">
+          <div className="h-2 w-full overflow-hidden rounded-full bg-black/10">
+            <div
+              className="h-full rounded-full bg-primary"
+              style={{ width: `${progress}%` }}
+            />
+          </div>
+          <p className="mt-1 text-sm text-muted">
+            {book.chaptersDone} / {total}장
+          </p>
+        </div>
+      ) : (
+        <p className="mt-3 text-sm text-muted">아직 이야기를 설계하고 있어요.</p>
+      )}
+
+      <Link
+        href={meta.href(book.id)}
+        className={buttonClass("primary", "md", "mt-5 w-full")}
+      >
+        {meta.cta}
+      </Link>
     </li>
   );
 }
