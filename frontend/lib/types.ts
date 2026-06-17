@@ -71,6 +71,19 @@ export interface ChapterSummary {
   hasIllustration: boolean;
 }
 
+/** GET /books 의 책 항목 (내 책 목록/이어 읽기, §4.2) */
+export interface BookSummary {
+  id: string;
+  title: string | null;
+  status: BookStatus;
+  /** 본문이 작성된(char_count>0) 챕터 수 */
+  chaptersDone: number;
+  /** 설계 전이면 null */
+  totalChaptersPlanned: number | null;
+  /** 마지막 활동 시각(ISO8601). 목록은 이 값 내림차순 */
+  updatedAt: string;
+}
+
 /** POST /books 응답 */
 export interface BookCreated {
   id: string;
@@ -113,6 +126,71 @@ export interface Word {
   term: string;
   reading: string;
   meaning: string;
+}
+
+/** GET /classes/{id}/dashboard 의 학생별 진척 (FR-T2) */
+export interface DashboardStudent {
+  studentId: string;
+  studentEmail: string;
+  bookId: string | null;
+  title: string | null;
+  status: BookStatus | null;
+  chaptersDone: number;
+  totalChapters: number;
+}
+
+/** GET /classes/{id}/dashboard 의 요약 집계 */
+export interface DashboardSummary {
+  studentCount: number;
+  booksStarted: number;
+  booksDone: number;
+  /** 완독률 0~1 */
+  completionRate: number;
+  vocabCount: number;
+}
+
+/** GET /classes/{id}/dashboard 응답 (FR-T2) */
+export interface Dashboard {
+  students: DashboardStudent[];
+  summary: DashboardSummary;
+}
+
+/** GET /books/{id}/learning 응답 (FR-S8~S12) */
+export interface QuizItem {
+  question: string;
+  choices: string[];
+  answerIndex: number;
+}
+export interface EssayBlank {
+  prompt: string;
+  hints: string[];
+}
+export interface EmotionPoint {
+  chapterIdx: number;
+  label: string;
+  value: number;
+}
+export interface Learning {
+  vocab: Word[];
+  quiz: QuizItem[];
+  essayBlanks: EssayBlank[];
+  emotion: EmotionPoint[];
+}
+
+/** POST /books/{id}/letters 응답 (FR-S11) */
+export interface LetterReply {
+  status: "answered" | "held";
+  reply: string | null;
+}
+
+/** GET /admin/usage 응답 (FR-M1 최소) */
+export interface AdminUsage {
+  users: { total: number; students: number; teachers: number; admins: number };
+  classrooms: number;
+  prompts: number;
+  books: { total: number; planning: number; writing: number; done: number };
+  chaptersWritten: number;
+  safetyFlags: { open: number; total: number };
 }
 
 /** 공통 에러 규약 (§4.1) */

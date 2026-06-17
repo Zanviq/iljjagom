@@ -8,11 +8,16 @@
  * 항상 이 실제 호출 경로를 쓴다(키 생기면 백엔드만 실 DB/AI로 전환).
  */
 import type {
+  AdminUsage,
   Book,
   BookCreated,
+  BookSummary,
   ClassSummary,
   CreatePromptRequest,
+  Dashboard,
   DesignStatus,
+  Learning,
+  LetterReply,
   Me,
   OnboardingRequest,
   PlanReply,
@@ -131,6 +136,12 @@ export function createPrompt(
   });
 }
 
+export function getBooks(
+  token: string | null,
+): Promise<{ books: BookSummary[] }> {
+  return apiFetch<{ books: BookSummary[] }>("/books", { token });
+}
+
 export function createBook(
   token: string | null,
   promptId: string,
@@ -168,6 +179,19 @@ export function postDesign(
   });
 }
 
+/** 자유모드 수정요청 (FR-S6). 202 {status:"revising"}. 완료는 stream 재구독 + reviewStatus 폴링. */
+export function reviseChapter(
+  token: string | null,
+  bookId: string,
+  chapterIdx: number,
+  instruction: string,
+): Promise<{ status: string }> {
+  return apiFetch<{ status: string }>(
+    `/books/${bookId}/chapters/${chapterIdx}/revise`,
+    { token, method: "POST", body: { instruction } },
+  );
+}
+
 export function getWord(
   token: string | null,
   bookId: string,
@@ -177,4 +201,39 @@ export function getWord(
     `/books/${bookId}/words?term=${encodeURIComponent(term)}`,
     { token },
   );
+}
+
+/** 교사 대시보드 (FR-T2). 담당 교사/admin만. */
+export function getDashboard(
+  token: string | null,
+  classId: string,
+): Promise<Dashboard> {
+  return apiFetch<Dashboard>(`/classes/${classId}/dashboard`, { token });
+}
+
+/** 학습 활동 (FR-S8~S12). 책 접근 가능자. */
+export function getLearning(
+  token: string | null,
+  bookId: string,
+): Promise<Learning> {
+  return apiFetch<Learning>(`/books/${bookId}/learning`, { token });
+}
+
+/** 인물 편지 (FR-S11). held=교사 확인 보류. */
+export function postLetter(
+  token: string | null,
+  bookId: string,
+  to: string,
+  body: string,
+): Promise<LetterReply> {
+  return apiFetch<LetterReply>(`/books/${bookId}/letters`, {
+    token,
+    method: "POST",
+    body: { to, body },
+  });
+}
+
+/** 관리자 사용량/안전 신호 (FR-M1). admin만. */
+export function getAdminUsage(token: string | null): Promise<AdminUsage> {
+  return apiFetch<AdminUsage>("/admin/usage", { token });
 }

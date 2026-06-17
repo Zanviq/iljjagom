@@ -35,12 +35,20 @@ export default async function TeacherClassesPage() {
                 </p>
               </div>
 
-              <Link
-                href={`/classes/${c.id}/prompt`}
-                className="mt-4 inline-flex h-12 items-center justify-center rounded-card bg-primary px-5 font-bold text-primary-foreground transition hover:brightness-105"
-              >
-                발제 만들기 / 보기
-              </Link>
+              <div className="mt-4 flex gap-2">
+                <Link
+                  href={`/classes/${c.id}/prompt`}
+                  className="inline-flex h-12 flex-1 items-center justify-center rounded-card bg-primary px-5 font-bold text-primary-foreground transition hover:brightness-105"
+                >
+                  발제 만들기 / 보기
+                </Link>
+                <Link
+                  href={`/classes/${c.id}/dashboard`}
+                  className="inline-flex h-12 items-center justify-center rounded-card border-2 border-border bg-surface px-5 font-bold transition hover:border-primary"
+                >
+                  대시보드
+                </Link>
+              </div>
             </li>
           ))}
         </ul>
