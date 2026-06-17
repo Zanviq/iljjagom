@@ -1,5 +1,6 @@
 "use client";
 
+import Link from "next/link";
 import { useCallback, useEffect, useRef, useState } from "react";
 
 import { buttonClass } from "@/components/ui/Button";
@@ -49,8 +50,10 @@ export function ChapterReader({ bookId, title, totalChaptersPlanned }: Props) {
           token={token}
           bookId={bookId}
           chapterIdx={chapterIdx}
+          totalChaptersPlanned={totalChaptersPlanned}
           onNext={() => setChapterIdx((i) => i + 1)}
           onRevised={() => setReloadNonce((n) => n + 1)}
+          onRetry={() => setReloadNonce((n) => n + 1)}
         />
       )}
     </section>
@@ -61,14 +64,18 @@ function ChapterStream({
   token,
   bookId,
   chapterIdx,
+  totalChaptersPlanned,
   onNext,
   onRevised,
+  onRetry,
 }: {
   token: string | null;
   bookId: string;
   chapterIdx: number;
+  totalChaptersPlanned: number;
   onNext: () => void;
   onRevised: () => void;
+  onRetry: () => void;
 }) {
   const [text, setText] = useState("");
   const [mode, setMode] = useState<ChapterMode | null>(null);
@@ -238,6 +245,9 @@ function ChapterStream({
   }
 
   const canGoNext = done?.nextChapterAvailable ?? false;
+  // 마지막 장(=완독) 여부. 계획된 장 수를 알 때만 판단.
+  const isLastChapter =
+    totalChaptersPlanned > 0 && chapterIdx >= totalChaptersPlanned;
   // 유도 모드에서 아직 본문을 공개하지 않은 상태(삽화·질문 먼저 보는 단계).
   const guidedGate = mode === "guided" && !revealed;
 
@@ -273,7 +283,13 @@ function ChapterStream({
               </button>
             </>
           ) : (
-            <p className="text-muted">그림을 준비하는 중이에요…</p>
+            <>
+              <div
+                className="mb-4 aspect-video w-full animate-pulse rounded-card bg-accent/30"
+                aria-hidden
+              />
+              <p className="text-muted">그림을 준비하는 중이에요…</p>
+            </>
           )}
         </div>
       )}
@@ -334,10 +350,33 @@ function ChapterStream({
             >
               다음 장으로 →
             </button>
+          ) : isLastChapter ? (
+            // 마지막 장 완독: 축하 + 학습활동 진입.
+            <div className="mt-2 text-center">
+              <p className="text-lg font-bold text-success">
+                🎉 이야기를 모두 읽었어요!
+              </p>
+              <Link
+                href={`/books/${bookId}/learn`}
+                className={buttonClass("primary", "lg", "mt-4 w-full")}
+              >
+                📚 학습 활동 하러 가기
+              </Link>
+            </div>
           ) : (
-            <p className="mt-2 text-center font-bold text-success">
-              🎉 이야기를 모두 읽었어요!
-            </p>
+            // 아직 마지막 장이 아닌데 다음 장이 준비되지 않음(생성 중/검수 대기).
+            // 거짓 완독으로 오인하지 않도록 안내 + 다시 확인.
+            <div className="mt-2 text-center">
+              <p className="font-bold text-muted">
+                다음 장을 준비하고 있어요. 잠시 후 다시 확인해 주세요.
+              </p>
+              <button
+                onClick={onRetry}
+                className={buttonClass("outline", "md", "mt-3 w-full")}
+              >
+                ↻ 다시 확인할래요
+              </button>
+            </div>
           )}
         </div>
       )}
