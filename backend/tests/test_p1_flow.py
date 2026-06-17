@@ -295,6 +295,91 @@ async def test_revise_blocks_unsafe_instruction(client):
     assert r.json()["error"]["code"] == "validation_error"
 
 
+async def test_learning_artifacts(client):
+    # FR-S8~S12: 어휘/퀴즈/독후감/감정 곡선.
+    code, _, prompt_id = await _teacher_makes_prompt(client)
+    sh = auth("kid_learn@test", "student")
+    await client.post("/onboarding", headers=sh, json={"role": "student", "classCode": code})
+    book_id, _ = await _design_and_write_ch1(client, sh, prompt_id)
+
+    r = await client.get(f"/books/{book_id}/learning", headers=sh)
+    assert r.status_code == 200
+    body = r.json()
+    assert {"vocab", "quiz", "essayBlanks", "emotion"} <= set(body)
+    assert len(body["emotion"]) >= 1
+    assert body["emotion"][0]["chapterIdx"] == 1
+    assert len(body["quiz"]) >= 1
+    assert body["quiz"][0]["answerIndex"] == 0
+    assert len(body["essayBlanks"]) >= 1
+
+
+async def test_letter_answered(client):
+    code, _, prompt_id = await _teacher_makes_prompt(client)
+    sh = auth("kid_letter@test", "student")
+    await client.post("/onboarding", headers=sh, json={"role": "student", "classCode": code})
+    book_id, _ = await _design_and_write_ch1(client, sh, prompt_id)
+
+    r = await client.post(
+        f"/books/{book_id}/letters",
+        headers=sh,
+        json={"to": "주인공", "body": "안녕 주인공아, 너의 용기가 정말 멋져!"},
+    )
+    assert r.status_code == 200
+    assert r.json()["status"] == "answered"
+    assert r.json()["reply"]
+
+
+async def test_letter_held_on_risk(client):
+    code, _, prompt_id = await _teacher_makes_prompt(client)
+    sh = auth("kid_letter2@test", "student")
+    await client.post("/onboarding", headers=sh, json={"role": "student", "classCode": code})
+    book_id, _ = await _design_and_write_ch1(client, sh, prompt_id)
+
+    r = await client.post(
+        f"/books/{book_id}/letters",
+        headers=sh,
+        json={"to": "주인공", "body": "다 죽여버릴거야"},
+    )
+    assert r.status_code == 200
+    assert r.json()["status"] == "held"
+    assert r.json()["reply"] is None
+
+
+async def test_letter_unknown_character(client):
+    code, _, prompt_id = await _teacher_makes_prompt(client)
+    sh = auth("kid_letter3@test", "student")
+    await client.post("/onboarding", headers=sh, json={"role": "student", "classCode": code})
+    book_id, _ = await _design_and_write_ch1(client, sh, prompt_id)
+    r = await client.post(
+        f"/books/{book_id}/letters",
+        headers=sh,
+        json={"to": "없는인물", "body": "안녕하세요"},
+    )
+    assert r.status_code == 400
+    assert r.json()["error"]["code"] == "validation_error"
+
+
+async def test_admin_usage(client):
+    code, _, prompt_id = await _teacher_makes_prompt(client)
+    sh = auth("kid_usage@test", "student")
+    await client.post("/onboarding", headers=sh, json={"role": "student", "classCode": code})
+    await client.post("/books", headers=sh, json={"promptId": prompt_id})
+
+    # 비관리자는 접근 불가.
+    r = await client.get("/admin/usage", headers=sh)
+    assert r.status_code == 403
+
+    # 관리자(화이트리스트)는 집계 조회.
+    admin = auth("admin@iljjagom.test", "student")
+    r = await client.get("/admin/usage", headers=admin)
+    assert r.status_code == 200
+    body = r.json()
+    assert body["users"]["total"] >= 2  # teacher + student
+    assert body["books"]["total"] >= 1
+    assert body["classrooms"] >= 1
+    assert "open" in body["safetyFlags"]
+
+
 async def test_guided_chapter_has_illustration_first(client):
     code, class_id, prompt_id = await _teacher_makes_prompt(client)
     sh = auth("kid2@test", "student")

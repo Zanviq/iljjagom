@@ -180,6 +180,70 @@ class ReviseResponse(CamelModel):
     status: Literal["revising"]
 
 
+# --- 학습 활동(P3) — FR-S8~S12 ---
+class QuizItem(CamelModel):
+    question: str
+    choices: list[str]
+    answer_index: int = 0
+
+
+class EssayBlank(CamelModel):
+    prompt: str
+    hints: list[str] = []
+
+
+class EmotionPoint(CamelModel):
+    chapter_idx: int
+    label: str
+    value: float
+
+
+class LearningResponse(CamelModel):
+    vocab: list[Word] = []
+    quiz: list[QuizItem] = []
+    essay_blanks: list[EssayBlank] = []
+    emotion: list[EmotionPoint] = []
+
+
+class LetterRequest(CamelModel):
+    to: str = Field(min_length=1)
+    body: str = Field(min_length=1)
+
+
+class LetterResponse(CamelModel):
+    status: Literal["answered", "held"]
+    reply: str | None = None
+
+
+# --- 관리자(FR-M1, 최소) ---
+class UsersStat(CamelModel):
+    total: int = 0
+    students: int = 0
+    teachers: int = 0
+    admins: int = 0
+
+
+class BooksStat(CamelModel):
+    total: int = 0
+    planning: int = 0
+    writing: int = 0
+    done: int = 0
+
+
+class SafetyStat(CamelModel):
+    open: int = 0
+    total: int = 0
+
+
+class AdminUsageResponse(CamelModel):
+    users: UsersStat = UsersStat()
+    classrooms: int = 0
+    prompts: int = 0
+    books: BooksStat = BooksStat()
+    chapters_written: int = 0
+    safety_flags: SafetyStat = SafetyStat()
+
+
 def serialize(model: CamelModel) -> dict[str, Any]:
     """응답 직렬화: camelCase alias 사용."""
     return model.model_dump(by_alias=True)

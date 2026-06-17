@@ -376,3 +376,41 @@ class SupabaseStore(Store):
             id="", book_id=book_id, student_id=student_id, source=source, reason=reason,
             created_at=now_iso(),
         )
+
+    # --- 관리자 집계 ---
+    def _count(self, table: str, **eq: Any) -> int:
+        q = self.client.table(table).select("*", count="exact", head=True)
+        for k, v in eq.items():
+            q = q.eq(k, v)
+        return q.execute().count or 0
+
+    def usage_counts(self) -> dict[str, Any]:
+        chapters_written = (
+            self.client.table("chapters")
+            .select("*", count="exact", head=True)
+            .gt("char_count", 0)
+            .execute()
+            .count
+            or 0
+        )
+        return {
+            "users": {
+                "total": self._count("profiles"),
+                "students": self._count("profiles", role="student"),
+                "teachers": self._count("profiles", role="teacher"),
+                "admins": self._count("profiles", role="admin"),
+            },
+            "classrooms": self._count("classrooms"),
+            "prompts": self._count("prompts"),
+            "books": {
+                "total": self._count("books"),
+                "planning": self._count("books", status="planning"),
+                "writing": self._count("books", status="writing"),
+                "done": self._count("books", status="done"),
+            },
+            "chapters_written": chapters_written,
+            "safety_flags": {
+                "open": self._count("safety_flags", status="open"),
+                "total": self._count("safety_flags"),
+            },
+        }

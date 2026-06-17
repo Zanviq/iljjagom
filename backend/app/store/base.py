@@ -133,3 +133,7 @@ class Store(ABC):
     def add_safety_flag(
         self, book_id: str | None, student_id: str | None, source: str, reason: str
     ) -> SafetyFlagRecord: ...
+
+    # --- 관리자 집계 ---
+    @abstractmethod
+    def usage_counts(self) -> dict[str, Any]: ...

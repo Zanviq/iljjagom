@@ -242,3 +242,36 @@ class InMemoryStore(Store):
         )
         self.safety_flags.append(rec)
         return rec
+
+    # --- 관리자 집계 ---
+    def usage_counts(self) -> dict[str, Any]:
+        profiles = list(self.profiles.values())
+        books = list(self.books.values())
+
+        def role_n(r: str) -> int:
+            return sum(1 for p in profiles if p.role == r)
+
+        def status_n(s: str) -> int:
+            return sum(1 for b in books if b.status == s)
+
+        return {
+            "users": {
+                "total": len(profiles),
+                "students": role_n("student"),
+                "teachers": role_n("teacher"),
+                "admins": role_n("admin"),
+            },
+            "classrooms": len(self.classrooms),
+            "prompts": len(self.prompts),
+            "books": {
+                "total": len(books),
+                "planning": status_n("planning"),
+                "writing": status_n("writing"),
+                "done": status_n("done"),
+            },
+            "chapters_written": sum(1 for c in self.chapters.values() if c.char_count > 0),
+            "safety_flags": {
+                "open": sum(1 for f in self.safety_flags if f.status == "open"),
+                "total": len(self.safety_flags),
+            },
+        }
