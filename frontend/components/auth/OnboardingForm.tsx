@@ -2,6 +2,7 @@
 
 import { useActionState, useState } from "react";
 
+import { ErrorText } from "@/components/ui/ErrorText";
 import { SubmitButton } from "@/components/ui/SubmitButton";
 import { submitOnboarding, type FormState } from "@/lib/auth/actions";
 
@@ -76,7 +77,7 @@ export function OnboardingForm() {
       )}
 
       {state.error && (
-        <p className="text-sm font-bold text-danger">{state.error}</p>
+        <ErrorText>{state.error}</ErrorText>
       )}
 
       <SubmitButton className="w-full" pendingText="설정 중…">

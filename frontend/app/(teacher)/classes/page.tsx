@@ -1,5 +1,6 @@
 import Link from "next/link";
 
+import { EmptyState } from "@/components/ui/EmptyState";
 import { getClasses } from "@/lib/api";
 import { getAccessToken } from "@/lib/auth/server";
 
@@ -15,9 +16,7 @@ export default async function TeacherClassesPage() {
       </p>
 
       {classes.length === 0 ? (
-        <div className="mt-6 rounded-card bg-surface p-6 ring-1 ring-border">
-          <p className="text-muted">아직 학급이 없어요.</p>
-        </div>
+        <EmptyState className="mt-6">아직 학급이 없어요.</EmptyState>
       ) : (
         <ul className="mt-6 grid gap-4 sm:grid-cols-2">
           {classes.map((c) => (

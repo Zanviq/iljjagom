@@ -3,6 +3,7 @@
 import { useActionState, useState } from "react";
 
 import { buttonClass } from "@/components/ui/Button";
+import { ErrorText } from "@/components/ui/ErrorText";
 import { SubmitButton } from "@/components/ui/SubmitButton";
 import { devLogin, type FormState } from "@/lib/auth/actions";
 import { createClient } from "@/lib/supabase/client";
@@ -91,7 +92,7 @@ function DevLogin() {
       </fieldset>
 
       {state.error && (
-        <p className="text-sm font-bold text-danger">{state.error}</p>
+        <ErrorText>{state.error}</ErrorText>
       )}
 
       <SubmitButton className="w-full" pendingText="접속 중…">

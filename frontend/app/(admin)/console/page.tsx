@@ -25,7 +25,7 @@ export default async function AdminConsolePage() {
         <Stat label="책(전체)" value={usage.books.total} />
         <Stat label="집필 챕터" value={usage.chaptersWritten} />
       </dl>
-      <dl className="mt-3 grid grid-cols-3 gap-3">
+      <dl className="mt-3 grid grid-cols-2 gap-3 sm:grid-cols-3">
         <Stat label="기획 중" value={usage.books.planning} />
         <Stat label="집필 중" value={usage.books.writing} />
         <Stat label="완독" value={usage.books.done} />

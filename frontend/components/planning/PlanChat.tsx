@@ -6,6 +6,7 @@ import { useEffect, useRef, useState } from "react";
 import { AskUserPanel } from "@/components/ai/AskUserPanel";
 import { CharacterCard } from "@/components/planning/CharacterCard";
 import { buttonClass } from "@/components/ui/Button";
+import { ErrorText } from "@/components/ui/ErrorText";
 import { ApiError, getBook, postDesign, postPlanMessage } from "@/lib/api";
 import { answerAiSession } from "@/lib/ai";
 import type { AskUserAnswer, AskUserPrompt } from "@/lib/ai";
@@ -135,7 +136,7 @@ export function PlanChat({ bookId }: { bookId: string }) {
         </div>
 
         {error && (
-          <p className="px-5 pb-2 text-sm font-bold text-danger">{error}</p>
+          <ErrorText className="px-5 pb-2">{error}</ErrorText>
         )}
 
         {ask && (

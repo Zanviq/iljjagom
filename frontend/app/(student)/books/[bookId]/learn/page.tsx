@@ -3,6 +3,7 @@ import { notFound } from "next/navigation";
 
 import { LetterForm } from "@/components/learning/LetterForm";
 import { Quiz } from "@/components/learning/Quiz";
+import { EmptyState } from "@/components/ui/EmptyState";
 import { ApiError, getBook, getLearning } from "@/lib/api";
 import { getAccessToken } from "@/lib/auth/server";
 import type { EmotionPoint, EssayBlank, Word } from "@/lib/types";
@@ -44,11 +45,9 @@ export default async function LearnPage({
       <p className="mt-1 text-muted">이야기로 낱말도 배우고 생각도 나눠 봐요.</p>
 
       {isEmpty ? (
-        <div className="mt-6 rounded-card bg-surface p-6 ring-1 ring-border">
-          <p className="text-muted">
-            아직 학습 활동이 준비되지 않았어요. 이야기를 더 읽고 와요!
-          </p>
-        </div>
+        <EmptyState className="mt-6">
+          아직 학습 활동이 준비되지 않았어요. 이야기를 더 읽고 와요!
+        </EmptyState>
       ) : (
         <div className="mt-6 space-y-10">
           {vocab.length > 0 && (

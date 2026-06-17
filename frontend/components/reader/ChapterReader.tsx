@@ -4,6 +4,8 @@ import Link from "next/link";
 import { useCallback, useEffect, useRef, useState } from "react";
 
 import { buttonClass } from "@/components/ui/Button";
+import { ErrorText } from "@/components/ui/ErrorText";
+import { Loading } from "@/components/ui/Loading";
 import { WordPopover } from "@/components/reader/WordPopover";
 import { ApiError, getBook, getWord, reviseChapter } from "@/lib/api";
 import { getClientAccessToken } from "@/lib/auth/client";
@@ -40,9 +42,7 @@ export function ChapterReader({ bookId, title, totalChaptersPlanned }: Props) {
       </div>
 
       {token === undefined ? (
-        <p className="rounded-card bg-surface p-6 text-muted ring-1 ring-border">
-          이야기를 준비하는 중이에요…
-        </p>
+        <Loading card>이야기를 준비하는 중이에요…</Loading>
       ) : (
         // 챕터 변경 또는 수정요청 완료 시 key 변경으로 스트림을 새로 마운트(상태 초기화·재구독).
         <ChapterStream
@@ -257,8 +257,8 @@ function ChapterStream({
         // eslint-disable-next-line @next/next/no-img-element
         <img
           src={illustration.url}
-          alt={illustration.alt}
-          className="mb-4 w-full rounded-card ring-1 ring-border"
+          alt={illustration.alt || "이야기 삽화"}
+          className="mb-4 max-h-[28rem] w-full rounded-card object-cover ring-1 ring-border"
         />
       )}
       {activePrompt && (
@@ -296,9 +296,7 @@ function ChapterStream({
 
       {/* meta 수신 전(모드 미확정) 잠깐의 로딩 */}
       {mode === null && !revealed && (
-        <p className="rounded-card bg-surface p-6 text-muted ring-1 ring-border">
-          이야기를 준비하는 중이에요…
-        </p>
+        <Loading card>이야기를 준비하는 중이에요…</Loading>
       )}
 
       {revealed && (
@@ -321,7 +319,7 @@ function ChapterStream({
       )}
 
       {streamError && (
-        <p className="mt-4 text-center font-bold text-danger">{streamError}</p>
+        <ErrorText className="mt-4 text-center">{streamError}</ErrorText>
       )}
 
       {revealed && done && (
@@ -353,7 +351,11 @@ function ChapterStream({
           ) : isLastChapter ? (
             // 마지막 장 완독: 축하 + 학습활동 진입.
             <div className="mt-2 text-center">
-              <p className="text-lg font-bold text-success">
+              <p
+                role="status"
+                aria-live="polite"
+                className="text-lg font-bold text-success"
+              >
                 🎉 이야기를 모두 읽었어요!
               </p>
               <Link
@@ -385,7 +387,11 @@ function ChapterStream({
       {revealed && done && mode === "free" && (
         <div className="mt-4 rounded-card bg-surface p-5 ring-1 ring-border">
           {revising ? (
-            <p className="text-center font-bold text-secondary">
+            <p
+              role="status"
+              aria-live="polite"
+              className="text-center font-bold text-secondary"
+            >
               <span className="streaming-cursor" aria-hidden /> 이야기를 고치고
               있어요… 잠시만 기다려 주세요.
             </p>
@@ -402,9 +408,7 @@ function ChapterStream({
                 />
               </label>
               {reviseError && (
-                <p className="mt-2 text-sm font-bold text-danger">
-                  {reviseError}
-                </p>
+                <ErrorText className="mt-2">{reviseError}</ErrorText>
               )}
               <div className="mt-3 flex gap-2">
                 <button

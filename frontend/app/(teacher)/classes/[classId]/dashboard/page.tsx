@@ -1,6 +1,7 @@
 import Link from "next/link";
 import { notFound } from "next/navigation";
 
+import { EmptyState } from "@/components/ui/EmptyState";
 import { ApiError, getClasses, getDashboard } from "@/lib/api";
 import { getAccessToken } from "@/lib/auth/server";
 import type { BookStatus, DashboardStudent } from "@/lib/types";
@@ -56,12 +57,10 @@ export default async function DashboardPage({
 
       <h2 className="mb-3 mt-8 text-lg font-bold">학생별 진척</h2>
       {students.length === 0 ? (
-        <div className="rounded-card bg-surface p-6 ring-1 ring-border">
-          <p className="text-muted">아직 학급에 학생이 없어요.</p>
-        </div>
+        <EmptyState>아직 학급에 학생이 없어요.</EmptyState>
       ) : (
-        <div className="overflow-hidden rounded-card ring-1 ring-border">
-          <table className="w-full border-collapse bg-surface text-left">
+        <div className="overflow-x-auto rounded-card ring-1 ring-border">
+          <table className="w-full min-w-[32rem] border-collapse bg-surface text-left">
             <thead>
               <tr className="border-b border-border text-sm text-muted">
                 <th className="p-3 font-bold">학생</th>

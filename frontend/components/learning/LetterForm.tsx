@@ -3,6 +3,7 @@
 import { useState } from "react";
 
 import { buttonClass } from "@/components/ui/Button";
+import { ErrorText } from "@/components/ui/ErrorText";
 import { ApiError, postLetter } from "@/lib/api";
 import { getClientAccessToken } from "@/lib/auth/client";
 import type { LetterReply } from "@/lib/types";
@@ -56,7 +57,7 @@ export function LetterForm({ bookId }: { bookId: string }) {
         />
       </label>
 
-      {error && <p className="mt-2 text-sm font-bold text-danger">{error}</p>}
+      {error && <ErrorText className="mt-2">{error}</ErrorText>}
 
       <button
         onClick={() => void send()}

@@ -3,6 +3,7 @@
 import { useId, useState } from "react";
 
 import { buttonClass } from "@/components/ui/Button";
+import { ErrorText } from "@/components/ui/ErrorText";
 import { cn } from "@/lib/cn";
 import type { AskUserAnswer, AskUserPrompt } from "@/lib/ai";
 
@@ -103,7 +104,7 @@ export function AskUserPanel({
         </div>
       )}
 
-      {error && <p className="mt-3 text-sm font-bold text-danger">{error}</p>}
+      {error && <ErrorText className="mt-3">{error}</ErrorText>}
 
       <button
         type="button"
