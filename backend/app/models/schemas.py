@@ -21,6 +21,9 @@ class Me(CamelModel):
     grade: int | None = None
     guardian_consent: bool = False
     needs_onboarding: bool = False
+    # 학생이 온보딩(classCode)으로 가입한 학급. 교사·관리자·미가입 학생은 null. (03 §4.2)
+    class_id: str | None = None
+    class_name: str | None = None
 
 
 class OnboardingRequest(CamelModel):

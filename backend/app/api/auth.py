@@ -12,8 +12,11 @@ router = APIRouter(tags=["auth"])
 
 
 @router.get("/me")
-async def me(user: CurrentUser = Depends(get_current_user)) -> dict:
-    return serialize(accounts.build_me(user))
+async def me(
+    user: CurrentUser = Depends(get_current_user),
+    store: Store = Depends(get_store_dep),
+) -> dict:
+    return serialize(accounts.build_me(user, store))
 
 
 @router.post("/onboarding")

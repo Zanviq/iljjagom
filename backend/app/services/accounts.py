@@ -13,8 +13,16 @@ from app.store.records import ProfileRecord
 CLASS_CODE_LEN = 8
 
 
-def build_me(user: CurrentUser) -> Me:
+def build_me(user: CurrentUser, store: Store | None = None) -> Me:
     p = user.profile
+    class_id: str | None = None
+    class_name: str | None = None
+    # 학생만 학급을 가진다. 학생이 자기 학급 발제를 찾는 진입점(03 §4.2).
+    if store is not None and user.role == "student":
+        classrooms = store.list_classrooms_for_student(user.id)
+        if classrooms:
+            class_id = classrooms[0].id
+            class_name = classrooms[0].name
     return Me(
         id=user.id,
         email=user.email,
@@ -22,6 +30,8 @@ def build_me(user: CurrentUser) -> Me:
         grade=p.grade if p else None,
         guardian_consent=p.guardian_consent if p else False,
         needs_onboarding=user.needs_onboarding,
+        class_id=class_id,
+        class_name=class_name,
     )
 
 
@@ -73,4 +83,4 @@ def onboard(store: Store, user: CurrentUser, req: OnboardingRequest) -> Me:
     refreshed = CurrentUser(
         id=user.id, email=user.email, role=role, profile=profile, needs_onboarding=False
     )
-    return build_me(refreshed)
+    return build_me(refreshed, store)
