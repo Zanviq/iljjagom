@@ -359,6 +359,24 @@ async def test_letter_unknown_character(client):
     assert r.json()["error"]["code"] == "validation_error"
 
 
+async def test_rate_limit_letters(client):
+    # 비용 가드레일: letters 한도(20/윈도) 초과 시 429 rate_limited.
+    code, _, prompt_id = await _teacher_makes_prompt(client)
+    sh = auth("kid_rl@test", "student")
+    await client.post("/onboarding", headers=sh, json={"role": "student", "classCode": code})
+    book_id, _ = await _design_and_write_ch1(client, sh, prompt_id)
+
+    last = None
+    for _ in range(21):
+        last = await client.post(
+            f"/books/{book_id}/letters",
+            headers=sh,
+            json={"to": "주인공", "body": "안녕 주인공아!"},
+        )
+    assert last.status_code == 429
+    assert last.json()["error"]["code"] == "rate_limited"
+
+
 async def test_admin_usage(client):
     code, _, prompt_id = await _teacher_makes_prompt(client)
     sh = auth("kid_usage@test", "student")

@@ -6,6 +6,7 @@ from fastapi import APIRouter, Depends, Response
 from app.ai.gemini import GeminiClient, get_gemini
 from app.deps import CurrentUser, get_store_dep, require_role
 from app.models.schemas import PlanMessageRequest, serialize
+from app.ratelimit import rate_limit
 from app.services import books
 from app.store.base import Store
 
@@ -19,6 +20,7 @@ async def plan_message(
     user: CurrentUser = Depends(require_role("student", "admin")),
     store: Store = Depends(get_store_dep),
     gemini: GeminiClient = Depends(get_gemini),
+    _rl: None = Depends(rate_limit("plan", 60)),
 ) -> dict:
     reply = await books.plan_message(store, gemini, user, book_id, req.message)
     return serialize(reply)
@@ -31,6 +33,7 @@ async def design(
     user: CurrentUser = Depends(require_role("student", "admin")),
     store: Store = Depends(get_store_dep),
     gemini: GeminiClient = Depends(get_gemini),
+    _rl: None = Depends(rate_limit("design", 10)),
 ) -> dict:
     result = await books.design_book(store, gemini, user, book_id)
     return serialize(result)

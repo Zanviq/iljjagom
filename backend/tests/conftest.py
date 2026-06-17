@@ -18,11 +18,15 @@ from app.store import get_store
 
 @pytest.fixture(autouse=True)
 def _reset_state():
-    # lru_cache 된 store/settings 를 테스트마다 초기화.
+    # lru_cache 된 store/settings + 호출 한도 를 테스트마다 초기화.
+    from app.ratelimit import reset as reset_ratelimit
+
     get_store.cache_clear()
     get_settings.cache_clear()
+    reset_ratelimit()
     yield
     get_store.cache_clear()
+    reset_ratelimit()
 
 
 @pytest.fixture
