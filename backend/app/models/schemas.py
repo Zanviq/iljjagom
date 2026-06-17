@@ -84,12 +84,22 @@ class DashboardStudent(CamelModel):
     total_chapters: int | None = None
 
 
+class ObjectiveAchievement(CamelModel):
+    objective: str
+    rate: float = 0.0
+
+
 class DashboardSummary(CamelModel):
     student_count: int = 0
     books_started: int = 0
     books_done: int = 0
-    completion_rate: float = 0.0
+    completion_rate: float = 0.0  # book_finished 기준(과도기 status 폴백)
     vocab_count: int = 0
+    # 추가기능 04 — 실데이터 지표
+    revisit_rate: float = 0.0
+    vocab_quiz_accuracy: float = 0.0
+    objective_achievement: list[ObjectiveAchievement] = []
+    essays_submitted: int = 0
 
 
 class DashboardResponse(CamelModel):
@@ -337,6 +347,13 @@ class SafetyStat(CamelModel):
     total: int = 0
 
 
+class LearningResultsStat(CamelModel):
+    quiz: int = 0
+    essay: int = 0
+    emotion: int = 0
+    letter: int = 0
+
+
 class AdminUsageResponse(CamelModel):
     users: UsersStat = UsersStat()
     classrooms: int = 0
@@ -344,6 +361,11 @@ class AdminUsageResponse(CamelModel):
     books: BooksStat = BooksStat()
     chapters_written: int = 0
     safety_flags: SafetyStat = SafetyStat()
+    # 추가기능 04 — 전체 지표
+    completion_rate: float = 0.0
+    revisit_rate: float = 0.0
+    events_total: int = 0
+    learning_results: LearningResultsStat = LearningResultsStat()
 
 
 # --- AI 세션 / ReAct 트레이스 (관리자 관측 · 03 §4.2) ---

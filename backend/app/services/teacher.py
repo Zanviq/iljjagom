@@ -1,6 +1,8 @@
 """교사 서비스 — 학급 목록, 발제 생성/조회 (FR-T1)."""
 from __future__ import annotations
 
+from collections import defaultdict
+
 from app.deps import CurrentUser
 from app.errors import forbidden, not_found
 from app.models.schemas import (
@@ -10,10 +12,57 @@ from app.models.schemas import (
     DashboardResponse,
     DashboardStudent,
     DashboardSummary,
+    ObjectiveAchievement,
     Prompt,
 )
 from app.store.base import Store
 from app.store.records import BookRecord, PromptRecord
+
+
+def compute_class_metrics(store: Store, class_id: str) -> dict:
+    """events·learning_artifacts 로 04 지표 산출(학급 범위)."""
+    events = store.list_events(class_id=class_id, limit=5000)
+    opened = {e.student_id for e in events if e.type == "chapter_open"}
+    finished = {e.student_id for e in events if e.type == "book_finished"}
+    completion = round(len(finished & opened) / len(opened), 2) if opened else None
+
+    days: dict[str, set[str]] = defaultdict(set)
+    for e in events:
+        if e.type in ("chapter_open", "learning_open") and e.student_id:
+            days[e.student_id].add((e.created_at or "")[:10])
+    active = len(days)
+    revisitors = sum(1 for d in days.values() if len(d) >= 2)
+    revisit_rate = round(revisitors / active, 2) if active else 0.0
+
+    arts = store.list_learning_artifacts(class_id=class_id)
+    total_ans = 0
+    correct = 0
+    obj: dict[str, list[int]] = defaultdict(lambda: [0, 0])  # [correct, total]
+    for a in arts:
+        if a.type != "quiz":
+            continue
+        for ans in a.data.get("answers", []):
+            total_ans += 1
+            is_c = bool(ans.get("correct"))
+            correct += 1 if is_c else 0
+            o = ans.get("objective")
+            if o:
+                obj[o][1] += 1
+                obj[o][0] += 1 if is_c else 0
+    vocab_quiz_accuracy = round(correct / total_ans, 2) if total_ans else 0.0
+    objective_achievement = [
+        ObjectiveAchievement(objective=o, rate=round(v[0] / v[1], 2))
+        for o, v in obj.items() if v[1]
+    ]
+    essays_submitted = sum(1 for a in arts if a.type == "essay")
+
+    return {
+        "completion_from_events": completion,  # None 이면 호출자가 status 폴백
+        "revisit_rate": revisit_rate,
+        "vocab_quiz_accuracy": vocab_quiz_accuracy,
+        "objective_achievement": objective_achievement,
+        "essays_submitted": essays_submitted,
+    }
 
 
 def list_classes(store: Store, user: CurrentUser) -> list[ClassSummary]:
@@ -103,13 +152,25 @@ def class_dashboard(store: Store, user: CurrentUser, class_id: str) -> Dashboard
 
     student_count = len(student_ids)
     books_started = sum(1 for sid in student_ids if sid in rep)
-    completion_rate = round(books_done / student_count, 2) if student_count else 0.0
+    status_completion = round(books_done / student_count, 2) if student_count else 0.0
+
+    # 04 실데이터 지표(events·learning_artifacts). 완독률은 book_finished 우선, 없으면 status 폴백.
+    metrics = compute_class_metrics(store, class_id)
+    completion_rate = (
+        metrics["completion_from_events"]
+        if metrics["completion_from_events"] is not None
+        else status_completion
+    )
     summary = DashboardSummary(
         student_count=student_count,
         books_started=books_started,
         books_done=books_done,
         completion_rate=completion_rate,
         vocab_count=vocab_count,
+        revisit_rate=metrics["revisit_rate"],
+        vocab_quiz_accuracy=metrics["vocab_quiz_accuracy"],
+        objective_achievement=metrics["objective_achievement"],
+        essays_submitted=metrics["essays_submitted"],
     )
     return DashboardResponse(students=students, summary=summary)
 

@@ -66,6 +66,36 @@ async def test_letter_also_saved_as_learning_result(client):
     assert any(x["type"] == "letter" and x["data"]["status"] == "answered" for x in results)
 
 
+async def test_dashboard_and_usage_real_metrics(client):
+    class_id, code, prompt_id, sh, th, book_id = await _student_book(client, email="kid_metric@test")
+    # 이벤트: 챕터 열람 + 완독
+    await client.post("/events", headers=sh, json={"events": [
+        {"bookId": book_id, "type": "chapter_open", "payload": {"chapterIdx": 1}},
+        {"bookId": book_id, "type": "book_finished", "payload": {"totalChapters": 1}},
+    ]})
+    # 학습결과: 퀴즈(증발 정답) + 독후감
+    await client.post(f"/books/{book_id}/learning-results", headers=sh, json={
+        "type": "quiz",
+        "data": {"answers": [{"index": 0, "picked": 0, "correct": True, "objective": "증발"}], "score": 1, "total": 1},
+    })
+    await client.post(f"/books/{book_id}/learning-results", headers=sh, json={
+        "type": "essay", "data": {"blanks": [{"prompt": "느낌은?", "text": "재미있었어요"}]},
+    })
+
+    dash = (await client.get(f"/classes/{class_id}/dashboard", headers=th)).json()
+    summary = dash["summary"]
+    assert summary["completionRate"] == 1.0  # book_finished/chapter_open
+    assert summary["vocabQuizAccuracy"] == 1.0
+    assert summary["essaysSubmitted"] == 1
+    assert any(o["objective"] == "증발" and o["rate"] == 1.0 for o in summary["objectiveAchievement"])
+
+    ah = auth("admin@iljjagom.test", "admin")
+    usage = (await client.get("/admin/usage", headers=ah)).json()
+    assert usage["eventsTotal"] >= 2
+    assert usage["learningResults"]["quiz"] >= 1
+    assert usage["learningResults"]["essay"] >= 1
+
+
 async def test_learning_result_forbidden_other_student(client):
     _, code, prompt_id, sh, th, book_id = await _student_book(client)
     other = auth("intruder_m@test", "student")

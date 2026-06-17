@@ -606,6 +606,40 @@ class SupabaseStore(Store):
                 "open": self._count("safety_flags", status="open"),
                 "total": self._count("safety_flags"),
             },
+            **self._measurement_counts(),
+        }
+
+    def _measurement_counts(self) -> dict[str, Any]:
+        events_total = self._count("events")
+        # 완독률/재방문률: 이벤트를 가져와 distinct 학생 기준 산출(관리자 관측, 상한 적용).
+        rows = self._rows(
+            self.client.table("events")
+            .select("student_id, type, created_at")
+            .in_("type", ["chapter_open", "book_finished", "learning_open"])
+            .order("created_at", desc=True)
+            .limit(5000)
+            .execute()
+        )
+        opened = {r["student_id"] for r in rows if r["type"] == "chapter_open"}
+        finished = {r["student_id"] for r in rows if r["type"] == "book_finished"}
+        completion = round(len(finished & opened) / len(opened), 2) if opened else 0.0
+        days: dict[str, set[str]] = {}
+        for r in rows:
+            if r["type"] in ("chapter_open", "learning_open") and r.get("student_id"):
+                days.setdefault(r["student_id"], set()).add((r.get("created_at") or "")[:10])
+        active = len(days)
+        revisitors = sum(1 for d in days.values() if len(d) >= 2)
+        revisit = round(revisitors / active, 2) if active else 0.0
+        return {
+            "completion_rate": completion,
+            "revisit_rate": revisit,
+            "events_total": events_total,
+            "learning_results": {
+                "quiz": self._count("learning_artifacts", type="quiz"),
+                "essay": self._count("learning_artifacts", type="essay"),
+                "emotion": self._count("learning_artifacts", type="emotion"),
+                "letter": self._count("learning_artifacts", type="letter"),
+            },
         }
 
     # --- AI 세션 / ReAct 트레이스 ---

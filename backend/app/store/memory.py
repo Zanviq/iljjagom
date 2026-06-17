@@ -448,6 +448,32 @@ class InMemoryStore(Store):
                 "open": sum(1 for f in self.safety_flags if f.status == "open"),
                 "total": len(self.safety_flags),
             },
+            **self._measurement_counts(),
+        }
+
+    def _measurement_counts(self) -> dict[str, Any]:
+        opened = {e.student_id for e in self.events if e.type == "chapter_open"}
+        finished = {e.student_id for e in self.events if e.type == "book_finished"}
+        completion = round(len(finished & opened) / len(opened), 2) if opened else 0.0
+        days: dict[str, set[str]] = {}
+        for e in self.events:
+            if e.type in ("chapter_open", "learning_open") and e.student_id:
+                days.setdefault(e.student_id, set()).add((e.created_at or "")[:10])
+        active = len(days)
+        revisitors = sum(1 for d in days.values() if len(d) >= 2)
+        revisit = round(revisitors / active, 2) if active else 0.0
+
+        def la_n(t: str) -> int:
+            return sum(1 for a in self.learning_artifacts if a.type == t)
+
+        return {
+            "completion_rate": completion,
+            "revisit_rate": revisit,
+            "events_total": len(self.events),
+            "learning_results": {
+                "quiz": la_n("quiz"), "essay": la_n("essay"),
+                "emotion": la_n("emotion"), "letter": la_n("letter"),
+            },
         }
 
     # --- AI 세션 / ReAct 트레이스 ---
