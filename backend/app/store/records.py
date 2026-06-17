@@ -114,6 +114,26 @@ class SafetyFlagRecord:
 
 
 @dataclass
+class EventRecord:
+    id: str
+    book_id: str | None
+    student_id: str | None
+    type: str
+    payload: dict[str, Any] = field(default_factory=dict)
+    created_at: str = ""
+
+
+@dataclass
+class LearningArtifactRecord:
+    id: str
+    book_id: str
+    type: str  # vocab|quiz|essay|letter|emotion
+    data: dict[str, Any] = field(default_factory=dict)
+    chapter_id: str | None = None
+    created_at: str = ""
+
+
+@dataclass
 class LetterRecord:
     id: str
     book_id: str

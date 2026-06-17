@@ -85,7 +85,7 @@ def create_app() -> FastAPI:
         }
 
     # 라우터 등록 (단계별로 추가)
-    from app.api import admin, ai, auth, books, chapters, planning, safety, teacher
+    from app.api import admin, ai, auth, books, chapters, events, planning, safety, teacher
 
     app.include_router(auth.router)
     app.include_router(teacher.router)
@@ -95,6 +95,7 @@ def create_app() -> FastAPI:
     app.include_router(admin.router)
     app.include_router(ai.router)
     app.include_router(safety.router)
+    app.include_router(events.router)
 
     return app
 

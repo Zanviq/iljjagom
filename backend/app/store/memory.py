@@ -18,6 +18,8 @@ from app.store.records import (
     ChapterRecord,
     ChunkRecord,
     ClassroomRecord,
+    EventRecord,
+    LearningArtifactRecord,
     LetterRecord,
     MessageRecord,
     NotificationRecord,
@@ -43,6 +45,8 @@ class InMemoryStore(Store):
         self.chunks: list[ChunkRecord] = []
         self.safety_flags: list[SafetyFlagRecord] = []
         self.letters: list[LetterRecord] = []
+        self.events: list[EventRecord] = []
+        self.learning_artifacts: list[LearningArtifactRecord] = []
         # 추가기능(03)
         self.ai_sessions: dict[str, AiSessionRecord] = {}
         self.ai_steps: list[AiStepRecord] = []
@@ -351,6 +355,67 @@ class InMemoryStore(Store):
         for k, v in fields.items():
             setattr(rec, k, v)
         return rec
+
+    # --- events ---
+    def add_events(self, student_id: str, items: list[dict[str, Any]]) -> int:
+        n = 0
+        for it in items:
+            self.events.append(
+                EventRecord(
+                    id=new_id(), book_id=it.get("book_id"), student_id=student_id,
+                    type=it["type"], payload=it.get("payload") or {}, created_at=now_iso(),
+                )
+            )
+            n += 1
+        return n
+
+    def list_events(
+        self,
+        class_id: str | None = None,
+        book_id: str | None = None,
+        student_id: str | None = None,
+        type: str | None = None,
+        since: str | None = None,
+        limit: int = 1000,
+    ) -> list[EventRecord]:
+        class_books = self._book_ids_for_class(class_id) if class_id else None
+        rows = [
+            e for e in self.events
+            if (book_id is None or e.book_id == book_id)
+            and (class_books is None or e.book_id in class_books)
+            and (student_id is None or e.student_id == student_id)
+            and (type is None or e.type == type)
+            and (since is None or e.created_at >= since)
+        ]
+        rows.sort(key=lambda e: e.created_at, reverse=True)
+        return rows[:limit]
+
+    # --- learning_artifacts ---
+    def add_learning_artifact(
+        self, book_id: str, type: str, data: dict[str, Any], chapter_id: str | None = None
+    ) -> LearningArtifactRecord:
+        rec = LearningArtifactRecord(
+            id=new_id(), book_id=book_id, type=type, data=data,
+            chapter_id=chapter_id, created_at=now_iso(),
+        )
+        self.learning_artifacts.append(rec)
+        return rec
+
+    def list_learning_artifacts(
+        self,
+        book_id: str | None = None,
+        class_id: str | None = None,
+        type: str | None = None,
+    ) -> list[LearningArtifactRecord]:
+        class_books = self._book_ids_for_class(class_id) if class_id else None
+        rows = [
+            a for a in self.learning_artifacts
+            if (book_id is None or a.book_id == book_id)
+            and (class_books is None or a.book_id in class_books)
+            and (type is None or a.type == type)
+        ]
+        rows.sort(key=lambda a: a.created_at, reverse=True)
+        return rows
 
     # --- 관리자 집계 ---
     def usage_counts(self) -> dict[str, Any]:

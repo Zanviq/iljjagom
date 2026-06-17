@@ -11,9 +11,14 @@ from app.deps import (
     require_guardian_consent,
     require_role,
 )
-from app.models.schemas import CreateBookRequest, LetterRequest, serialize
+from app.models.schemas import (
+    CreateBookRequest,
+    LearningResultCreate,
+    LetterRequest,
+    serialize,
+)
 from app.ratelimit import rate_limit
-from app.services import books, learning, words
+from app.services import books, events, learning, words
 from app.services import safety as safety_service
 from app.store.base import Store
 
@@ -76,6 +81,29 @@ async def get_learning(
     # 어휘/퀴즈/독후감/감정 곡선 (FR-S8~S12). 책 접근 가능자.
     result = await learning.build_learning(store, gemini, user, book_id)
     return serialize(result)
+
+
+@router.post("/books/{book_id}/learning-results", status_code=201)
+async def post_learning_result(
+    book_id: str,
+    req: LearningResultCreate,
+    user: CurrentUser = Depends(require_role("student", "admin")),
+    store: Store = Depends(get_store_dep),
+    _rl: None = Depends(rate_limit("learning-results", 30)),
+) -> dict:
+    # 퀴즈/독후감/감정 자기보고 저장(learning_artifacts). essay는 안전 게이트 통과.
+    created = events.save_learning_result(store, user, book_id, req.type, req.data)
+    return serialize(created)
+
+
+@router.get("/books/{book_id}/learning-results")
+async def get_learning_results(
+    book_id: str,
+    user: CurrentUser = Depends(get_current_user),
+    store: Store = Depends(get_store_dep),
+) -> dict:
+    # 책 접근 가능자(학생 본인·교사·admin)가 학습 결과 조회.
+    return serialize(events.list_learning_results(store, user, book_id))
 
 
 @router.get("/books/{book_id}/letters")

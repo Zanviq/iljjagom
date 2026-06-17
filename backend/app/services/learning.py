@@ -116,6 +116,11 @@ async def write_letter(
             severity=severity,
             letter_id=letter.id,
         )
+        # 학습결과(편지)도 함께 기록(04 측정 — 신규 엔드포인트 불필요).
+        store.add_learning_artifact(
+            book_id, "letter",
+            {"to": to, "body": body, "status": "held", "replySaved": False},
+        )
         return LetterResponse(status="held", reply=None, letter_id=letter.id)
 
     bible_rec = store.get_bible(book_id)
@@ -129,5 +134,8 @@ async def write_letter(
     )
     letter = store.add_letter(
         book_id, user.id, to, body, status="answered", reply=reply, reply_source="ai"
+    )
+    store.add_learning_artifact(
+        book_id, "letter", {"to": to, "body": body, "status": "answered", "replySaved": True}
     )
     return LetterResponse(status="answered", reply=reply, letter_id=letter.id)

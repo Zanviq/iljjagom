@@ -20,6 +20,8 @@ from app.store.records import (
     ChapterRecord,
     ChunkRecord,
     ClassroomRecord,
+    EventRecord,
+    LearningArtifactRecord,
     LetterRecord,
     MessageRecord,
     NotificationRecord,
@@ -495,6 +497,78 @@ class SupabaseStore(Store):
             self.client.table("letters").update(fields).eq("id", letter_id).execute()
         )
         return LetterRecord(**row)
+
+    # --- events ---
+    def add_events(self, student_id: str, items: list[dict[str, Any]]) -> int:
+        if not items:
+            return 0
+        payload = [
+            {
+                "book_id": it.get("book_id"),
+                "student_id": student_id,
+                "type": it["type"],
+                "payload": it.get("payload") or {},
+            }
+            for it in items
+        ]
+        rows = self._rows(self.client.table("events").insert(payload).execute())
+        return len(rows) if rows else len(payload)
+
+    def list_events(
+        self,
+        class_id: str | None = None,
+        book_id: str | None = None,
+        student_id: str | None = None,
+        type: str | None = None,
+        since: str | None = None,
+        limit: int = 1000,
+    ) -> list[EventRecord]:
+        q = self.client.table("events").select("*")
+        if book_id is not None:
+            q = q.eq("book_id", book_id)
+        if class_id is not None:
+            ids = self._class_book_ids(class_id)
+            if not ids:
+                return []
+            q = q.in_("book_id", ids)
+        if student_id is not None:
+            q = q.eq("student_id", student_id)
+        if type is not None:
+            q = q.eq("type", type)
+        if since is not None:
+            q = q.gte("created_at", since)
+        rows = self._rows(q.order("created_at", desc=True).limit(limit).execute())
+        return [EventRecord(**r) for r in rows]
+
+    # --- learning_artifacts ---
+    def add_learning_artifact(
+        self, book_id: str, type: str, data: dict[str, Any], chapter_id: str | None = None
+    ) -> LearningArtifactRecord:
+        row = self._one(
+            self.client.table("learning_artifacts")
+            .insert({"book_id": book_id, "type": type, "data": data, "chapter_id": chapter_id})
+            .execute()
+        )
+        return LearningArtifactRecord(**row)
+
+    def list_learning_artifacts(
+        self,
+        book_id: str | None = None,
+        class_id: str | None = None,
+        type: str | None = None,
+    ) -> list[LearningArtifactRecord]:
+        q = self.client.table("learning_artifacts").select("*")
+        if book_id is not None:
+            q = q.eq("book_id", book_id)
+        if class_id is not None:
+            ids = self._class_book_ids(class_id)
+            if not ids:
+                return []
+            q = q.in_("book_id", ids)
+        if type is not None:
+            q = q.eq("type", type)
+        rows = self._rows(q.order("created_at", desc=True).execute())
+        return [LearningArtifactRecord(**r) for r in rows]
 
     # --- 관리자 집계 ---
     def _count(self, table: str, **eq: Any) -> int:

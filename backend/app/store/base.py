@@ -13,6 +13,8 @@ from app.store.records import (
     ChapterRecord,
     ChunkRecord,
     ClassroomRecord,
+    EventRecord,
+    LearningArtifactRecord,
     LetterRecord,
     MessageRecord,
     NotificationRecord,
@@ -191,6 +193,37 @@ class Store(ABC):
 
     @abstractmethod
     def update_letter(self, letter_id: str, **fields: Any) -> LetterRecord: ...
+
+    # --- events (행동 로그, 04) ---
+    @abstractmethod
+    def add_events(self, student_id: str, items: list[dict[str, Any]]) -> int:
+        """배치 적재. items=[{book_id, type, payload}]. 적재 수 반환."""
+        ...
+
+    @abstractmethod
+    def list_events(
+        self,
+        class_id: str | None = None,
+        book_id: str | None = None,
+        student_id: str | None = None,
+        type: str | None = None,
+        since: str | None = None,
+        limit: int = 1000,
+    ) -> list[EventRecord]: ...
+
+    # --- learning_artifacts (학습결과, 04 — 신규 테이블 대신 재사용) ---
+    @abstractmethod
+    def add_learning_artifact(
+        self, book_id: str, type: str, data: dict[str, Any], chapter_id: str | None = None
+    ) -> LearningArtifactRecord: ...
+
+    @abstractmethod
+    def list_learning_artifacts(
+        self,
+        book_id: str | None = None,
+        class_id: str | None = None,
+        type: str | None = None,
+    ) -> list[LearningArtifactRecord]: ...
 
     # --- 관리자 집계 ---
     @abstractmethod

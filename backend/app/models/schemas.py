@@ -272,6 +272,51 @@ class LetterRejectRequest(CamelModel):
     note: str | None = None
 
 
+# --- 측정(추가기능 04) ---
+class TrackEvent(CamelModel):
+    book_id: str | None = None
+    type: str = Field(min_length=1)
+    payload: dict[str, Any] = {}
+    client_ts: str | None = None
+
+
+class EventsRequest(CamelModel):
+    events: list[TrackEvent] = Field(min_length=1, max_length=50)
+
+
+class EventsResponse(CamelModel):
+    accepted: int = 0
+
+
+class LearningResultCreate(CamelModel):
+    type: Literal["quiz", "essay", "emotion"]
+    data: dict[str, Any] = {}
+
+
+class LearningResult(CamelModel):
+    id: str
+    type: str
+    data: dict[str, Any] = {}
+    created_at: str = ""
+
+
+class LearningResultCreated(CamelModel):
+    id: str
+    type: str
+    created_at: str = ""
+
+
+class LearningResultsResponse(CamelModel):
+    results: list[LearningResult] = []
+
+
+class Ask(CamelModel):
+    session_id: str
+    question: str
+    choices: list[str] = []
+    allow_text: bool = True
+
+
 # --- 관리자(FR-M1, 최소) ---
 class UsersStat(CamelModel):
     total: int = 0
