@@ -19,16 +19,21 @@ test("랜딩이 렌더되고 로그인으로 이동한다", async ({ page }) => 
   await expect(devEmail.or(googleBtn).first()).toBeVisible();
 });
 
-test("E17 반응형 스모크: 랜딩이 360/768/1280에서 가로 오버플로 없음", async ({
+test("E17 반응형 스모크: 랜딩·로그인이 360/768/1280에서 가로 오버플로 없음", async ({
   page,
 }) => {
-  for (const width of [360, 768, 1280]) {
-    await page.setViewportSize({ width, height: 800 });
-    await page.goto("/");
-    // 문서 폭이 뷰포트를 넘지 않아야 한다(가로 스크롤 방지).
-    const overflow = await page.evaluate(
-      () => document.documentElement.scrollWidth - window.innerWidth,
-    );
-    expect(overflow, `width=${width} 가로 오버플로`).toBeLessThanOrEqual(1);
+  for (const path of ["/", "/login"]) {
+    for (const width of [360, 768, 1280]) {
+      await page.setViewportSize({ width, height: 800 });
+      await page.goto(path);
+      // 문서 폭이 뷰포트를 넘지 않아야 한다(가로 스크롤 방지).
+      const overflow = await page.evaluate(
+        () => document.documentElement.scrollWidth - window.innerWidth,
+      );
+      expect(
+        overflow,
+        `${path} @ ${width}px 가로 오버플로`,
+      ).toBeLessThanOrEqual(1);
+    }
   }
 });

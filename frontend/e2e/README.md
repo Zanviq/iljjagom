@@ -17,7 +17,7 @@ npx playwright test landing.spec.ts --project=desktop   # 스모크만
 - **dev 모드(기본·CI)**: 백엔드를 `DEV_AUTH=true` + `SUPABASE_*`/`GOOGLE_API_KEY` 비움으로 :8000에 띄우고,
   프론트는 Supabase 미설정(`.env`)으로 빌드 → DevLogin 노출. mock AI라 결정적이라 안정적 어서션 가능.
   `auth.spec.ts`(E1~) 등 인증·데이터 시나리오는 이 모드에서만 통과(실키 모드면 자동 skip).
-- **실키 모드(@realkey)**: Google OAuth·실 Gemini 필요 → CI 기본 제외, 수동/야간. (현재 미태깅, 후속.)
+- **실키 모드(@realkey)**: Google OAuth·실 Gemini 필요 → CI 기본 제외, 수동/야간. 테스트 제목에 `@realkey` 태그를 붙이고, CI는 `npm run e2e:ci`(= `--grep-invert @realkey`)로 제외한다.
 
 > `landing.spec.ts`는 백엔드 무관 스모크 + 반응형(360/768/1280) 가로 오버플로 점검이라 어느 모드에서도 통과.
 
@@ -29,4 +29,4 @@ npx playwright test landing.spec.ts --project=desktop   # 스모크만
 
 ## CI (07 §5.7, 후속)
 
-PR에서 `npm run build`+`lint`+`e2e`(dev). 실패 시 trace/screenshot 아티팩트 업로드. 백엔드 dev 모드 webServer는 백엔드 세션과 합의해 추가.
+PR에서 `npm run build`+`lint`+`npm run e2e:ci`(dev, @realkey 제외). 실패 시 trace/screenshot 아티팩트 업로드. 백엔드 dev 모드 webServer는 백엔드 세션과 합의해 추가.
