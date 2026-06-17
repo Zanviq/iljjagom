@@ -8,6 +8,7 @@ from app.deps import CurrentUser, get_current_user, get_store_dep, require_role
 from app.models.schemas import CreateBookRequest, LetterRequest, serialize
 from app.ratelimit import rate_limit
 from app.services import books, learning, words
+from app.services import safety as safety_service
 from app.store.base import Store
 
 router = APIRouter(tags=["books"])
@@ -68,6 +69,16 @@ async def get_learning(
     # 어휘/퀴즈/독후감/감정 곡선 (FR-S8~S12). 책 접근 가능자.
     result = await learning.build_learning(store, gemini, user, book_id)
     return serialize(result)
+
+
+@router.get("/books/{book_id}/letters")
+async def list_book_letters(
+    book_id: str,
+    user: CurrentUser = Depends(get_current_user),
+    store: Store = Depends(get_store_dep),
+) -> dict:
+    # 학생이 자기 편지 상태(보류/승인된 답장)를 확인. 책 접근 가능자.
+    return serialize(safety_service.list_book_letters(store, user, book_id))
 
 
 @router.post("/books/{book_id}/letters")

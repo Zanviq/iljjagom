@@ -213,6 +213,63 @@ class LetterRequest(CamelModel):
 class LetterResponse(CamelModel):
     status: Literal["answered", "held"]
     reply: str | None = None
+    letter_id: str | None = None
+
+
+# --- 안전·교사검토 (추가기능 03) ---
+class Letter(CamelModel):
+    id: str
+    book_id: str
+    student_id: str | None = None
+    recipient: str
+    body: str
+    status: str  # pending|answered|held|approved|rejected
+    reply: str | None = None
+    reply_source: str | None = None
+    reviewed_by: str | None = None
+    reviewed_at: str | None = None
+    created_at: str = ""
+
+
+class LettersResponse(CamelModel):
+    letters: list[Letter] = []
+
+
+class SafetyFlag(CamelModel):
+    id: str
+    book_id: str | None = None
+    student_id: str | None = None
+    source: str
+    reason: str
+    category: str | None = None
+    severity: str = "normal"
+    status: str  # open|reviewed|resolved
+    letter_id: str | None = None
+    reviewed_by: str | None = None
+    reviewed_at: str | None = None
+    note: str | None = None
+    created_at: str = ""
+
+
+class SafetyFlagsResponse(CamelModel):
+    flags: list[SafetyFlag] = []
+
+
+class SafetyFlagDetail(SafetyFlag):
+    letter: Letter | None = None
+
+
+class ResolveRequest(CamelModel):
+    note: str | None = None
+
+
+class LetterApproveRequest(CamelModel):
+    reply: str | None = None
+    use_ai_reply: bool = False
+
+
+class LetterRejectRequest(CamelModel):
+    note: str | None = None
 
 
 # --- 관리자(FR-M1, 최소) ---
