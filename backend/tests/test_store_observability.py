@@ -90,3 +90,17 @@ def test_audit_log():
     rows = s.list_audit()
     assert len(rows) == 2
     assert rows[0].action in {"set_setting", "send_notification"}
+
+
+def test_rate_hit_counts_within_window():
+    s = _store()
+    # 같은 (bucket, user) 호출은 윈도 내 누적 카운트를 반환한다.
+    assert s.rate_hit("design", "u1", 60) == 1
+    assert s.rate_hit("design", "u1", 60) == 2
+    assert s.rate_hit("design", "u1", 60) == 3
+    # 다른 사용자/버킷은 독립.
+    assert s.rate_hit("design", "u2", 60) == 1
+    assert s.rate_hit("revise", "u1", 60) == 1
+    # window 음수면 직전 기록이 항상 만료되어 카운트 1 유지.
+    assert s.rate_hit("design", "u3", -1) == 1
+    assert s.rate_hit("design", "u3", -1) == 1

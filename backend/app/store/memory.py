@@ -4,6 +4,8 @@
 """
 from __future__ import annotations
 
+import time
+from collections import defaultdict, deque
 from typing import Any
 
 from app.store.base import Store
@@ -47,6 +49,7 @@ class InMemoryStore(Store):
         self.notifications: list[NotificationRecord] = []
         self.settings: dict[str, Any] = {}
         self.audit: list[AuditRecord] = []
+        self._rate_hits: dict[tuple[str, str], deque[float]] = defaultdict(deque)
 
     # --- profiles ---
     def get_profile(self, user_id: str) -> ProfileRecord | None:
@@ -453,3 +456,12 @@ class InMemoryStore(Store):
 
     def list_audit(self, limit: int = 100) -> list[AuditRecord]:
         return sorted(self.audit, key=lambda a: a.created_at, reverse=True)[:limit]
+
+    # --- rate limit ---
+    def rate_hit(self, bucket: str, user_id: str, window: float) -> int:
+        now = time.monotonic()
+        dq = self._rate_hits[(bucket, user_id)]
+        while dq and now - dq[0] > window:
+            dq.popleft()
+        dq.append(now)
+        return len(dq)

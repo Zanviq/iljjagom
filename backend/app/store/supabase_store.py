@@ -5,6 +5,8 @@
 """
 from __future__ import annotations
 
+import re
+from datetime import datetime, timedelta, timezone
 from typing import Any
 
 from app.config import Settings
@@ -27,6 +29,10 @@ from app.store.records import (
     TokenUsageRecord,
 )
 from app.util import cosine_similarity, now_iso
+
+# PostgREST 필터 보간 전 검증용 — UUID 형식 / 허용 역할.
+_UUID_RE = re.compile(r"\A[0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{12}\Z")
+_VALID_ROLES = {"student", "teacher", "admin"}
 
 
 class SupabaseStore(Store):
@@ -567,9 +573,14 @@ class SupabaseStore(Store):
     def list_notifications(
         self, user_id: str, role: str, unread_only: bool = False, limit: int = 50
     ) -> list[NotificationRecord]:
-        q = self.client.table("notifications").select("*").or_(
-            f"target_user_id.eq.{user_id},is_broadcast.eq.true,target_role.eq.{role}"
-        )
+        # PostgREST or_ 필터 주입 방지: 신뢰 못 할 값을 보간하기 전에 엄격 검증.
+        # 검증 실패 시 해당 절을 빼고(브로드캐스트만) 안전하게 동작.
+        clauses = ["is_broadcast.eq.true"]
+        if _UUID_RE.fullmatch(user_id):
+            clauses.append(f"target_user_id.eq.{user_id}")
+        if role in _VALID_ROLES:
+            clauses.append(f"target_role.eq.{role}")
+        q = self.client.table("notifications").select("*").or_(",".join(clauses))
         if unread_only:
             q = q.is_("read_at", "null")
         rows = self._rows(q.order("created_at", desc=True).limit(limit).execute())
@@ -617,3 +628,22 @@ class SupabaseStore(Store):
             .select("*").order("created_at", desc=True).limit(limit).execute()
         )
         return [AuditRecord(**r) for r in rows]
+
+    # --- rate limit (무상태, 멀티 워커 정합) ---
+    def rate_hit(self, bucket: str, user_id: str, window: float) -> int:
+        cutoff = (datetime.now(timezone.utc) - timedelta(seconds=window)).isoformat()
+        # 만료 행 정리(이 bucket/user) → 카운트가 곧 윈도 내 횟수가 된다.
+        self.client.table("rate_hits").delete().eq("bucket", bucket).eq(
+            "user_id", user_id
+        ).lt("created_at", cutoff).execute()
+        self.client.table("rate_hits").insert(
+            {"bucket": bucket, "user_id": user_id}
+        ).execute()
+        resp = (
+            self.client.table("rate_hits")
+            .select("id", count="exact", head=True)
+            .eq("bucket", bucket)
+            .eq("user_id", user_id)
+            .execute()
+        )
+        return resp.count or 0

@@ -254,3 +254,9 @@ class Store(ABC):
 
     @abstractmethod
     def list_audit(self, limit: int = 100) -> list[AuditRecord]: ...
+
+    # --- rate limit (무상태화, §3.4) ---
+    @abstractmethod
+    def rate_hit(self, bucket: str, user_id: str, window: float) -> int:
+        """이 (bucket, user) 호출을 1 기록하고, window 초 내 현재 카운트를 반환."""
+        ...
