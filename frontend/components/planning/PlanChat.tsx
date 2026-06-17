@@ -3,11 +3,20 @@
 import { useRouter } from "next/navigation";
 import { useEffect, useRef, useState } from "react";
 
+import { AskUserPanel } from "@/components/ai/AskUserPanel";
 import { CharacterCard } from "@/components/planning/CharacterCard";
 import { buttonClass } from "@/components/ui/Button";
 import { ApiError, getBook, postDesign, postPlanMessage } from "@/lib/api";
+import { answerAiSession } from "@/lib/ai";
+import type { AskUserAnswer, AskUserPrompt } from "@/lib/ai";
 import { getClientAccessToken } from "@/lib/auth/client";
 import type { PlanReply } from "@/lib/types";
+
+/** ask_user 가 plan 응답에 실려오는 경우(백엔드 계약 확정 시 PlanReply로 승격). */
+function extractAsk(reply: PlanReply): AskUserPrompt | null {
+  const ask = (reply as PlanReply & { ask?: AskUserPrompt }).ask;
+  return ask && ask.sessionId && ask.question ? ask : null;
+}
 
 interface Message {
   who: "child" | "ai";
@@ -33,6 +42,9 @@ export function PlanChat({ bookId }: { bookId: string }) {
   const [sending, setSending] = useState(false);
   const [designing, setDesigning] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  const [ask, setAsk] = useState<AskUserPrompt | null>(null);
+  const [answering, setAnswering] = useState(false);
+  const [askError, setAskError] = useState<string | null>(null);
 
   const endRef = useRef<HTMLDivElement>(null);
   useEffect(() => {
@@ -52,12 +64,35 @@ export function PlanChat({ bookId }: { bookId: string }) {
       setMessages((m) => [...m, { who: "ai", text: reply.reply }]);
       setDraft(reply.characterDraft);
       setReadyToWrite(reply.readyToWrite);
+      setAsk(extractAsk(reply));
     } catch (e) {
       setError(
         e instanceof ApiError ? e.message : "메시지를 보내지 못했어요.",
       );
     } finally {
       setSending(false);
+    }
+  }
+
+  async function submitAnswer(answer: AskUserAnswer) {
+    if (!ask || answering) return;
+    setAskError(null);
+    setAnswering(true);
+    const shown =
+      answer.text ??
+      (answer.choice !== undefined ? ask.choices[answer.choice] : "");
+    try {
+      const token = await getClientAccessToken();
+      await answerAiSession(token, ask.sessionId, answer);
+      if (shown) setMessages((m) => [...m, { who: "child", text: shown }]);
+      setAsk(null);
+      // 흐름 재개 응답 형태는 백엔드 확정 대기(handoff). 확정되면 후속 reply를 이어붙인다.
+    } catch (e) {
+      setAskError(
+        e instanceof ApiError ? e.message : "대답을 전하지 못했어요.",
+      );
+    } finally {
+      setAnswering(false);
     }
   }
 
@@ -103,12 +138,25 @@ export function PlanChat({ bookId }: { bookId: string }) {
           <p className="px-5 pb-2 text-sm font-bold text-danger">{error}</p>
         )}
 
+        {ask && (
+          <div className="border-t border-border p-4">
+            <AskUserPanel
+              prompt={ask}
+              pending={answering}
+              error={askError}
+              onAnswer={(a) => void submitAnswer(a)}
+            />
+          </div>
+        )}
+
         <form
           onSubmit={(e) => {
             e.preventDefault();
             void send();
           }}
-          className="flex items-end gap-2 border-t border-border p-4"
+          className={`flex items-end gap-2 border-t border-border p-4 ${
+            ask ? "hidden" : ""
+          }`}
         >
           <textarea
             value={input}
