@@ -70,6 +70,35 @@ async def _teacher_makes_prompt(client):
     return code, class_id, prompt["id"]
 
 
+async def test_me_class_fields(client):
+    # 03 §4.2: 학생은 가입 학급의 classId/className 을 받고, 미가입·교사는 null.
+    code, class_id, _ = await _teacher_makes_prompt(client)
+
+    # 미가입 학생: null
+    sh = auth("kid_solo@test", "student")
+    me = (await client.get("/me", headers=sh)).json()
+    assert me["classId"] is None
+    assert me["className"] is None
+
+    # 온보딩(학급 코드) 응답에 즉시 채워짐
+    on = (await client.post(
+        "/onboarding", headers=sh, json={"role": "student", "classCode": code}
+    )).json()
+    assert on["classId"] == class_id
+    assert on["className"] == "우리 반"
+
+    # 이후 GET /me 에서도 동일
+    me = (await client.get("/me", headers=sh)).json()
+    assert me["classId"] == class_id
+    assert me["className"] == "우리 반"
+
+    # 교사는 학급을 만들어도 classId/className 은 null(학생 전용 진입점).
+    th = auth("teacher@test", "teacher")
+    tme = (await client.get("/me", headers=th)).json()
+    assert tme["classId"] is None
+    assert tme["className"] is None
+
+
 async def test_full_p1_vertical_slice(client):
     # 1. 교사: 발제 생성
     code, class_id, prompt_id = await _teacher_makes_prompt(client)
