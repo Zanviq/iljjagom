@@ -208,13 +208,22 @@ function ChapterStream({
       );
       return;
     }
-    // 비동기 처리(재생성→편집→반영) 완료 대기: reviewStatus revising→ok.
-    for (let i = 0; i < 40; i++) {
-      await sleep(1000);
+    // 비동기 처리(해석→재생성→Tier3 편집→반영) 완료 대기: reviewStatus revising→ok.
+    // 실 AI는 3단계 LLM 호출이라 오래 걸릴 수 있어 넉넉히(약 3분) 폴링한다.
+    // 시작 직후 잠깐의 ok(직전 상태)를 완료로 오인하지 않도록, "revising"을 한 번 본 뒤의
+    // ok(또는 충분한 시간 경과 후의 ok)만 완료로 인정한다.
+    let sawRevising = false;
+    for (let i = 0; i < 90; i++) {
+      await sleep(2000);
       try {
         const book = await getBook(token, bookId);
         const ch = book.chapters.find((c) => c.idx === chapterIdx);
-        if (ch && ch.reviewStatus === "ok") {
+        if (!ch) continue;
+        if (ch.reviewStatus === "revising") {
+          sawRevising = true;
+          continue;
+        }
+        if (ch.reviewStatus === "ok" && (sawRevising || i >= 3)) {
           onRevised(); // 부모가 key 변경 → 재마운트 → 수정 반영된 저장본 재구독
           return;
         }
@@ -223,7 +232,9 @@ function ChapterStream({
       }
     }
     setRevising(false);
-    setReviseError("수정이 오래 걸려요. 잠시 후 다시 시도해 주세요.");
+    setReviseError(
+      "수정이 아직 진행 중이에요. 잠시 후 새로고침하면 반영돼요.",
+    );
   }
 
   const canGoNext = done?.nextChapterAvailable ?? false;
