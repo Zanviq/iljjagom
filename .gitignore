@@ -50,3 +50,4 @@ yarn-error.log*
 
 # Claude Code 로컬 설정/에이전트 정의 (로컬 도구, 저장소에 올리지 않음)
 .claude/
+.mcp.json

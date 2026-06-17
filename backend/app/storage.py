@@ -5,12 +5,15 @@
 """
 from __future__ import annotations
 
+import logging
 from abc import ABC, abstractmethod
 from functools import lru_cache
 
 from app.config import Settings, get_settings
 
 ILLUSTRATION_BUCKET = "illustrations"
+
+logger = logging.getLogger("app.storage")
 
 
 class Storage(ABC):
@@ -57,4 +60,12 @@ def get_storage() -> Storage:
     settings = get_settings()
     if settings.use_supabase:
         return SupabaseStorage(settings)
+    # 운영에서는 삽화가 사라지지 않도록 Noop 금지(fail-closed).
+    if not settings.in_memory_allowed:
+        raise RuntimeError(
+            "운영(APP_ENV=prod)에서 Supabase Storage 자격이 없습니다. "
+            "삽화 저장을 위해 SUPABASE_URL / SUPABASE_SERVICE_ROLE_KEY 를 설정하세요."
+        )
+    if not settings.is_test:
+        logger.warning("Supabase 미설정 — 삽화 업로드 비활성(NoopStorage).")
     return NoopStorage()

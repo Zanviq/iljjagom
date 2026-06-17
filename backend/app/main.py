@@ -18,6 +18,14 @@ def create_app() -> FastAPI:
             "DEV_AUTH 가 켜진 상태로 SUPABASE_JWT_SECRET/SUPABASE_URL 이 설정되어 있습니다. "
             "운영 환경에서는 DEV_AUTH=false 로 두세요."
         )
+
+    # 영속화: 운영(APP_ENV=prod)에서 Supabase 자격이 없으면 기동 거부(fail-closed).
+    # 인메모리/Noop 폴백이 운영에 새지 않도록 한다(03-추가기능/01 §3.1).
+    if settings.is_prod and not settings.use_supabase:
+        raise RuntimeError(
+            "APP_ENV=prod 인데 Supabase 자격(SUPABASE_URL/SUPABASE_SERVICE_ROLE_KEY)이 없습니다. "
+            "운영에서는 인메모리 폴백이 금지됩니다."
+        )
     app = FastAPI(
         title="일짜곰 백엔드",
         version="0.1.0",
