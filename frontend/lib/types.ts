@@ -177,10 +177,58 @@ export interface Learning {
   emotion: EmotionPoint[];
 }
 
-/** POST /books/{id}/letters 응답 (FR-S11) */
+/** POST /books/{id}/letters 응답 (FR-S11). letterId 추가(추가기능 03). */
 export interface LetterReply {
   status: "answered" | "held";
   reply: string | null;
+  letterId: string;
+}
+
+/* ── 안전·교사검토 (추가기능 03, §4.2·§7) ── */
+export type LetterStatus =
+  | "pending"
+  | "answered"
+  | "held"
+  | "approved"
+  | "rejected";
+export type SafetyFlagStatus = "open" | "resolved";
+
+/** 인물 편지 원문·답장·검토 상태 */
+export interface Letter {
+  id: string;
+  bookId: string;
+  studentId: string;
+  recipient: string;
+  body: string;
+  status: LetterStatus;
+  reply?: string | null;
+  replySource?: string | null;
+  reviewedBy?: string | null;
+  reviewedAt?: string | null;
+  createdAt: string;
+}
+
+/** 안전 신호(safety_flags) */
+export interface SafetyFlag {
+  id: string;
+  bookId: string | null;
+  studentId: string | null;
+  /** 발생 위치(입력/출력/편지 등) */
+  source: string;
+  reason: string;
+  category?: string | null;
+  severity: string;
+  status: SafetyFlagStatus;
+  letterId?: string | null;
+  reviewedBy?: string | null;
+  reviewedAt?: string | null;
+  note?: string | null;
+  createdAt: string;
+}
+
+/** GET /safety-flags/{id} 응답 = 신호 + 연결 편지 */
+export interface SafetyFlagDetail extends SafetyFlag {
+  letter?: Letter | null;
 }
 
 /** GET /admin/usage 응답 (FR-M1 최소) */

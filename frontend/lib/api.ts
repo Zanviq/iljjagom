@@ -21,11 +21,15 @@ import type {
   DesignStatus,
   Health,
   Learning,
+  Letter,
   LetterReply,
   Me,
   OnboardingRequest,
   PlanReply,
   Prompt,
+  SafetyFlag,
+  SafetyFlagDetail,
+  SafetyFlagStatus,
   Word,
 } from "./types";
 
@@ -269,4 +273,101 @@ export function getAiSession(
   id: string,
 ): Promise<AiSessionDetail> {
   return apiFetch<AiSessionDetail>(`/ai/sessions/${id}`, { token });
+}
+
+/* ── 안전·교사검토 (추가기능 03, §4.2) ── */
+
+/** 학급 안전 신호 목록(teacher/admin). */
+export function getClassSafetyFlags(
+  token: string | null,
+  classId: string,
+  params?: { status?: SafetyFlagStatus; source?: string },
+): Promise<{ flags: SafetyFlag[] }> {
+  const q = new URLSearchParams();
+  if (params?.status) q.set("status", params.status);
+  if (params?.source) q.set("source", params.source);
+  const qs = q.toString();
+  return apiFetch<{ flags: SafetyFlag[] }>(
+    `/classes/${classId}/safety-flags${qs ? `?${qs}` : ""}`,
+    { token },
+  );
+}
+
+/** 안전 신호 상세(연결 편지 포함, teacher/admin). */
+export function getSafetyFlag(
+  token: string | null,
+  id: string,
+): Promise<SafetyFlagDetail> {
+  return apiFetch<SafetyFlagDetail>(`/safety-flags/${id}`, { token });
+}
+
+/** 안전 신호 종결(teacher/admin). */
+export function resolveSafetyFlag(
+  token: string | null,
+  id: string,
+  note?: string,
+): Promise<SafetyFlag> {
+  return apiFetch<SafetyFlag>(`/safety-flags/${id}/resolve`, {
+    token,
+    method: "POST",
+    body: { note },
+  });
+}
+
+/** 전 학급 안전 신호(admin). */
+export function getAdminSafetyFlags(
+  token: string | null,
+  status?: SafetyFlagStatus,
+): Promise<{ flags: SafetyFlag[] }> {
+  const qs = status ? `?status=${status}` : "";
+  return apiFetch<{ flags: SafetyFlag[] }>(`/admin/safety-flags${qs}`, {
+    token,
+  });
+}
+
+/** 학급 편지 목록(teacher/admin). */
+export function getClassLetters(
+  token: string | null,
+  classId: string,
+  status?: string,
+): Promise<{ letters: Letter[] }> {
+  const qs = status ? `?status=${status}` : "";
+  return apiFetch<{ letters: Letter[] }>(
+    `/classes/${classId}/letters${qs}`,
+    { token },
+  );
+}
+
+/** 편지 답장 승인(teacher/admin). reply 없고 useAiReply면 AI 페르소나 답장 생성. */
+export function approveLetter(
+  token: string | null,
+  id: string,
+  body: { reply?: string; useAiReply?: boolean },
+): Promise<Letter> {
+  return apiFetch<Letter>(`/letters/${id}/approve`, {
+    token,
+    method: "POST",
+    body,
+  });
+}
+
+/** 편지 답장 미발송(teacher/admin). */
+export function rejectLetter(
+  token: string | null,
+  id: string,
+  note?: string,
+): Promise<Letter> {
+  return apiFetch<Letter>(`/letters/${id}/reject`, {
+    token,
+    method: "POST",
+    body: { note },
+  });
+}
+
+/** 학생 본인/교사/admin: 책의 편지 상태·승인된 답장. */
+export function getBookLetters(
+  token: string | null,
+  bookId: string,
+): Promise<{ letters: Letter[] }> {
+  return apiFetch<{ letters: Letter[] }>(`/books/${bookId}/letters`, { token });
 }

@@ -34,7 +34,7 @@ export default async function TeacherClassesPage() {
                 </p>
               </div>
 
-              <div className="mt-4 flex gap-2">
+              <div className="mt-4 flex flex-wrap gap-2">
                 <Link
                   href={`/classes/${c.id}/prompt`}
                   className="inline-flex h-12 flex-1 items-center justify-center rounded-card bg-primary px-5 font-bold text-primary-foreground transition hover:brightness-105"
@@ -46,6 +46,12 @@ export default async function TeacherClassesPage() {
                   className="inline-flex h-12 items-center justify-center rounded-card border-2 border-border bg-surface px-5 font-bold transition hover:border-primary"
                 >
                   대시보드
+                </Link>
+                <Link
+                  href={`/classes/${c.id}/safety`}
+                  className="inline-flex h-12 items-center justify-center rounded-card border-2 border-border bg-surface px-5 font-bold transition hover:border-primary"
+                >
+                  안전 검토
                 </Link>
               </div>
             </li>
