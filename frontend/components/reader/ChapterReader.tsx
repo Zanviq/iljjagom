@@ -21,7 +21,7 @@ import { track } from "@/lib/track";
 import type { Ask, ChapterMode, SSEDone, SSEIllustration, Word } from "@/lib/types";
 
 const sleep = (ms: number) => new Promise((r) => setTimeout(r, ms));
-const MAX_RECONNECT = 5;
+const MAX_RECONNECT = 8;
 
 interface Props {
   bookId: string;
@@ -164,8 +164,9 @@ function ChapterStream({
 
     async function run() {
       let attempts = 0;
+      let waited = 0;
+      const MAX_WAIT_MS = 60_000;
       while (!cancelled && attempts <= MAX_RECONNECT) {
-        let sawRetryable = false;
         try {
           await streamChapter({
             token,
@@ -217,8 +218,8 @@ function ChapterStream({
                   }
                   break;
                 case "error":
-                  if (evt.data.retryable) sawRetryable = true;
-                  else {
+                  // 재시도 가능 오류는 무시하고 아래 루프가 재구독하게 둔다.
+                  if (!evt.data.retryable) {
                     setStreamError(evt.data.message);
                     setStreaming(false);
                     doneRef.current = true;
@@ -230,20 +231,23 @@ function ChapterStream({
             },
           });
         } catch {
-          if (!cancelled) sawRetryable = true;
+          // 네트워크 단절 등은 아래 재시도 분기에서 처리.
         }
 
         if (cancelled || doneRef.current) return;
-        if (sawRetryable) {
-          attempts++;
-          await sleep(1000);
-          continue;
-        }
-        return;
+        // done 없이 끝난 정상종료(빈 스트림·프록시 idle 끊김 포함)도 재시도 대상.
+        // 지수 백오프 + jitter, 누적 대기 상한으로 무한 로딩/즉시 포기를 모두 막는다.
+        attempts++;
+        if (waited >= MAX_WAIT_MS) break;
+        const delay =
+          Math.min(1000 * 2 ** (attempts - 1), 8000) +
+          Math.floor(Math.random() * 400);
+        waited += delay;
+        await sleep(delay);
       }
       if (!cancelled && !doneRef.current) {
         setStreaming(false);
-        setStreamError("연결이 자꾸 끊겨요. 잠시 후 다시 시도해 주세요.");
+        setStreamError("연결이 잠시 불안정해요. 아래 버튼으로 다시 시도해 주세요.");
       }
     }
 
@@ -467,7 +471,12 @@ function ChapterStream({
       )}
 
       {streamError && (
-        <ErrorText className="mt-4 text-center">{streamError}</ErrorText>
+        <div className="mt-4 flex flex-col items-center gap-3">
+          <ErrorText className="text-center">{streamError}</ErrorText>
+          <Button variant="outline" icon="refresh-cw" onClick={onRetry}>
+            다시 시도
+          </Button>
+        </div>
       )}
 
       {revealed && done && (
