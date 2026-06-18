@@ -1,0 +1,80 @@
+/* ── Iljjagom · Teacher "Workbench" theme ──────────────────────────
+   Cool, crisp, efficient. White surfaces over light slate, indigo
+   primary, tight radii, flat subtle borders. Built for tables and
+   data density — no warmth, no bounce, just clarity.
+   Apply by wrapping any subtree in .theme-teacher.
+   ------------------------------------------------------------------ */
+
+.theme-teacher {
+  --env-name: "teacher"; /* @kind other */
+
+  /* Surfaces */
+  --bg: var(--slate-100);
+  --bg-tint: var(--slate-200);
+  --surface: var(--white);
+  --surface-2: var(--slate-50);
+  --surface-inset: var(--slate-100);
+  --surface-raised: var(--white);
+
+  /* Text */
+  --text-1: var(--slate-900);
+  --text-2: var(--slate-600);
+  --text-3: var(--slate-500);
+  --text-faint: var(--slate-400);
+
+  /* Lines */
+  --line: var(--slate-200);
+  --line-soft: var(--slate-100);
+  --line-strong: var(--slate-300);
+
+  /* Primary (indigo) */
+  --primary: var(--indigo-500);
+  --primary-hover: var(--indigo-600);
+  --primary-press: var(--indigo-700);
+  --primary-text: var(--indigo-700);
+  --primary-tint: #eef0fc;
+  --on-primary: var(--white);
+
+  /* Accent (teal — secondary signal) */
+  --accent: var(--cyan-500);
+  --accent-hover: #18a596;
+  --accent-text: #0f8576;
+  --accent-tint: #e0f5f2;
+  --on-accent: var(--white);
+
+  --highlight: var(--indigo-400);
+  --highlight-tint: #eef0fc;
+
+  /* Status (kept, slightly cooler tints) */
+  --success-tint: #e6f3ec;
+  --danger-tint: #fbe9e7;
+  --warning-tint: #fbf2da;
+  --info: var(--indigo-500);
+  --info-text: var(--indigo-700);
+  --info-tint: #eef0fc;
+
+  --ring: var(--indigo-500);
+
+  /* Geometry — sharper, tighter */
+  --radius-card: var(--radius-sm);
+  --radius-control: var(--radius-xs);
+  --radius-input: var(--radius-xs);
+  --radius-chip: var(--radius-xs);
+
+  /* Elevation — crisp */
+  --elev-sm: var(--shadow-t-sm);
+  --elev-md: var(--shadow-t-md);
+  --elev-lg: var(--shadow-t-lg);
+  --elev-pop: var(--shadow-t-lg);
+
+  /* Motion — fast, flat */
+  --ease-env: var(--ease-snap);
+  --dur-env: var(--dur-fast);
+
+  /* Fonts — all sans; serif only for the wordmark */
+  --font-display: var(--font-sans);
+  --font-reading: var(--font-sans);
+
+  background: var(--bg);
+  color: var(--text-1);
+}

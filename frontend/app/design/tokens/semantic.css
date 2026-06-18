@@ -1,0 +1,87 @@
+/* ── Iljjagom semantic tokens ──────────────────────────────────────
+   Role-agnostic names that every component references. The base :root
+   IS the Student "Reading Room" theme (the brand default). Teacher and
+   Admin re-map these under scope classes in theme-*.css — wrap any
+   subtree in .theme-teacher / .theme-admin to retheme it wholesale.
+   ------------------------------------------------------------------ */
+
+:root {
+  /* Environment */
+  --env-name: "student"; /* @kind other */
+
+  /* Surfaces */
+  --bg: var(--paper-100);
+  --bg-tint: var(--paper-200);
+  --surface: var(--paper-50);
+  --surface-2: var(--white);
+  --surface-inset: var(--paper-100);
+  --surface-raised: var(--white);
+
+  /* Text */
+  --text-1: var(--ink-900);
+  --text-2: var(--ink-600);
+  --text-3: var(--ink-500);
+  --text-faint: var(--ink-400);
+
+  /* Lines / borders */
+  --line: var(--paper-300);
+  --line-soft: var(--paper-200);
+  --line-strong: var(--paper-400);
+
+  /* Primary (honey) */
+  --primary: var(--amber-500);
+  --primary-hover: var(--amber-600);
+  --primary-press: var(--amber-700);
+  --primary-text: var(--amber-700);   /* primary used AS text on paper */
+  --primary-tint: #fbeede;            /* faint primary surface */
+  --on-primary: var(--white);
+
+  /* Accent / secondary (sage) */
+  --accent: var(--sage-500);
+  --accent-hover: var(--sage-600);
+  --accent-text: var(--sage-600);
+  --accent-tint: #e6f0e9;
+  --on-accent: var(--white);
+
+  /* Highlight (warm gold — badges, marks) */
+  --highlight: var(--gold-400);
+  --highlight-tint: #fbf0d4;
+
+  /* Status */
+  --success: var(--green-500);
+  --success-text: var(--green-700);
+  --success-tint: #e4f1e8;
+  --danger: var(--red-500);
+  --danger-text: var(--red-700);
+  --danger-tint: #fbe6e3;
+  --warning: var(--gold-500);
+  --warning-text: var(--gold-700);
+  --warning-tint: #fbf0d4;
+  --info: var(--indigo-500);
+  --info-text: var(--indigo-700);
+  --info-tint: #eaecfb;
+
+  /* Focus ring */
+  --ring: var(--amber-500);
+
+  /* Component geometry — student is round & soft */
+  --radius-card: var(--radius-xl);
+  --radius-control: var(--radius-pill);
+  --radius-input: var(--radius-md);
+  --radius-chip: var(--radius-pill);
+
+  /* Elevation mapping */
+  --elev-sm: var(--shadow-s-sm);
+  --elev-md: var(--shadow-s-md);
+  --elev-lg: var(--shadow-s-lg);
+  --elev-pop: var(--shadow-s-pop);
+
+  /* Motion personality */
+  --ease-env: var(--ease-bounce);
+  --dur-env: var(--dur-slow);
+
+  /* Fonts in use */
+  --font-display: var(--font-serif);
+  --font-body: var(--font-sans);
+  --font-reading: var(--font-serif);
+}

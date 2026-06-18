@@ -7,5 +7,9 @@ export default async function AdminLayout({
   children: React.ReactNode;
 }) {
   const me = await requireRole("admin");
-  return <AppShell me={me}>{children}</AppShell>;
+  return (
+    <div className="theme-admin flex min-h-full flex-1 flex-col">
+      <AppShell me={me}>{children}</AppShell>
+    </div>
+  );
 }

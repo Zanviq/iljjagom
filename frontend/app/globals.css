@@ -1,88 +1,69 @@
 @import "tailwindcss";
 
-/*
-  일짜곰 디자인 토큰 (동화풍, 저연령 UX 우선)
-  - 큰 글자 스케일, 부드러운 색상, 높은 명도 대비, 큰 터치 영역
-  - 폰트: Pretendard(한글 가독성) + 시스템 폴백
-*/
+/* ── 일짜곰 디자인 시스템 토큰 (attached new-design_version2 동일) ──
+   학생 = :root(base) · 교사 = .theme-teacher · 관리자 = .theme-admin.
+   폰트(fonts.css)는 next/font로 대체 — 아래 --font-serif/--font-mono 오버라이드. */
+@import "./design/tokens/palette.css";
+@import "./design/tokens/typography.css";
+@import "./design/tokens/spacing.css";
+@import "./design/tokens/elevation.css";
+@import "./design/tokens/motion.css";
+@import "./design/tokens/semantic.css"; /* :root = 학생(base) */
+@import "./design/tokens/theme-teacher.css"; /* .theme-teacher */
+@import "./design/tokens/theme-admin.css"; /* .theme-admin */
+@import "./design/tokens/base.css"; /* reset · .ijg-* · focus */
 
+/* next/font 연결: typography.css의 폴백 체인 앞에 자체 호스팅 폰트를 첫 순위로.
+   (Pretendard는 layout.tsx에서 npm 패키지로 자체 호스팅) */
 :root {
-  --background: #fdf8f0; /* 따뜻한 크림 */
-  --surface: #ffffff;
-  --foreground: #3a2e22; /* 짙은 갈색 텍스트 */
-  --muted: #726252; /* 보조 텍스트 (WCAG AA: bg 5.5:1) */
-
-  --primary: #f5872e; /* 주황 (CTA 채움용) */
-  --primary-foreground: #ffffff;
-  /* 밝은 색을 "텍스트"로 쓸 때(연한 배경 위) AA 충족용 진한 변형 */
-  --primary-strong: #a84d0e; /* 주황 텍스트/링크 (bg 5.3:1) */
-  --secondary: #6cb4a4; /* 청록 (보조 채움용) */
-  --secondary-strong: #2b7263; /* 청록 텍스트 (bg 5.4:1) */
-  --accent: #ffd45e; /* 노랑 (강조) */
-
-  --border: #ecdfca;
-  --ring: #f5872e;
-
-  --danger: #c4392b; /* 빨강 — 텍스트로도 쓰여 AA(surf 5.3:1)로 진하게 */
-  --success: #4f9d69; /* 초록 (채움용) */
-  --success-strong: #37794e; /* 초록 텍스트 (surf 5.2:1) */
-
-  --radius: 1.25rem;
+  --font-serif: var(--font-serif-next), "Pretendard Variable", Georgia, serif;
+  --font-mono: var(--font-mono-next), ui-monospace, "SF Mono", Menlo, monospace;
 }
 
+/* Tailwind v4 브리지: 시맨틱 토큰을 유틸로 노출(테마 스코프에 자동 반응).
+   컴포넌트는 원본 충실 재현을 위해 var(--…) 인라인/임의값도 함께 사용. */
 @theme inline {
-  --color-background: var(--background);
+  --color-bg: var(--bg);
+  --color-bg-tint: var(--bg-tint);
   --color-surface: var(--surface);
-  --color-foreground: var(--foreground);
-  --color-muted: var(--muted);
+  --color-surface-2: var(--surface-2);
+  --color-surface-inset: var(--surface-inset);
+  --color-surface-raised: var(--surface-raised);
+
+  --color-ink: var(--text-1);
+  --color-ink-2: var(--text-2);
+  --color-ink-3: var(--text-3);
+  --color-ink-faint: var(--text-faint);
+
+  --color-line: var(--line);
+  --color-line-soft: var(--line-soft);
+  --color-line-strong: var(--line-strong);
 
   --color-primary: var(--primary);
-  --color-primary-foreground: var(--primary-foreground);
-  --color-primary-strong: var(--primary-strong);
-  --color-secondary: var(--secondary);
-  --color-secondary-strong: var(--secondary-strong);
+  --color-primary-hover: var(--primary-hover);
+  --color-primary-text: var(--primary-text);
+  --color-primary-tint: var(--primary-tint);
+  --color-on-primary: var(--on-primary);
+
   --color-accent: var(--accent);
+  --color-accent-hover: var(--accent-hover);
+  --color-accent-text: var(--accent-text);
+  --color-accent-tint: var(--accent-tint);
+  --color-on-accent: var(--on-accent);
 
-  --color-border: var(--border);
-  --color-ring: var(--ring);
-  --color-danger: var(--danger);
+  --color-highlight: var(--highlight);
+  --color-highlight-tint: var(--highlight-tint);
+
   --color-success: var(--success);
-  --color-success-strong: var(--success-strong);
-
-  --font-sans: "Pretendard Variable", "Pretendard", system-ui, -apple-system,
-    "Segoe UI", Roboto, "Apple SD Gothic Neo", "Noto Sans KR", sans-serif;
-
-  --radius-card: var(--radius);
-}
-
-html {
-  font-size: 18px; /* 저연령 가독성: 기본 폰트 크게 */
-}
-
-body {
-  background: var(--background);
-  color: var(--foreground);
-  font-family: var(--font-sans);
-  line-height: 1.7;
-  -webkit-font-smoothing: antialiased;
-}
-
-/* 본문 스트리밍 타이핑 커서 */
-.streaming-cursor::after {
-  content: "▍";
-  margin-left: 1px;
-  animation: blink 1s steps(1) infinite;
-  color: var(--primary);
-}
-
-@keyframes blink {
-  50% {
-    opacity: 0;
-  }
-}
-
-/* 포커스 접근성 (저연령·키보드 사용자) */
-:where(a, button, input, textarea, select):focus-visible {
-  outline: 3px solid var(--ring);
-  outline-offset: 2px;
+  --color-success-text: var(--success-text);
+  --color-success-tint: var(--success-tint);
+  --color-danger: var(--danger);
+  --color-danger-text: var(--danger-text);
+  --color-danger-tint: var(--danger-tint);
+  --color-warning: var(--warning);
+  --color-warning-text: var(--warning-text);
+  --color-warning-tint: var(--warning-tint);
+  --color-info: var(--info);
+  --color-info-text: var(--info-text);
+  --color-info-tint: var(--info-tint);
 }

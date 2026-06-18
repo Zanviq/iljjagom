@@ -7,5 +7,9 @@ export default async function TeacherLayout({
   children: React.ReactNode;
 }) {
   const me = await requireRole("teacher");
-  return <AppShell me={me}>{children}</AppShell>;
+  return (
+    <div className="theme-teacher flex min-h-full flex-1 flex-col">
+      <AppShell me={me}>{children}</AppShell>
+    </div>
+  );
 }
