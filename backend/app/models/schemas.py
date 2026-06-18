@@ -18,6 +18,8 @@ class Me(CamelModel):
     id: str
     email: str
     role: Role
+    # 표시 이름(인사 개인화). display_name(user_metadata 또는 이메일 local-part), 없으면 null. (03 §4.2)
+    name: str | None = None
     grade: int | None = None
     guardian_consent: bool = False
     needs_onboarding: bool = False

@@ -69,6 +69,9 @@ class SupabaseStore(Store):
             "guardian_consent": profile.guardian_consent,
             "grade": profile.grade,
         }
+        # display_name 은 값이 있을 때만 보낸다(None 으로 기존 값 덮어쓰기 방지 — "이미 있으면 유지").
+        if profile.display_name:
+            payload["display_name"] = profile.display_name
         row = self._one(self.client.table("profiles").upsert(payload).execute())
         return ProfileRecord(**row) if row else profile
 

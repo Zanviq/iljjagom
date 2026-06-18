@@ -50,9 +50,35 @@ def test_es256_verify_ok(monkeypatch):
     settings = Settings(supabase_url="https://proj.supabase.co", supabase_service_role_key="x")
 
     tok = jwt.encode(_claims(), priv, algorithm="ES256")
-    uid, email = deps._resolve_identity(tok, settings)
+    uid, email, _name = deps._resolve_identity(tok, settings)
     assert uid == "user-123"
     assert email == "kid@test.com"  # 소문자화
+
+
+def test_name_claim_from_user_metadata(monkeypatch):
+    priv = ec.generate_private_key(ec.SECP256R1())
+    monkeypatch.setattr(deps, "_jwks_client", lambda url: _FakeJWKS(priv.public_key()))
+    settings = Settings(supabase_url="https://proj.supabase.co", supabase_service_role_key="x")
+
+    # user_metadata.full_name 우선.
+    tok = jwt.encode(_claims(user_metadata={"full_name": "김민지", "name": "minji"}), priv, algorithm="ES256")
+    _uid, _email, name = deps._resolve_identity(tok, settings)
+    assert name == "김민지"
+
+    # full_name 없으면 name.
+    tok2 = jwt.encode(_claims(user_metadata={"name": "민지"}), priv, algorithm="ES256")
+    assert deps._resolve_identity(tok2, settings)[2] == "민지"
+
+    # 이름 클레임 없으면 None(이메일 폴백은 프로필 단계에서).
+    tok3 = jwt.encode(_claims(), priv, algorithm="ES256")
+    assert deps._resolve_identity(tok3, settings)[2] is None
+
+
+def test_display_name_from_helper():
+    assert deps.display_name_from("  김민지 ", "kid@test.com") == "김민지"
+    assert deps.display_name_from(None, "Minji@Test.com") == "Minji"
+    assert deps.display_name_from("", "minji@test.com") == "minji"
+    assert deps.display_name_from(None, "") is None
 
 
 def test_es256_rejects_bad_issuer_aud_expiry_tamper(monkeypatch):
@@ -99,7 +125,7 @@ def test_malformed_token_maps_to_401():
 def test_hs256_legacy_verify(monkeypatch):
     settings = Settings(supabase_jwt_secret="test-secret-at-least-32-bytes-long!!", supabase_url="")
     tok = jwt.encode(_claims(), "test-secret-at-least-32-bytes-long!!", algorithm="HS256")
-    uid, email = deps._resolve_identity(tok, settings)
+    uid, email, _name = deps._resolve_identity(tok, settings)
     assert uid == "user-123"
 
     bad = jwt.encode(_claims(), "another-wrong-secret-32-bytes-xxxxxx", algorithm="HS256")
@@ -118,5 +144,5 @@ def test_dev_token_disabled_when_supabase_configured():
 def test_dev_token_allowed_only_keyless():
     settings = Settings(dev_auth=True, supabase_url="", supabase_jwt_secret="")
     assert settings.dev_auth_enabled is True
-    uid, email = deps._resolve_identity("dev:kid@test.com:student", settings)
+    uid, email, _name = deps._resolve_identity("dev:kid@test.com:student", settings)
     assert email == "kid@test.com"
