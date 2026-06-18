@@ -302,11 +302,94 @@ export interface Ask {
   allowText: boolean;
 }
 
+/* ── 관리자 콘솔 (추가기능 06, §4.2·§7) ── */
+export interface AdminUser {
+  id: string;
+  email: string;
+  role: Role;
+  classId?: string | null;
+  className?: string | null;
+  grade?: number | null;
+  guardianConsent: boolean;
+  status: "active" | "deactivated";
+  createdAt: string;
+}
+export interface AdminUserPatch {
+  role?: Role;
+  classId?: string | null;
+  guardianConsent?: boolean;
+}
+
+export interface AdminMessage {
+  id: string;
+  bookId?: string | null;
+  userId?: string | null;
+  role: string;
+  kind: string;
+  content: string;
+  sessionId?: string | null;
+  createdAt: string;
+}
+
+export interface TokenUsageBucket {
+  key: string;
+  calls: number;
+  tokensIn: number;
+  tokensOut: number;
+  estCost: number;
+}
+export interface TokenUsageReport {
+  groupBy: string;
+  buckets: TokenUsageBucket[];
+  total: { calls: number; tokensIn: number; tokensOut: number; estCost: number };
+}
+
+export interface AdminSettingsResponse {
+  settings: Record<string, unknown>;
+  /** env 키 존재 여부만(값 비노출) */
+  env: Record<string, boolean>;
+}
+export interface SettingPut {
+  key?: string;
+  value?: unknown;
+  settings?: Record<string, unknown>;
+}
+
+export type NotificationLevel = "info" | "warn" | "error";
+/** 알림 (DOM 전역 Notification 과 구분해 AppNotification). */
+export interface AppNotification {
+  id: string;
+  targetUserId?: string | null;
+  targetRole?: string | null;
+  isBroadcast: boolean;
+  title: string;
+  body?: string | null;
+  level: NotificationLevel;
+  readAt?: string | null;
+  createdAt: string;
+}
+export interface NotificationCreate {
+  targetUserId?: string;
+  targetRole?: string;
+  isBroadcast?: boolean;
+  title: string;
+  body?: string;
+  level: NotificationLevel;
+}
+
+export interface BackupExportRequest {
+  tables?: string[] | null;
+}
+export interface BackupImportRequest {
+  mode: "merge" | "overwrite";
+  tables: Record<string, unknown[]>;
+}
+
 /* ── AI 세션/트레이스 (추가기능 02, §4.2·§7) ── */
 export type AiRole = "designer" | "writer" | "editor" | "chat";
 export type AiSessionStatus = "running" | "awaiting_user" | "done" | "error";
 
-/** GET /ai/sessions 의 세션 항목 */
+/** GET /ai/sessions 의 세션 항목 (06 확장 필드 optional) */
 export interface AiSession {
   id: string;
   bookId: string | null;
@@ -317,6 +400,11 @@ export interface AiSession {
   error: string | null;
   startedAt: string;
   endedAt: string | null;
+  /* 06 확장 */
+  userEmail?: string | null;
+  stepCount?: number;
+  tokensIn?: number;
+  tokensOut?: number;
 }
 
 /** ReAct 스텝(트레이스 타임라인 1행) */

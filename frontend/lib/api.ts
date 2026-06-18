@@ -8,10 +8,17 @@
  * 항상 이 실제 호출 경로를 쓴다(키 생기면 백엔드만 실 DB/AI로 전환).
  */
 import type {
+  AdminMessage,
+  AdminSettingsResponse,
   AdminUsage,
+  AdminUser,
+  AdminUserPatch,
+  AiRole,
   AiSession,
   AiSessionDetail,
   AiSessionStatus,
+  AppNotification,
+  BackupImportRequest,
   Book,
   BookCreated,
   BookSummary,
@@ -26,12 +33,15 @@ import type {
   Letter,
   LetterReply,
   Me,
+  NotificationCreate,
   OnboardingRequest,
   PlanReply,
   Prompt,
   SafetyFlag,
   SafetyFlagDetail,
   SafetyFlagStatus,
+  SettingPut,
+  TokenUsageReport,
   TrackEvent,
   Word,
 } from "./types";
@@ -254,14 +264,26 @@ export function getHealth(): Promise<Health> {
   return apiFetch<Health>("/health");
 }
 
-/** AI 세션 목록(관측, §4.2). admin만. 최근순. */
+/** AI 세션 목록(관측, §4.2). admin만. 최근순. (06: role/userId/from/to 필터) */
 export function getAiSessions(
   token: string | null,
-  params?: { bookId?: string; status?: AiSessionStatus; limit?: number },
+  params?: {
+    bookId?: string;
+    status?: AiSessionStatus;
+    role?: AiRole;
+    userId?: string;
+    from?: string;
+    to?: string;
+    limit?: number;
+  },
 ): Promise<{ sessions: AiSession[] }> {
   const q = new URLSearchParams();
   if (params?.bookId) q.set("bookId", params.bookId);
   if (params?.status) q.set("status", params.status);
+  if (params?.role) q.set("role", params.role);
+  if (params?.userId) q.set("userId", params.userId);
+  if (params?.from) q.set("from", params.from);
+  if (params?.to) q.set("to", params.to);
   if (params?.limit) q.set("limit", String(params.limit));
   const qs = q.toString();
   return apiFetch<{ sessions: AiSession[] }>(
@@ -409,5 +431,153 @@ export function getLearningResults(
   return apiFetch<{ results: LearningResult[] }>(
     `/books/${bookId}/learning-results`,
     { token },
+  );
+}
+
+/* ── 관리자 콘솔 (추가기능 06, §4.2) — 전부 admin ── */
+
+export function getAdminUsers(
+  token: string | null,
+  params?: { query?: string; role?: string; classId?: string },
+): Promise<{ users: AdminUser[] }> {
+  const q = new URLSearchParams();
+  if (params?.query) q.set("query", params.query);
+  if (params?.role) q.set("role", params.role);
+  if (params?.classId) q.set("classId", params.classId);
+  const qs = q.toString();
+  return apiFetch<{ users: AdminUser[] }>(`/admin/users${qs ? `?${qs}` : ""}`, {
+    token,
+  });
+}
+
+export function patchAdminUser(
+  token: string | null,
+  id: string,
+  patch: AdminUserPatch,
+): Promise<AdminUser> {
+  return apiFetch<AdminUser>(`/admin/users/${id}`, {
+    token,
+    method: "PATCH",
+    body: patch,
+  });
+}
+
+export function deactivateAdminUser(
+  token: string | null,
+  id: string,
+): Promise<{ id: string; status: string }> {
+  return apiFetch<{ id: string; status: string }>(
+    `/admin/users/${id}/deactivate`,
+    { token, method: "POST" },
+  );
+}
+
+export function getAdminMessages(
+  token: string | null,
+  params?: {
+    userId?: string;
+    bookId?: string;
+    kind?: string;
+    from?: string;
+    to?: string;
+    limit?: number;
+  },
+): Promise<{ messages: AdminMessage[] }> {
+  const q = new URLSearchParams();
+  if (params?.userId) q.set("userId", params.userId);
+  if (params?.bookId) q.set("bookId", params.bookId);
+  if (params?.kind) q.set("kind", params.kind);
+  if (params?.from) q.set("from", params.from);
+  if (params?.to) q.set("to", params.to);
+  if (params?.limit) q.set("limit", String(params.limit));
+  const qs = q.toString();
+  return apiFetch<{ messages: AdminMessage[] }>(
+    `/admin/messages${qs ? `?${qs}` : ""}`,
+    { token },
+  );
+}
+
+export function getTokenUsage(
+  token: string | null,
+  groupBy: "model" | "role" | "day" = "model",
+  range?: { from?: string; to?: string },
+): Promise<TokenUsageReport> {
+  const q = new URLSearchParams({ groupBy });
+  if (range?.from) q.set("from", range.from);
+  if (range?.to) q.set("to", range.to);
+  return apiFetch<TokenUsageReport>(`/admin/usage/tokens?${q.toString()}`, {
+    token,
+  });
+}
+
+export function getAdminSettings(
+  token: string | null,
+): Promise<AdminSettingsResponse> {
+  return apiFetch<AdminSettingsResponse>("/admin/settings", { token });
+}
+
+export function putAdminSettings(
+  token: string | null,
+  body: SettingPut,
+): Promise<AdminSettingsResponse> {
+  return apiFetch<AdminSettingsResponse>("/admin/settings", {
+    token,
+    method: "PUT",
+    body,
+  });
+}
+
+export function getAdminNotifications(
+  token: string | null,
+  params?: { unread?: boolean; limit?: number },
+): Promise<{ notifications: AppNotification[] }> {
+  const q = new URLSearchParams();
+  if (params?.unread) q.set("unread", "true");
+  if (params?.limit) q.set("limit", String(params.limit));
+  const qs = q.toString();
+  return apiFetch<{ notifications: AppNotification[] }>(
+    `/admin/notifications${qs ? `?${qs}` : ""}`,
+    { token },
+  );
+}
+
+export function createNotification(
+  token: string | null,
+  body: NotificationCreate,
+): Promise<AppNotification> {
+  return apiFetch<AppNotification>("/admin/notifications", {
+    token,
+    method: "POST",
+    body,
+  });
+}
+
+export function markNotificationRead(
+  token: string | null,
+  id: string,
+): Promise<{ id: string; readAt: string }> {
+  return apiFetch<{ id: string; readAt: string }>(
+    `/notifications/${id}/read`,
+    { token, method: "POST" },
+  );
+}
+
+export function backupExport(
+  token: string | null,
+  tables?: string[] | null,
+): Promise<{ exportedAt: string; tables: Record<string, unknown[]> }> {
+  return apiFetch<{ exportedAt: string; tables: Record<string, unknown[]> }>(
+    "/admin/backup/export",
+    { token, method: "POST", body: { tables: tables ?? null } },
+  );
+}
+
+export function backupImport(
+  token: string | null,
+  body: BackupImportRequest,
+): Promise<{ imported: Record<string, number> }> {
+  return apiFetch<{ imported: Record<string, number> }>(
+    "/admin/backup/import",
+    { token, method: "POST", body },
   );
 }

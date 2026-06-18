@@ -49,6 +49,7 @@ export default async function ConsoleSessionsPage() {
               <tr className="border-b border-border text-sm text-muted">
                 <th className="p-3 font-bold">역할</th>
                 <th className="p-3 font-bold">모델</th>
+                <th className="p-3 font-bold">사용자</th>
                 <th className="p-3 font-bold">상태</th>
                 <th className="p-3 font-bold">요약</th>
                 <th className="p-3 font-bold">시작</th>
@@ -69,6 +70,9 @@ export default async function ConsoleSessionsPage() {
                     </Link>
                   </td>
                   <td className="p-3 text-sm text-muted">{s.model}</td>
+                  <td className="p-3 text-sm text-muted">
+                    {s.userEmail || "—"}
+                  </td>
                   <td className="p-3">
                     <SessionStatus status={s.status} />
                   </td>

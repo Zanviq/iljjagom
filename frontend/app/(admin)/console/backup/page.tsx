@@ -1,11 +1,15 @@
-import { Pending } from "@/components/admin/Pending";
+import { BackupPanel } from "@/components/admin/BackupPanel";
 
 export default function ConsoleBackupPage() {
   return (
-    <Pending
-      title="백업 / 복원"
-      describe="Supabase 데이터를 범위 선택해 내보내고(JSON), 업로드로 복원해요. 복원은 위험 작업이라 확인·감사 기록됩니다."
-      endpoint="POST /admin/backup/export|import"
-    />
+    <div>
+      <h1 className="text-3xl font-extrabold">백업 / 복원</h1>
+      <p className="mt-1 text-muted">
+        데이터를 JSON으로 내보내고, 업로드로 복원해요. 복원은 확인·감사됩니다.
+      </p>
+      <div className="mt-6">
+        <BackupPanel />
+      </div>
+    </div>
   );
 }
