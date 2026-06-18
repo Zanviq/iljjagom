@@ -15,15 +15,13 @@ export function Pending({
 }) {
   return (
     <div>
-      <h1 className="text-3xl font-extrabold">{title}</h1>
-      <p className="mt-1 text-muted">{describe}</p>
-      <EmptyState className="mt-6 text-left">
-        <p className="font-bold text-foreground">백엔드 계약 확정 대기 중</p>
-        <p className="mt-2">
-          이 화면은 <code className="rounded bg-black/5 px-1">{endpoint}</code>{" "}
-          응답을 표시합니다. 해당 API가 <code>03-기능명세서</code> §4/§7에 확정되면
-          실데이터로 연결됩니다. (handoff/requests.md OPEN)
-        </p>
+      <h1 className="text-[length:var(--text-lg)] font-extrabold text-ink">
+        {title}
+      </h1>
+      <p className="mt-1 text-ink-2">{describe}</p>
+      <EmptyState icon="clock" title="백엔드 계약 확정 대기 중" className="mt-6">
+        이 화면은 <code>{endpoint}</code> 응답을 표시합니다. 해당 API가 확정되면
+        실데이터로 연결됩니다.
       </EmptyState>
     </div>
   );

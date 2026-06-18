@@ -44,24 +44,30 @@ export function WordPopover({
         role="dialog"
         aria-modal="true"
         aria-label={word ? `낱말 뜻: ${word.term}` : "낱말 뜻"}
-        className="w-full max-w-sm rounded-card bg-surface p-6 shadow-lg ring-1 ring-border"
+        className="w-full max-w-sm rounded-[var(--radius-card)] bg-surface p-6 shadow-[var(--elev-lg)] border border-line"
         onClick={(e) => e.stopPropagation()}
       >
         {loading || !word ? (
           <Loading>낱말을 찾는 중…</Loading>
         ) : (
           <>
-            <p className="text-2xl font-extrabold">{word.term}</p>
+            <p className="text-[length:var(--text-xl)] font-extrabold text-ink">
+              {word.term}
+            </p>
             {word.reading && word.reading !== word.term && (
-              <p className="mt-1 text-lg text-muted">[{word.reading}]</p>
+              <p className="mt-1 text-[length:var(--text-md)] text-ink-3">
+                [{word.reading}]
+              </p>
             )}
-            <p className="mt-3 text-lg">{word.meaning}</p>
+            <p className="mt-3 text-[length:var(--text-md)] text-ink">
+              {word.meaning}
+            </p>
           </>
         )}
         <button
           ref={closeRef}
           onClick={onClose}
-          className={buttonClass("primary", "md", "mt-5 w-full")}
+          className={buttonClass("solid", "md", "mt-5 w-full")}
         >
           알았어요
         </button>

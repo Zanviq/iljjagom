@@ -1,4 +1,4 @@
-import { AppShell } from "@/components/layout/AppShell";
+import { AdminShell } from "@/components/layout/AdminShell";
 import { requireRole } from "@/lib/auth/guard";
 
 export default async function AdminLayout({
@@ -6,6 +6,6 @@ export default async function AdminLayout({
 }: {
   children: React.ReactNode;
 }) {
-  const me = await requireRole("admin");
-  return <AppShell me={me}>{children}</AppShell>;
+  await requireRole("admin");
+  return <AdminShell>{children}</AdminShell>;
 }

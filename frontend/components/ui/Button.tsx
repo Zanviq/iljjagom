@@ -1,48 +1,84 @@
 import { cn } from "@/lib/cn";
+import { Icon } from "./Icon";
 
-type Variant = "primary" | "secondary" | "outline" | "ghost" | "danger";
-type Size = "md" | "lg";
+/**
+ * Button — 디자인 시스템 액션 프리미티브(new-design_version2 core/Button).
+ * 테마 토큰으로 자동 re-skin. hover/active는 components.css(.ijg-btn*)에서 CSS로 처리해
+ * 서버/클라이언트 어디서나 쓰인다.
+ * 하위호환: variant "primary"=solid, "secondary"=accent (기존 호출부 유지용).
+ */
+export type ButtonVariant =
+  | "solid"
+  | "accent"
+  | "outline"
+  | "ghost"
+  | "danger"
+  | "primary"
+  | "secondary";
+export type ButtonSize = "sm" | "md" | "lg";
 
-const VARIANTS: Record<Variant, string> = {
-  primary:
-    "bg-primary text-primary-foreground hover:brightness-105 active:scale-[0.98]",
-  secondary:
-    "bg-secondary text-white hover:brightness-105 active:scale-[0.98]",
-  outline:
-    "border-2 border-border bg-surface text-foreground hover:border-primary",
-  ghost: "text-foreground hover:bg-black/5",
-  danger: "bg-danger text-white hover:brightness-105 active:scale-[0.98]",
+const VARIANT_CLASS: Record<ButtonVariant, string> = {
+  solid: "ijg-btn-solid",
+  primary: "ijg-btn-solid",
+  accent: "ijg-btn-accent",
+  secondary: "ijg-btn-accent",
+  outline: "ijg-btn-outline",
+  ghost: "ijg-btn-ghost",
+  danger: "ijg-btn-danger",
 };
 
-const SIZES: Record<Size, string> = {
-  md: "h-12 px-5 text-base",
-  lg: "h-14 px-8 text-xl",
+const SIZE_CLASS: Record<ButtonSize, string> = {
+  sm: "h-[var(--control-h-sm)] px-4 gap-1.5 text-[length:var(--text-sm)]",
+  md: "h-[var(--control-h)] px-[22px] gap-2 text-[length:var(--text-base)]",
+  lg: "h-[var(--control-h-lg)] px-8 gap-2.5 text-[length:var(--text-md)]",
 };
+
+const ICON_SIZE: Record<ButtonSize, number> = { sm: 16, md: 18, lg: 20 };
 
 export function buttonClass(
-  variant: Variant = "primary",
-  size: Size = "md",
+  variant: ButtonVariant = "solid",
+  size: ButtonSize = "md",
   className?: string,
 ): string {
-  return cn(
-    "inline-flex items-center justify-center gap-2 rounded-card font-bold shadow-sm transition disabled:cursor-not-allowed disabled:opacity-50",
-    VARIANTS[variant],
-    SIZES[size],
-    className,
-  );
+  return cn("ijg-btn", VARIANT_CLASS[variant], SIZE_CLASS[size], className);
 }
 
 export interface ButtonProps
   extends React.ButtonHTMLAttributes<HTMLButtonElement> {
-  variant?: Variant;
-  size?: Size;
+  variant?: ButtonVariant;
+  size?: ButtonSize;
+  icon?: string;
+  iconRight?: string;
+  fullWidth?: boolean;
+  loading?: boolean;
 }
 
 export function Button({
-  variant = "primary",
+  variant = "solid",
   size = "md",
+  icon,
+  iconRight,
+  fullWidth = false,
+  loading = false,
+  disabled = false,
   className,
-  ...props
+  children,
+  ...rest
 }: ButtonProps) {
-  return <button className={buttonClass(variant, size, className)} {...props} />;
+  const isz = ICON_SIZE[size];
+  return (
+    <button
+      disabled={disabled || loading}
+      className={cn(buttonClass(variant, size), fullWidth && "w-full", className)}
+      {...rest}
+    >
+      {loading ? (
+        <Icon name="loader-circle" size={isz} className="animate-spin" />
+      ) : (
+        icon && <Icon name={icon} size={isz} />
+      )}
+      {children}
+      {iconRight && !loading && <Icon name={iconRight} size={isz} />}
+    </button>
+  );
 }

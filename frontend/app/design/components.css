@@ -1,0 +1,165 @@
+/* ── 일짜곰 컴포넌트 상호작용 스타일 ──────────────────────────────
+   원본(new-design_version2)의 hover/focus/active/checked 동작을 JS 상태 대신
+   CSS로 구현해, 컴포넌트가 서버/클라이언트 어디서든 쓰이도록(universal) 한다.
+   색/그림자 등 hover로 바뀌는 속성은 인라인 style이 아닌 이 클래스에서 정의해야
+   :hover 가 덮어쓸 수 있다(인라인 우선순위 회피). 크기·간격은 인라인 유지. */
+
+/* Button */
+.ijg-btn {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  font-family: var(--font-body);
+  font-weight: var(--weight-bold);
+  line-height: 1;
+  border-radius: var(--radius-control);
+  border: var(--border) solid transparent;
+  cursor: pointer;
+  transition:
+    background var(--dur-fast) var(--ease-env),
+    transform var(--dur-fast) var(--ease-env),
+    border-color var(--dur-fast) var(--ease-env);
+}
+.ijg-btn:active:not(:disabled) {
+  transform: scale(0.97);
+}
+.ijg-btn:disabled {
+  opacity: 0.5;
+  cursor: not-allowed;
+  box-shadow: none !important;
+}
+.ijg-btn-solid {
+  background: var(--primary);
+  color: var(--on-primary);
+  box-shadow: var(--elev-sm);
+}
+.ijg-btn-solid:hover:not(:disabled) {
+  background: var(--primary-hover);
+}
+.ijg-btn-accent {
+  background: var(--accent);
+  color: var(--on-accent);
+  box-shadow: var(--elev-sm);
+}
+.ijg-btn-accent:hover:not(:disabled) {
+  background: var(--accent-hover);
+}
+.ijg-btn-outline {
+  background: var(--surface);
+  color: var(--text-1);
+  border-color: var(--line-strong);
+}
+.ijg-btn-outline:hover:not(:disabled) {
+  background: var(--surface-inset);
+  border-color: var(--primary);
+}
+.ijg-btn-ghost {
+  background: transparent;
+  color: var(--text-2);
+}
+.ijg-btn-ghost:hover:not(:disabled) {
+  background: var(--surface-inset);
+}
+.ijg-btn-danger {
+  background: var(--danger);
+  color: #fff;
+  box-shadow: var(--elev-sm);
+}
+.ijg-btn-danger:hover:not(:disabled) {
+  background: var(--danger-text);
+}
+
+/* Card */
+.ijg-card {
+  box-shadow: var(--elev-sm);
+  transition:
+    transform var(--dur-env) var(--ease-env),
+    box-shadow var(--dur-env) var(--ease-env);
+}
+.ijg-card-interactive {
+  cursor: pointer;
+}
+.ijg-card-interactive:hover {
+  box-shadow: var(--elev-lg);
+  transform: translateY(-3px);
+}
+
+/* Form controls (Input / Textarea / Select) */
+.ijg-control {
+  width: 100%;
+  font-family: var(--font-body);
+  font-size: var(--text-base);
+  color: var(--text-1);
+  background: var(--surface-2);
+  border: var(--border-thick) solid var(--line-strong);
+  border-radius: var(--radius-input);
+  outline: none;
+  transition:
+    border-color var(--dur-fast) var(--ease-env),
+    box-shadow var(--dur-fast) var(--ease-env);
+}
+.ijg-control:focus {
+  border-color: var(--primary);
+  box-shadow: 0 0 0 3px color-mix(in oklab, var(--ring) 22%, transparent);
+}
+.ijg-control.is-invalid {
+  border-color: var(--danger);
+}
+
+/* Checkbox */
+.ijg-checkbox-input {
+  position: absolute;
+  opacity: 0;
+  width: 0;
+  height: 0;
+}
+.ijg-checkbox-box {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 24px;
+  height: 24px;
+  background: var(--surface-2);
+  border: var(--border-thick) solid var(--line-strong);
+  border-radius: calc(var(--radius-input) * 0.55);
+  color: var(--on-primary);
+  transition: var(--transition-base);
+}
+.ijg-checkbox-input:checked + .ijg-checkbox-box {
+  background: var(--primary);
+  border-color: var(--primary);
+}
+.ijg-checkbox-box > .ijg-checkbox-mark {
+  opacity: 0;
+}
+.ijg-checkbox-input:checked + .ijg-checkbox-box > .ijg-checkbox-mark {
+  opacity: 1;
+}
+
+/* Switch */
+.ijg-switch-track {
+  display: inline-block;
+  position: relative;
+  width: 44px;
+  height: 26px;
+  background: var(--line-strong);
+  border-radius: 999px;
+  transition: background var(--dur-base) var(--ease-env);
+}
+.ijg-checkbox-input:checked + .ijg-switch-track {
+  background: var(--primary);
+}
+.ijg-switch-knob {
+  position: absolute;
+  top: 3px;
+  inset-inline-start: 3px;
+  width: 20px;
+  height: 20px;
+  background: #fff;
+  border-radius: 999px;
+  box-shadow: 0 1px 3px rgba(0, 0, 0, 0.3);
+  transition: inset-inline-start var(--dur-base) var(--ease-env);
+}
+.ijg-checkbox-input:checked + .ijg-switch-track > .ijg-switch-knob {
+  inset-inline-start: 21px;
+}

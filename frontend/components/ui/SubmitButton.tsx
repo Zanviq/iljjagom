@@ -2,30 +2,24 @@
 
 import { useFormStatus } from "react-dom";
 
-import { buttonClass, type ButtonProps } from "./Button";
+import { Button, type ButtonProps } from "./Button";
 
-interface SubmitButtonProps extends Omit<ButtonProps, "type"> {
+interface SubmitButtonProps extends Omit<ButtonProps, "type" | "loading"> {
   pendingText?: string;
 }
 
-/** form action(서버 액션)과 함께 쓰는 제출 버튼. 진행 중에는 비활성화/표시. */
+/** form action(서버 액션)과 함께 쓰는 제출 버튼. 진행 중에는 비활성/스피너 표시. */
 export function SubmitButton({
   children,
   pendingText,
-  variant = "primary",
+  variant = "solid",
   size = "lg",
-  className,
   ...props
 }: SubmitButtonProps) {
   const { pending } = useFormStatus();
   return (
-    <button
-      type="submit"
-      disabled={pending}
-      className={buttonClass(variant, size, className)}
-      {...props}
-    >
+    <Button type="submit" loading={pending} variant={variant} size={size} {...props}>
       {pending ? (pendingText ?? "잠시만요…") : children}
-    </button>
+    </Button>
   );
 }

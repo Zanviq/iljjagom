@@ -1,0 +1,31 @@
+/* ── Iljjagom spacing & sizing ─────────────────────────────────────
+   4px base grid. Children's touch targets never below --touch-min.
+   ------------------------------------------------------------------ */
+
+:root {
+  --space-0: 0;
+  --space-1: 0.25rem;  /* 4 */
+  --space-2: 0.5rem;   /* 8 */
+  --space-3: 0.75rem;  /* 12 */
+  --space-4: 1rem;     /* 16 */
+  --space-5: 1.5rem;   /* 24 */
+  --space-6: 2rem;     /* 32 */
+  --space-7: 2.5rem;   /* 40 */
+  --space-8: 3rem;     /* 48 */
+  --space-9: 4rem;     /* 64 */
+  --space-10: 5rem;    /* 80 */
+
+  /* Touch targets — student floors are larger (young hands) */
+  --touch-min: 44px;
+  --touch-student: 56px;
+
+  /* Content widths */
+  --measure-read: 38rem;   /* story column */
+  --width-content: 64rem;  /* student/teacher app shell */
+  --width-wide: 90rem;     /* admin console */
+
+  /* Component heights */
+  --control-h: 44px;       /* default input/button */
+  --control-h-lg: 56px;    /* student CTA */
+  --control-h-sm: 36px;    /* teacher dense / admin */
+}

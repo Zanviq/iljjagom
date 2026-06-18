@@ -1,4 +1,5 @@
 import { SettingsEditor } from "@/components/admin/SettingsEditor";
+import { Badge } from "@/components/ui/Badge";
 import { ErrorText } from "@/components/ui/ErrorText";
 import { getAdminSettings } from "@/lib/api";
 import { getAccessToken } from "@/lib/auth/server";
@@ -16,32 +17,33 @@ export default async function ConsoleSettingsPage() {
 
   return (
     <div>
-      <h1 className="text-3xl font-extrabold">설정</h1>
-      <p className="mt-1 text-muted">
-        역할별 모델·런타임 수치를 편집해요. 시크릿 값은 노출/저장하지 않아요.
+      <p className="ijg-eyebrow mb-4 text-ink-3">
+        모델 · 환경 설정 (시크릿 값은 노출/저장하지 않음)
       </p>
 
       {error ? (
-        <ErrorText className="mt-6">{error}</ErrorText>
+        <ErrorText className="mt-2">{error}</ErrorText>
       ) : data ? (
         <>
-          <h2 className="mb-3 mt-6 text-lg font-bold">환경변수 (존재 여부)</h2>
+          <h2 className="mb-3 text-[length:var(--text-md)] font-extrabold text-ink">
+            환경변수 (존재 여부)
+          </h2>
           <ul className="flex flex-wrap gap-2">
             {Object.entries(data.env).map(([k, present]) => (
-              <li
-                key={k}
-                className={`rounded-full px-3 py-1 text-sm font-bold ${
-                  present
-                    ? "bg-success/15 text-success-strong"
-                    : "bg-danger/10 text-danger"
-                }`}
-              >
-                {k} {present ? "✓" : "✗"}
+              <li key={k}>
+                <Badge
+                  tone={present ? "success" : "danger"}
+                  icon={present ? "check" : "x"}
+                >
+                  {k}
+                </Badge>
               </li>
             ))}
           </ul>
 
-          <h2 className="mb-3 mt-8 text-lg font-bold">런타임 설정</h2>
+          <h2 className="mb-3 mt-8 text-[length:var(--text-md)] font-extrabold text-ink">
+            런타임 설정
+          </h2>
           <SettingsEditor settings={data.settings} />
         </>
       ) : null}

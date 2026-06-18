@@ -1,6 +1,5 @@
-import Link from "next/link";
-
 import { SafetyReview } from "@/components/teacher/SafetyReview";
+import { TeacherHeader } from "@/components/teacher/TeacherHeader";
 import { EmptyState } from "@/components/ui/EmptyState";
 import { getClasses, getClassLetters, getClassSafetyFlags } from "@/lib/api";
 import { getAccessToken } from "@/lib/auth/server";
@@ -8,7 +7,6 @@ import type { Letter, SafetyFlag } from "@/lib/types";
 
 /**
  * 교사 안전 검토(03): 보류 편지 승인/미발송 + 안전 신호 종결.
- * 계약 확정(03 §4.2)됐으나 백엔드 구현 진행 중 → 엔드포인트 미노출 시 graceful 안내.
  */
 export default async function ClassSafetyPage({
   params,
@@ -37,31 +35,20 @@ export default async function ClassSafetyPage({
   }
 
   return (
-    <section>
-      <Link href="/classes" className="text-sm font-bold text-muted">
-        ← 학급 목록
-      </Link>
-      <h1 className="mt-2 text-3xl font-extrabold">
-        안전 검토 {klass ? `· ${klass.name}` : ""}
-      </h1>
-      <p className="mt-1 text-muted">
-        보류된 편지와 안전 신호를 확인하고 처리해요.
-      </p>
+    <div>
+      <TeacherHeader
+        title={`안전 검토${klass ? ` · ${klass.name}` : ""}`}
+        sub="확인이 필요한 신호를 검토하고 처리해요."
+      />
 
       {pending ? (
-        <EmptyState className="mt-6 text-left">
-          <p className="font-bold text-foreground">백엔드 구현 대기</p>
-          <p className="mt-2">
-            계약은 확정됐어요(<code>GET /classes/{"{id}"}/safety-flags</code>,{" "}
-            <code>/letters</code>). 백엔드 구현이 올라오면 검토 목록이 자동으로
-            표시됩니다.
-          </p>
+        <EmptyState icon="shield-check" title="백엔드 구현 대기">
+          계약은 확정됐어요. 백엔드 구현이 올라오면 검토 목록이 자동으로
+          표시됩니다.
         </EmptyState>
       ) : (
-        <div className="mt-6">
-          <SafetyReview letters={letters} flags={flags} />
-        </div>
+        <SafetyReview letters={letters} flags={flags} />
       )}
-    </section>
+    </div>
   );
 }

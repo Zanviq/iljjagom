@@ -21,25 +21,18 @@ export default async function ConsoleSafetyPage() {
 
   return (
     <div>
-      <h1 className="text-3xl font-extrabold">안전</h1>
-      <p className="mt-1 text-muted">
-        전 학급의 미처리 안전 신호예요. 교사 검토(03)와 모델을 공유해요.
+      <p className="ijg-eyebrow mb-4 text-ink-3">
+        안전 · 전 학급 미처리 신호 (교사 검토와 모델 공유)
       </p>
 
       {pending ? (
-        <EmptyState className="mt-6 text-left">
-          <p className="font-bold text-foreground">백엔드 구현 대기</p>
-          <p className="mt-2">
-            계약은 확정됐고(<code>GET /admin/safety-flags</code>) 백엔드 구현이
-            올라오면 자동으로 목록이 표시됩니다.
-          </p>
+        <EmptyState icon="clock" title="백엔드 구현 대기">
+          계약은 확정됐어요. 백엔드 구현이 올라오면 목록이 자동으로 표시됩니다.
         </EmptyState>
       ) : !flags || flags.length === 0 ? (
-        <EmptyState className="mt-6">미처리 안전 신호가 없어요. 👍</EmptyState>
+        <EmptyState icon="shield-check" title="미처리 안전 신호가 없어요" />
       ) : (
-        <div className="mt-6">
-          <SafetyFlagList flags={flags} />
-        </div>
+        <SafetyFlagList flags={flags} />
       )}
     </div>
   );

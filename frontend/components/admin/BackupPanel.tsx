@@ -3,8 +3,11 @@
 import { useState } from "react";
 
 import { ConfirmModal } from "@/components/admin/ConfirmModal";
-import { buttonClass } from "@/components/ui/Button";
+import { Button } from "@/components/ui/Button";
+import { Card } from "@/components/ui/Card";
 import { ErrorText } from "@/components/ui/ErrorText";
+import { Select } from "@/components/ui/Select";
+import { Textarea } from "@/components/ui/Textarea";
 import { ApiError, backupExport, backupImport } from "@/lib/api";
 import { getClientAccessToken } from "@/lib/auth/client";
 
@@ -67,28 +70,32 @@ export function BackupPanel() {
   }
 
   return (
-    <div className="space-y-8">
-      <section className="rounded-card bg-surface p-5 ring-1 ring-border">
-        <h2 className="text-lg font-bold">내보내기</h2>
-        <p className="mt-1 text-sm text-muted">
+    <div className="flex flex-col gap-8">
+      <Card padding="lg">
+        <h2 className="text-[length:var(--text-md)] font-extrabold text-ink">
+          내보내기
+        </h2>
+        <p className="mt-1 text-[length:var(--text-sm)] text-ink-2">
           전체 데이터를 JSON 파일로 내려받아요.
         </p>
         {exportError && <ErrorText className="mt-2">{exportError}</ErrorText>}
-        <button
+        <Button
           onClick={() => void doExport()}
           disabled={exporting}
-          className={buttonClass("primary", "md", "mt-3")}
+          loading={exporting}
+          icon="download"
+          className="mt-3"
         >
           {exporting ? "내보내는 중…" : "JSON 내보내기"}
-        </button>
-      </section>
+        </Button>
+      </Card>
 
-      <section className="rounded-card bg-surface p-5 ring-1 ring-border">
-        <h2 className="text-lg font-bold">복원</h2>
-        <p className="mt-1 text-sm text-muted">
+      <Card padding="lg">
+        <h2 className="text-[length:var(--text-md)] font-extrabold text-ink">복원</h2>
+        <p className="mt-1 text-[length:var(--text-sm)] text-ink-2">
           백업 JSON을 붙여넣어 복원해요. <strong>위험 작업</strong>이에요.
         </p>
-        <textarea
+        <Textarea
           value={text}
           onChange={(e) => {
             setText(e.target.value);
@@ -97,32 +104,41 @@ export function BackupPanel() {
           rows={5}
           spellCheck={false}
           placeholder='{"tables": { ... }}'
-          className="mt-3 w-full rounded-xl border-2 border-border bg-background p-3 font-mono text-sm"
+          className="mt-3"
+          style={{ fontFamily: "var(--font-mono)", fontSize: 13 }}
         />
         <div className="mt-3 flex items-center gap-2">
-          <select
+          <Select
             value={mode}
             onChange={(e) => setMode(e.target.value as "merge" | "overwrite")}
-            className="rounded-lg border-2 border-border bg-background px-2 py-1.5 text-sm font-bold"
-          >
-            <option value="merge">병합(merge)</option>
-            <option value="overwrite">덮어쓰기(overwrite)</option>
-          </select>
-          <button
+            options={[
+              { value: "merge", label: "병합(merge)" },
+              { value: "overwrite", label: "덮어쓰기(overwrite)" },
+            ]}
+            style={{ width: "auto" }}
+          />
+          <Button
+            variant="danger"
             onClick={() => setConfirm(true)}
             disabled={!text.trim()}
-            className={buttonClass("danger", "md")}
+            className="flex-none"
           >
             복원 실행
-          </button>
+          </Button>
         </div>
         {importError && <ErrorText className="mt-2">{importError}</ErrorText>}
         {result && (
-          <p className="mt-3 text-sm font-bold text-success-strong">
-            복원됨: {Object.entries(result).map(([t, n]) => `${t} ${n}`).join(", ")}
+          <p
+            className="mt-3 text-[length:var(--text-sm)] font-bold"
+            style={{ color: "var(--success-text)" }}
+          >
+            복원됨:{" "}
+            {Object.entries(result)
+              .map(([t, n]) => `${t} ${n}`)
+              .join(", ")}
           </p>
         )}
-      </section>
+      </Card>
 
       {confirm && (
         <ConfirmModal

@@ -1,9 +1,24 @@
-import Link from "next/link";
 import { notFound } from "next/navigation";
 
 import { PromptForm } from "@/components/teacher/PromptForm";
+import { TeacherHeader } from "@/components/teacher/TeacherHeader";
+import { Badge } from "@/components/ui/Badge";
+import { Card } from "@/components/ui/Card";
+import { Chip } from "@/components/ui/Chip";
 import { ApiError, getClasses, getPrompts } from "@/lib/api";
 import { getAccessToken } from "@/lib/auth/server";
+import type { AssessmentType } from "@/lib/types";
+
+const ASSESSMENT_LABEL: Record<AssessmentType, string> = {
+  quiz: "퀴즈",
+  essay: "독후감",
+  none: "평가 없음",
+};
+
+const LANGUAGE_LABEL: Record<string, string> = {
+  ko: "한국어",
+  en: "English",
+};
 
 export default async function PromptPage({
   params,
@@ -25,50 +40,49 @@ export default async function PromptPage({
   const prompts = promptsResult.prompts;
 
   return (
-    <section>
-      <Link href="/classes" className="text-sm font-bold text-muted">
-        ← 학급 목록
-      </Link>
-      <h1 className="mt-2 text-3xl font-extrabold">
-        발제 {klass ? `· ${klass.name}` : ""}
-      </h1>
-      <p className="mt-1 text-muted">
-        주제와 학습 목표를 정하면, 학생이 그 안에서 자기 이야기를 만들어요.
-      </p>
+    <div>
+      <TeacherHeader
+        title={`발제${klass ? ` · ${klass.name}` : ""}`}
+        sub="이야기 주제와 학습 목표를 정해 학급에 내요."
+      />
 
-      <div className="mt-6 grid gap-8 md:grid-cols-[1fr_20rem]">
+      <div className="grid items-start gap-[22px] [grid-template-columns:1fr] md:[grid-template-columns:1.3fr_1fr]">
         <PromptForm classId={classId} />
 
-        <aside>
-          <h2 className="text-lg font-bold">낸 발제 ({prompts.length})</h2>
+        <div>
+          <p className="ijg-eyebrow mb-3 text-ink-3">낸 발제 ({prompts.length})</p>
           {prompts.length === 0 ? (
-            <p className="mt-2 text-sm text-muted">아직 낸 발제가 없어요.</p>
+            <p className="text-[length:var(--text-sm)] text-ink-3">
+              아직 낸 발제가 없어요.
+            </p>
           ) : (
-            <ul className="mt-3 space-y-3">
+            <div className="flex flex-col gap-3">
               {prompts.map((p) => (
-                <li
-                  key={p.id}
-                  className="rounded-card bg-surface p-4 ring-1 ring-border"
-                >
-                  <p className="font-bold">{p.topic}</p>
+                <Card key={p.id} padding="md">
+                  <h4 className="text-[length:var(--text-base)] font-extrabold text-ink">
+                    {p.topic}
+                  </h4>
                   {p.learningObjectives.length > 0 && (
-                    <ul className="mt-2 flex flex-wrap gap-1.5">
+                    <div className="mt-2.5 flex flex-wrap gap-1.5">
                       {p.learningObjectives.map((o, i) => (
-                        <li
-                          key={i}
-                          className="rounded-full bg-secondary/15 px-2.5 py-0.5 text-xs text-secondary-strong"
-                        >
-                          {o}
-                        </li>
+                        <Chip key={i}>{o}</Chip>
                       ))}
-                    </ul>
+                    </div>
                   )}
-                </li>
+                  <div className="mt-3 flex flex-wrap gap-2">
+                    <Badge tone="primary" icon="clipboard-check">
+                      {ASSESSMENT_LABEL[p.assessment.type]}
+                    </Badge>
+                    <Badge tone="info" icon="languages">
+                      {LANGUAGE_LABEL[p.language] ?? p.language}
+                    </Badge>
+                  </div>
+                </Card>
               ))}
-            </ul>
+            </div>
           )}
-        </aside>
+        </div>
       </div>
-    </section>
+    </div>
   );
 }

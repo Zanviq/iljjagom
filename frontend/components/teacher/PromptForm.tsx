@@ -3,7 +3,12 @@
 import { useRouter } from "next/navigation";
 import { useActionState, useEffect, useState } from "react";
 
+import { Button } from "@/components/ui/Button";
+import { Card } from "@/components/ui/Card";
 import { ErrorText } from "@/components/ui/ErrorText";
+import { Field } from "@/components/ui/Field";
+import { Input } from "@/components/ui/Input";
+import { Select } from "@/components/ui/Select";
 import { SubmitButton } from "@/components/ui/SubmitButton";
 import {
   createPromptAction,
@@ -13,11 +18,16 @@ import type { AssessmentType } from "@/lib/types";
 
 const initial: PromptFormState = {};
 
-const ASSESSMENT_LABEL: Record<AssessmentType, string> = {
-  quiz: "퀴즈",
-  essay: "독후감",
-  none: "평가 없음",
-};
+const ASSESSMENT_OPTIONS = [
+  { value: "none", label: "평가 없음" },
+  { value: "quiz", label: "퀴즈" },
+  { value: "essay", label: "독후감" },
+];
+
+const LANGUAGE_OPTIONS = [
+  { value: "ko", label: "한국어" },
+  { value: "en", label: "English" },
+];
 
 export function PromptForm({ classId }: { classId: string }) {
   const router = useRouter();
@@ -29,26 +39,28 @@ export function PromptForm({ classId }: { classId: string }) {
   }, [state.createdId, router]);
 
   return (
-    <form
-      action={formAction}
-      className="rounded-card bg-surface p-6 ring-1 ring-border"
-    >
-      <input type="hidden" name="classId" value={classId} />
+    <Card padding="lg">
+      <form action={formAction} className="flex flex-col gap-[18px]">
+        <input type="hidden" name="classId" value={classId} />
 
-      {/* 성공할 때마다 createdId 가 바뀌어 입력 필드(로컬 상태)가 새로 마운트=초기화 */}
-      <PromptFields key={state.createdId ?? "init"} />
+        {/* 성공할 때마다 createdId 가 바뀌어 입력 필드(로컬 상태)가 새로 마운트=초기화 */}
+        <PromptFields key={state.createdId ?? "init"} />
 
-      {state.error && (
-        <ErrorText className="mt-4">{state.error}</ErrorText>
-      )}
-      {state.ok && (
-        <p className="mt-4 text-sm font-bold text-success-strong">발제를 냈어요! 🎉</p>
-      )}
+        {state.error && <ErrorText>{state.error}</ErrorText>}
+        {state.ok && (
+          <p
+            className="text-[length:var(--text-sm)] font-bold"
+            style={{ color: "var(--success-text)" }}
+          >
+            발제를 냈어요!
+          </p>
+        )}
 
-      <SubmitButton className="mt-6 w-full" pendingText="만드는 중…">
-        발제 내기
-      </SubmitButton>
-    </form>
+        <SubmitButton fullWidth size="md" icon="send" pendingText="만드는 중…">
+          발제 내기
+        </SubmitButton>
+      </form>
+    </Card>
   );
 }
 
@@ -59,95 +71,73 @@ function PromptFields() {
 
   return (
     <>
-      <label className="flex flex-col gap-2">
-        <span className="font-bold">주제</span>
-        <input
-          name="topic"
-          required
-          placeholder="예) 물의 순환"
-          className="h-12 rounded-xl border-2 border-border bg-background px-4 text-lg"
-        />
-      </label>
+      <Field label="주제" required>
+        <Input name="topic" required icon="pencil" placeholder="예) 물의 순환" />
+      </Field>
 
-      <fieldset className="mt-5 flex flex-col gap-2">
-        <legend className="font-bold">학습 목표 (1개 이상)</legend>
-        {objectives.map((val, i) => (
-          <div key={i} className="flex gap-2">
-            <input
-              name="learningObjectives"
-              value={val}
-              onChange={(e) =>
-                setObjectives((arr) =>
-                  arr.map((v, j) => (j === i ? e.target.value : v)),
-                )
-              }
-              placeholder="예) 증발·응결·강수 이해"
-              className="h-11 flex-1 rounded-xl border-2 border-border bg-background px-4"
-            />
-            {objectives.length > 1 && (
-              <button
-                type="button"
-                onClick={() =>
-                  setObjectives((arr) => arr.filter((_, j) => j !== i))
+      <div>
+        <p className="mb-2 text-[length:var(--text-sm)] font-bold text-ink">
+          학습 목표{" "}
+          <span className="font-medium text-ink-3">(1개 이상)</span>
+        </p>
+        <div className="flex flex-col gap-2">
+          {objectives.map((val, i) => (
+            <div key={i} className="flex gap-2">
+              <Input
+                name="learningObjectives"
+                value={val}
+                onChange={(e) =>
+                  setObjectives((arr) =>
+                    arr.map((v, j) => (j === i ? e.target.value : v)),
+                  )
                 }
-                className="rounded-xl px-3 font-bold text-muted hover:bg-black/5"
-                aria-label="목표 삭제"
-              >
-                ✕
-              </button>
-            )}
-          </div>
-        ))}
-        <button
+                placeholder="예) 증발·응결·강수 이해"
+              />
+              {objectives.length > 1 && (
+                <Button
+                  type="button"
+                  variant="ghost"
+                  size="sm"
+                  icon="x"
+                  aria-label="목표 삭제"
+                  onClick={() =>
+                    setObjectives((arr) => arr.filter((_, j) => j !== i))
+                  }
+                />
+              )}
+            </div>
+          ))}
+        </div>
+        <Button
           type="button"
+          variant="ghost"
+          size="sm"
+          icon="plus"
+          className="mt-2"
           onClick={() => setObjectives((arr) => [...arr, ""])}
-          className="self-start rounded-xl px-3 py-1 text-sm font-bold text-secondary-strong hover:bg-secondary/10"
         >
-          + 목표 추가
-        </button>
-      </fieldset>
+          목표 추가
+        </Button>
+      </div>
 
-      <div className="mt-5 grid gap-4 sm:grid-cols-2">
-        <label className="flex flex-col gap-2">
-          <span className="font-bold">평가 방식</span>
-          <select
+      <div className="grid gap-3.5 sm:grid-cols-2">
+        <Field label="평가 방식">
+          <Select
             name="assessmentType"
             value={assessmentType}
-            onChange={(e) =>
-              setAssessmentType(e.target.value as AssessmentType)
-            }
-            className="h-12 rounded-xl border-2 border-border bg-background px-3 text-lg"
-          >
-            {(["none", "quiz", "essay"] as const).map((t) => (
-              <option key={t} value={t}>
-                {ASSESSMENT_LABEL[t]}
-              </option>
-            ))}
-          </select>
-        </label>
-
-        <label className="flex flex-col gap-2">
-          <span className="font-bold">언어</span>
-          <select
-            name="language"
-            defaultValue="ko"
-            className="h-12 rounded-xl border-2 border-border bg-background px-3 text-lg"
-          >
-            <option value="ko">한국어</option>
-            <option value="en">English</option>
-          </select>
-        </label>
+            onChange={(e) => setAssessmentType(e.target.value as AssessmentType)}
+            options={ASSESSMENT_OPTIONS}
+          />
+        </Field>
+        <Field label="언어">
+          <Select name="language" defaultValue="ko" options={LANGUAGE_OPTIONS} />
+        </Field>
       </div>
 
       {assessmentType !== "none" && (
-        <label className="mt-4 flex flex-col gap-2">
-          <span className="font-bold">평가 상세 (선택)</span>
-          <input
-            name="assessmentDetail"
-            placeholder="예) 5문항 객관식"
-            className="h-11 rounded-xl border-2 border-border bg-background px-4"
-          />
-        </label>
+        <Field label="평가 상세 (선택)">
+          <Input name="assessmentDetail" placeholder="예) 5문항 객관식" />
+        </Field>
       )}
     </>
   );

@@ -17,18 +17,15 @@ export default async function ConsoleUsersPage() {
 
   return (
     <div>
-      <h1 className="text-3xl font-extrabold">사용자 관리</h1>
-      <p className="mt-1 text-muted">
-        역할·권한을 관리해요. 위험 변경은 확인 후 적용돼요.
+      <p className="ijg-eyebrow mb-4 text-ink-3">
+        사용자 · 역할·권한 관리 (위험 변경은 확인 후 적용)
       </p>
       {error ? (
-        <ErrorText className="mt-6">{error}</ErrorText>
+        <ErrorText className="mt-2">{error}</ErrorText>
       ) : !users || users.length === 0 ? (
-        <EmptyState className="mt-6">사용자가 없어요.</EmptyState>
+        <EmptyState icon="users" title="사용자가 없어요" />
       ) : (
-        <div className="mt-6">
-          <UsersTable users={users} />
-        </div>
+        <UsersTable users={users} />
       )}
     </div>
   );

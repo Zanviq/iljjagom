@@ -14,6 +14,8 @@ export type AssessmentType = "quiz" | "essay" | "none";
 export interface Me {
   id: string;
   email: string;
+  /** 표시 이름(=profiles.display_name). 온보딩 전이면 null. (2026-06-18 계약 추가) */
+  name: string | null;
   role: Role;
   grade: number | null;
   guardianConsent: boolean;

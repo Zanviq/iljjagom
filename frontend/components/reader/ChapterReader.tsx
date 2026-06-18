@@ -4,9 +4,13 @@ import Link from "next/link";
 import { useCallback, useEffect, useRef, useState } from "react";
 
 import { AskUserPanel } from "@/components/ai/AskUserPanel";
-import { buttonClass } from "@/components/ui/Button";
+import { Button, buttonClass } from "@/components/ui/Button";
+import { Badge } from "@/components/ui/Badge";
+import { Card } from "@/components/ui/Card";
 import { ErrorText } from "@/components/ui/ErrorText";
+import { Icon } from "@/components/ui/Icon";
 import { Loading } from "@/components/ui/Loading";
+import { Textarea } from "@/components/ui/Textarea";
 import { WordPopover } from "@/components/reader/WordPopover";
 import { answerAiSession } from "@/lib/ai";
 import type { AskUserAnswer } from "@/lib/ai";
@@ -36,14 +40,39 @@ export function ChapterReader({ bookId, title, totalChaptersPlanned }: Props) {
   }, []);
 
   return (
-    <section className="mx-auto max-w-2xl">
-      <div className="mb-4 flex items-center justify-between">
-        <h1 className="text-2xl font-extrabold">{title || "내 이야기"}</h1>
-        <span className="rounded-full bg-accent/40 px-3 py-1 text-sm font-bold">
+    <div className="relative mx-auto w-full max-w-[820px] px-6 pb-16 pt-6">
+      <div className="mb-[18px] flex items-center justify-between gap-3">
+        <Link
+          href="/home"
+          className="inline-flex items-center gap-1.5 text-[length:var(--text-sm)] font-bold text-ink-3"
+        >
+          <Icon name="arrow-left" size={16} />
+          내 책장
+        </Link>
+        <Badge tone="primary" dot>
           {chapterIdx}
-          {totalChaptersPlanned ? ` / ${totalChaptersPlanned}` : ""} 장
-        </span>
+          {totalChaptersPlanned ? ` / ${totalChaptersPlanned}` : ""}장
+        </Badge>
       </div>
+
+      <h1
+        className="mb-5 text-center"
+        style={{
+          fontFamily: "var(--font-serif)",
+          fontWeight: 600,
+          fontSize: 34,
+          letterSpacing: "-.02em",
+          color: "var(--text-1)",
+        }}
+      >
+        <span
+          className="ijg-eyebrow mb-2 block"
+          style={{ color: "var(--primary-text)" }}
+        >
+          {chapterIdx}장
+        </span>
+        {title || "내 이야기"}
+      </h1>
 
       {token === undefined ? (
         <Loading card>이야기를 준비하는 중이에요…</Loading>
@@ -60,7 +89,7 @@ export function ChapterReader({ bookId, title, totalChaptersPlanned }: Props) {
           onRetry={() => setReloadNonce((n) => n + 1)}
         />
       )}
-    </section>
+    </div>
   );
 }
 
@@ -293,9 +322,7 @@ function ChapterStream({
       }
     }
     setRevising(false);
-    setReviseError(
-      "수정이 아직 진행 중이에요. 잠시 후 새로고침하면 반영돼요.",
-    );
+    setReviseError("수정이 아직 진행 중이에요. 잠시 후 새로고침하면 반영돼요.");
   }
 
   async function submitAsk(answer: AskUserAnswer) {
@@ -306,9 +333,7 @@ function ChapterStream({
       await answerAiSession(token, ask.sessionId, answer);
       setAsk(null);
     } catch (e) {
-      setAskError(
-        e instanceof ApiError ? e.message : "대답을 전하지 못했어요.",
-      );
+      setAskError(e instanceof ApiError ? e.message : "대답을 전하지 못했어요.");
     } finally {
       setAnsweringAsk(false);
     }
@@ -328,13 +353,29 @@ function ChapterStream({
         <img
           src={illustration.url}
           alt={illustration.alt || "이야기 삽화"}
-          className="mb-4 max-h-[28rem] w-full rounded-card object-cover ring-1 ring-border"
+          className="mb-4 max-h-[28rem] w-full rounded-[var(--radius-card)] object-cover shadow-[var(--elev-md)]"
         />
       )}
+
       {activePrompt && (
-        <p className="mb-4 rounded-card bg-secondary/15 p-4 text-lg font-bold text-secondary-strong">
-          💬 {activePrompt}
-        </p>
+        <Card
+          tone="accent"
+          padding="md"
+          className="mb-4"
+          style={{ display: "flex", alignItems: "flex-start", gap: 8 }}
+        >
+          <Icon
+            name="message-circle"
+            size={20}
+            style={{ color: "var(--accent-text)", flex: "none", marginTop: 2 }}
+          />
+          <p
+            className="text-[length:var(--text-md)] font-bold"
+            style={{ color: "var(--accent-text)" }}
+          >
+            {activePrompt}
+          </p>
+        </Card>
       )}
 
       {/* AI 되물음(ask_user): 답해도/안 해도 읽기는 계속(비차단). */}
@@ -351,32 +392,44 @@ function ChapterStream({
 
       {/* 유도 모드: 삽화·질문을 먼저 보고, 탭하면 본문을 공개한다. */}
       {guidedGate && (
-        <div className="rounded-card bg-surface p-6 text-center ring-1 ring-border">
+        <Card tone="primary" padding="lg" className="mt-[22px]" style={{ textAlign: "center" }}>
           {illustration || activePrompt ? (
             <>
-              <p className="mb-4 text-lg font-bold">
-                그림을 보고 어떤 이야기일지 상상해 봐요.
+              <p
+                style={{
+                  fontFamily: "var(--font-serif)",
+                  fontStyle: "italic",
+                  fontSize: 20,
+                  color: "var(--text-1)",
+                }}
+              >
+                &ldquo;이건 어떤 장면일까?&rdquo;
               </p>
-              <button
+              <p className="my-2 text-[length:var(--text-sm)] text-ink-2">
+                곰 작가가 그림을 먼저 보여 줬어요. 이야기가 궁금하면 열어 봐요.
+              </p>
+              <Button
+                size="lg"
+                icon="book-open"
                 onClick={() => {
                   setRevealed(true);
                   track("prompt_reveal", { bookId, payload: { chapterIdx } });
                 }}
-                className={buttonClass("primary", "lg", "w-full")}
+                className="mt-2"
               >
-                ▶ 이야기 읽어볼까요?
-              </button>
+                이야기 읽어볼까요?
+              </Button>
             </>
           ) : (
             <>
               <div
-                className="mb-4 aspect-video w-full animate-pulse rounded-card bg-accent/30"
+                className="mb-4 aspect-video w-full animate-pulse rounded-[var(--radius-card)] bg-accent-tint"
                 aria-hidden
               />
-              <p className="text-muted">그림을 준비하는 중이에요…</p>
+              <p className="text-ink-2">그림을 준비하는 중이에요…</p>
             </>
           )}
-        </div>
+        </Card>
       )}
 
       {/* meta 수신 전(모드 미확정) 잠깐의 로딩 */}
@@ -385,22 +438,32 @@ function ChapterStream({
       )}
 
       {revealed && (
-        <>
-          <article
-            onMouseUp={onTextMouseUp}
-            className="rounded-card bg-surface p-6 text-xl leading-loose ring-1 ring-border"
-          >
-            <span className="whitespace-pre-wrap">{text}</span>
-            {streaming && <span className="streaming-cursor" aria-hidden />}
-            {!text && streaming && (
-              <span className="text-muted">이야기를 펼치는 중이에요…</span>
-            )}
-          </article>
+        <div className="mt-[26px]">
+          <div onMouseUp={onTextMouseUp}>
+            <p
+              className={streaming ? "ijg-caret" : undefined}
+              style={{
+                fontFamily: "var(--font-reading)",
+                fontSize: "var(--text-read)",
+                lineHeight: "var(--leading-read)",
+                color: "var(--text-1)",
+                maxWidth: "var(--measure-read)",
+                margin: "0 auto",
+                whiteSpace: "pre-wrap",
+              }}
+            >
+              {text}
+              {!text && streaming && (
+                <span className="text-ink-3">이야기를 펼치는 중이에요…</span>
+              )}
+            </p>
+          </div>
 
-          <p className="mt-2 text-center text-sm text-muted">
-            모르는 낱말을 <strong>손가락으로 살짝 선택</strong>하면 뜻을 알려줘요.
+          <p className="mt-3 text-center text-[length:var(--text-sm)] text-ink-3">
+            모르는 낱말을 <strong>손가락으로 살짝 선택</strong>하면 뜻을
+            알려줘요.
           </p>
-        </>
+        </div>
       )}
 
       {streamError && (
@@ -408,121 +471,117 @@ function ChapterStream({
       )}
 
       {revealed && done && (
-        <div className="mt-6 rounded-card bg-surface p-5 ring-1 ring-border">
+        <div className="mt-8">
           {done.words.length > 0 && (
-            <>
-              <h2 className="text-sm font-bold text-muted">이 장의 낱말</h2>
-              <ul className="mt-2 flex flex-wrap gap-2">
-                {done.words.map((w) => (
-                  <li key={w}>
-                    <button
-                      onClick={() => void lookUp(w)}
-                      className="rounded-full bg-accent/40 px-3 py-1 text-sm font-bold hover:brightness-105"
-                    >
-                      {w}
-                    </button>
-                  </li>
-                ))}
-              </ul>
-            </>
-          )}
-          {canGoNext ? (
-            <button
-              onClick={onNext}
-              className={buttonClass("primary", "lg", "mt-4 w-full")}
-            >
-              다음 장으로 →
-            </button>
-          ) : isLastChapter ? (
-            // 마지막 장 완독: 축하 + 학습활동 진입.
-            <div className="mt-2 text-center">
+            <div className="mx-auto max-w-[var(--measure-read)]">
               <p
-                role="status"
-                aria-live="polite"
-                className="text-lg font-bold text-success-strong"
+                className="ijg-eyebrow mb-2.5"
+                style={{ color: "var(--text-3)" }}
               >
-                🎉 이야기를 모두 읽었어요!
+                이 장의 낱말
               </p>
-              <Link
-                href={`/books/${bookId}/learn`}
-                className={buttonClass("primary", "lg", "mt-4 w-full")}
-              >
-                📚 학습 활동 하러 가기
-              </Link>
+              <div className="flex flex-wrap gap-2.5">
+                {done.words.map((w) => (
+                  <WordChip key={w} term={w} onClick={() => void lookUp(w)} />
+                ))}
+              </div>
             </div>
-          ) : (
-            // 아직 마지막 장이 아닌데 다음 장이 준비되지 않음(생성 중/검수 대기).
-            // 거짓 완독으로 오인하지 않도록 안내 + 다시 확인.
-            <div className="mt-2 text-center">
-              <p className="font-bold text-muted">
-                다음 장을 준비하고 있어요. 잠시 후 다시 확인해 주세요.
-              </p>
-              <button
-                onClick={onRetry}
-                className={buttonClass("outline", "md", "mt-3 w-full")}
+          )}
+
+          {isLastChapter && !canGoNext && (
+            <p
+              role="status"
+              aria-live="polite"
+              className="mt-8 text-center text-[length:var(--text-md)] font-bold"
+              style={{ color: "var(--success-text)" }}
+            >
+              이야기를 모두 읽었어요!
+            </p>
+          )}
+
+          <div className="mt-9 flex flex-wrap justify-center gap-3">
+            {mode === "free" && !reviseOpen && !revising && (
+              <Button
+                variant="outline"
+                icon="wand-sparkles"
+                onClick={() => setReviseOpen(true)}
               >
-                ↻ 다시 확인할래요
-              </button>
-            </div>
+                이야기 고치기
+              </Button>
+            )}
+
+            {canGoNext ? (
+              <Button iconRight="arrow-right" onClick={onNext}>
+                다음 장으로
+              </Button>
+            ) : isLastChapter ? null : (
+              <Button variant="outline" icon="refresh-cw" onClick={onRetry}>
+                다시 확인할래요
+              </Button>
+            )}
+
+            <Link
+              href={`/books/${bookId}/learn`}
+              className={buttonClass("accent", "md")}
+            >
+              <Icon name="graduation-cap" size={18} />
+              학습 활동 하러 가기
+            </Link>
+          </div>
+
+          {!canGoNext && !isLastChapter && (
+            <p className="mt-3 text-center text-[length:var(--text-sm)] font-bold text-ink-2">
+              다음 장을 준비하고 있어요. 잠시 후 다시 확인해 주세요.
+            </p>
           )}
         </div>
       )}
 
       {/* 자유모드 수정요청: 다 쓰인 자유 챕터에서 본문을 고쳐 달라고 요청. */}
-      {revealed && done && mode === "free" && (
-        <div className="mt-4 rounded-card bg-surface p-5 ring-1 ring-border">
+      {revealed && done && mode === "free" && (reviseOpen || revising) && (
+        <Card padding="md" className="mx-auto mt-4 max-w-[var(--measure-read)]">
           {revising ? (
             <p
               role="status"
               aria-live="polite"
-              className="text-center font-bold text-secondary-strong"
+              className="ijg-caret text-center font-bold"
+              style={{ color: "var(--accent-text)" }}
             >
-              <span className="streaming-cursor" aria-hidden /> 이야기를 고치고
-              있어요… 잠시만 기다려 주세요.
+              이야기를 고치고 있어요… 잠시만 기다려 주세요.
             </p>
-          ) : reviseOpen ? (
+          ) : (
             <>
               <label className="flex flex-col gap-2">
-                <span className="font-bold">어떻게 고칠까요?</span>
-                <textarea
+                <span className="font-bold text-ink">어떻게 고칠까요?</span>
+                <Textarea
                   value={reviseText}
                   onChange={(e) => setReviseText(e.target.value)}
                   rows={3}
                   placeholder="예) 주인공을 더 씩씩하게 바꿔 줘"
-                  className="rounded-xl border-2 border-border bg-background p-3 text-lg"
                 />
               </label>
-              {reviseError && (
-                <ErrorText className="mt-2">{reviseError}</ErrorText>
-              )}
+              {reviseError && <ErrorText className="mt-2">{reviseError}</ErrorText>}
               <div className="mt-3 flex gap-2">
-                <button
+                <Button
                   onClick={() => void submitRevise()}
                   disabled={!reviseText.trim()}
-                  className={buttonClass("primary", "md", "flex-1")}
+                  className="flex-1"
                 >
                   고쳐 주세요
-                </button>
-                <button
+                </Button>
+                <Button
+                  variant="ghost"
                   onClick={() => {
                     setReviseOpen(false);
                     setReviseError(null);
                   }}
-                  className={buttonClass("ghost", "md")}
                 >
                   취소
-                </button>
+                </Button>
               </div>
             </>
-          ) : (
-            <button
-              onClick={() => setReviseOpen(true)}
-              className={buttonClass("outline", "md", "w-full")}
-            >
-              ✏️ 이야기 고치기
-            </button>
           )}
-        </div>
+        </Card>
       )}
 
       {(word || wordLoading) && (
@@ -533,5 +592,32 @@ function ChapterStream({
         />
       )}
     </>
+  );
+}
+
+function WordChip({ term, onClick }: { term: string; onClick: () => void }) {
+  return (
+    <button
+      type="button"
+      onClick={onClick}
+      style={{
+        display: "inline-flex",
+        alignItems: "center",
+        gap: 7,
+        height: 38,
+        padding: "0 14px",
+        background: "var(--surface-2)",
+        border: "var(--border) solid var(--line)",
+        borderRadius: 999,
+        fontFamily: "var(--font-body)",
+        fontWeight: 700,
+        fontSize: "var(--text-sm)",
+        color: "var(--text-1)",
+        cursor: "pointer",
+      }}
+    >
+      <Icon name="volume-2" size={15} style={{ color: "var(--primary)" }} />
+      {term}
+    </button>
   );
 }

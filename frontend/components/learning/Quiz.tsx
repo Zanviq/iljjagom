@@ -2,6 +2,8 @@
 
 import { useEffect, useRef, useState } from "react";
 
+import { Card } from "@/components/ui/Card";
+import { Icon } from "@/components/ui/Icon";
 import { postLearningResult } from "@/lib/api";
 import { getClientAccessToken } from "@/lib/auth/client";
 import { cn } from "@/lib/cn";
@@ -43,7 +45,7 @@ export function Quiz({ items, bookId }: { items: QuizItem[]; bookId: string }) {
   }, [picked, items, bookId]);
 
   return (
-    <ul className="space-y-4">
+    <div className="flex flex-col gap-4">
       {items.map((q, i) => (
         <QuizCard
           key={i}
@@ -59,7 +61,7 @@ export function Quiz({ items, bookId }: { items: QuizItem[]; bookId: string }) {
           }
         />
       ))}
-    </ul>
+    </div>
   );
 }
 
@@ -78,45 +80,53 @@ function QuizCard({
   const correct = picked === item.answerIndex;
 
   return (
-    <li className="rounded-card bg-surface p-5 ring-1 ring-border">
-      <p className="font-bold">
+    <Card padding="lg">
+      <p className="mb-3 font-bold text-ink" style={{ fontSize: 17 }}>
         {index + 1}. {item.question}
       </p>
-      <ul className="mt-3 space-y-2">
+      <div className="flex flex-col gap-2.5">
         {item.choices.map((choice, ci) => {
           const isAnswer = ci === item.answerIndex;
           const isPicked = ci === picked;
           return (
-            <li key={ci}>
-              <button
-                onClick={() => onPick(ci)}
-                disabled={answered}
-                className={cn(
-                  "w-full rounded-xl border-2 px-4 py-2.5 text-left text-lg transition disabled:cursor-default",
-                  !answered && "border-border bg-background hover:border-primary",
-                  answered && isAnswer && "border-success bg-success/15 font-bold",
-                  answered &&
-                    isPicked &&
-                    !isAnswer &&
-                    "border-danger bg-danger/10",
-                  answered && !isAnswer && !isPicked && "border-border opacity-60",
-                )}
-              >
-                {choice}
-                {answered && isAnswer && " ✓"}
-              </button>
-            </li>
+            <button
+              key={ci}
+              onClick={() => onPick(ci)}
+              disabled={answered}
+              className={cn(
+                "flex w-full items-center justify-between gap-2.5 rounded-[var(--radius-input)] border-2 px-4 py-3 text-left font-semibold transition disabled:cursor-default",
+                !answered &&
+                  "border-line-strong bg-surface-2 text-ink hover:border-primary",
+                answered &&
+                  isAnswer &&
+                  "border-success bg-success-tint text-success-text",
+                answered &&
+                  isPicked &&
+                  !isAnswer &&
+                  "border-danger bg-danger-tint text-danger-text",
+                answered &&
+                  !isAnswer &&
+                  !isPicked &&
+                  "border-line-strong bg-surface-2 text-ink opacity-60",
+              )}
+            >
+              {choice}
+              {answered && isAnswer && <Icon name="check" size={18} strokeWidth={3} />}
+              {answered && isPicked && !isAnswer && (
+                <Icon name="x" size={18} strokeWidth={3} />
+              )}
+            </button>
           );
         })}
-      </ul>
+      </div>
       {answered && (
         <p
-          className={cn(
-            "mt-3 text-sm font-bold",
-            correct ? "text-success-strong" : "text-danger",
-          )}
+          className="mt-2.5 text-[length:var(--text-sm)] font-bold"
+          style={{
+            color: correct ? "var(--success-text)" : "var(--danger-text)",
+          }}
         >
-          {correct ? "정답이에요! 🎉" : "다시 한 번 생각해 볼까요?"}
+          {correct ? "정답이에요! 잘했어요." : "다시 한 번 생각해 볼까요?"}
           {!correct && (
             <button onClick={() => onPick(null)} className="ml-2 underline">
               다시 풀기
@@ -124,6 +134,6 @@ function QuizCard({
           )}
         </p>
       )}
-    </li>
+    </Card>
   );
 }

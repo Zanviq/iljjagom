@@ -6,10 +6,12 @@ export default async function OnboardingPage() {
 
   return (
     <main className="flex flex-1 flex-col items-center justify-center px-6 py-12">
-      <div className="w-full max-w-md rounded-card bg-surface p-8 shadow-sm ring-1 ring-border">
+      <div className="w-full max-w-md rounded-[var(--radius-card)] border border-line bg-surface p-8 shadow-[var(--elev-md)]">
         <div className="mb-6 text-center">
-          <h1 className="text-2xl font-extrabold">처음 오셨네요!</h1>
-          <p className="mt-2 text-muted">
+          <h1 className="text-[length:var(--text-xl)] font-extrabold text-ink">
+            처음 오셨네요!
+          </h1>
+          <p className="mt-2 text-ink-2">
             {me.email} 님, 시작하기 전에 몇 가지만 알려 주세요.
           </p>
         </div>

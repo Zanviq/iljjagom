@@ -20,40 +20,42 @@ export default async function ConsoleUsagePage() {
 
   return (
     <div>
-      <h1 className="text-3xl font-extrabold">토큰·비용</h1>
-      <p className="mt-1 text-muted">모델별 토큰과 예상 비용이에요.</p>
+      <p className="ijg-eyebrow mb-4 text-ink-3">토큰·비용 · 모델별 토큰과 예상 비용</p>
       {error ? (
-        <ErrorText className="mt-6">{error}</ErrorText>
+        <ErrorText className="mt-2">{error}</ErrorText>
       ) : !report || report.buckets.length === 0 ? (
-        <EmptyState className="mt-6">집계된 사용량이 없어요.</EmptyState>
+        <EmptyState icon="coins" title="집계된 사용량이 없어요" />
       ) : (
-        <div className="mt-6 overflow-x-auto rounded-card ring-1 ring-border">
-          <table className="w-full min-w-[40rem] border-collapse bg-surface text-left">
+        <div className="overflow-x-auto rounded-[var(--radius-card)] border border-line">
+          <table
+            className="w-full min-w-[40rem] border-collapse bg-surface text-left"
+            style={{ fontFamily: "var(--font-mono)" }}
+          >
             <thead>
-              <tr className="border-b border-border text-sm text-muted">
-                <th className="p-3 font-bold">모델</th>
-                <th className="p-3 font-bold">호출</th>
-                <th className="p-3 font-bold">입력 토큰</th>
-                <th className="p-3 font-bold">출력 토큰</th>
-                <th className="p-3 font-bold">예상 비용</th>
+              <tr className="border-b border-line bg-surface-2">
+                {["모델", "호출", "입력 토큰", "출력 토큰", "예상 비용"].map((h) => (
+                  <th key={h} className="ijg-eyebrow p-3 text-ink-3" style={{ textAlign: "left" }}>
+                    {h}
+                  </th>
+                ))}
               </tr>
             </thead>
-            <tbody>
+            <tbody className="text-[length:var(--text-sm)] text-ink">
               {report.buckets.map((b) => (
-                <tr key={b.key} className="border-b border-border">
-                  <td className="p-3 text-sm font-bold">{b.key}</td>
-                  <td className="p-3 text-sm">{b.calls}</td>
-                  <td className="p-3 text-sm">{b.tokensIn}</td>
-                  <td className="p-3 text-sm">{b.tokensOut}</td>
-                  <td className="p-3 text-sm">{cost(b.estCost)}</td>
+                <tr key={b.key} className="border-b border-line-soft">
+                  <td className="p-3 font-bold">{b.key}</td>
+                  <td className="p-3">{b.calls}</td>
+                  <td className="p-3">{b.tokensIn}</td>
+                  <td className="p-3">{b.tokensOut}</td>
+                  <td className="p-3">{cost(b.estCost)}</td>
                 </tr>
               ))}
-              <tr className="bg-background font-bold">
-                <td className="p-3 text-sm">합계</td>
-                <td className="p-3 text-sm">{report.total.calls}</td>
-                <td className="p-3 text-sm">{report.total.tokensIn}</td>
-                <td className="p-3 text-sm">{report.total.tokensOut}</td>
-                <td className="p-3 text-sm">{cost(report.total.estCost)}</td>
+              <tr className="bg-surface-2 font-bold">
+                <td className="p-3">합계</td>
+                <td className="p-3">{report.total.calls}</td>
+                <td className="p-3">{report.total.tokensIn}</td>
+                <td className="p-3">{report.total.tokensOut}</td>
+                <td className="p-3">{cost(report.total.estCost)}</td>
               </tr>
             </tbody>
           </table>

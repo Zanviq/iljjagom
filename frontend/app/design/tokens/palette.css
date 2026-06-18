@@ -1,0 +1,89 @@
+/* ── Iljjagom primitive palette ────────────────────────────────────
+   Raw color ramps only. No semantic meaning here — semantics live in
+   semantic.css / theme-*.css. Three neutral families (one per role
+   environment) plus the shared brand accents.
+   ------------------------------------------------------------------ */
+
+:root {
+  /* Paper — warm cream neutrals (student "reading room") */
+  --paper-50:  #fdfaf4;
+  --paper-100: #f8f2e8;
+  --paper-200: #efe6d6;
+  --paper-300: #e4d6bf;
+  --paper-400: #d2c0a2;
+
+  /* Ink — warm near-black text ramp (student) */
+  --ink-900: #2a2018;
+  --ink-800: #3a2e22;
+  --ink-700: #564738;
+  --ink-600: #756353;
+  --ink-500: #97836f;
+  --ink-400: #b7a48f;
+
+  /* Slate — cool neutrals (teacher "workbench") */
+  --slate-50:  #f7f9fb;
+  --slate-100: #eef1f6;
+  --slate-200: #e1e6ee;
+  --slate-300: #cfd6e2;
+  --slate-400: #a4afc1;
+  --slate-500: #6c7689;
+  --slate-600: #4d5667;
+  --slate-700: #353d4d;
+  --slate-800: #232a37;
+  --slate-900: #161b24;
+
+  /* Abyss — dark navy ramp (admin "control room") */
+  --abyss-950: #0c0f15;
+  --abyss-900: #11151d;
+  --abyss-850: #161b25;
+  --abyss-800: #1c2230;
+  --abyss-700: #262e3d;
+  --abyss-600: #323c4d;
+  --abyss-500: #475061;
+
+  /* Amber — signature honey (student primary, brand) */
+  --amber-300: #f6c489;
+  --amber-400: #f0a858;
+  --amber-500: #e8913a;
+  --amber-600: #cf7820;
+  --amber-700: #a85d18;  /* text-safe on paper */
+  --amber-800: #834712;
+
+  /* Sage — soft green (student secondary) */
+  --sage-300: #afd0bb;
+  --sage-400: #8bba9c;
+  --sage-500: #69a07e;
+  --sage-600: #4f8364;  /* text-safe */
+  --sage-700: #3d684f;
+
+  /* Indigo — teacher primary */
+  --indigo-300: #b3b9f0;
+  --indigo-400: #828ce6;
+  --indigo-500: #5560d8;
+  --indigo-600: #424ec2;
+  --indigo-700: #353f9e;  /* text-safe on white */
+  --indigo-800: #2a3280;
+
+  /* Signal accents (admin) */
+  --cyan-400:  #3dd6c4;
+  --cyan-500:  #1fb9a8;
+  --lime-400:  #a3e05a;
+  --lime-500:  #82c23a;
+  --violet-400: #9485f2;
+  --violet-500: #7867e6;
+
+  /* Status (shared) */
+  --green-400: #5cb37a;
+  --green-500: #4f9d69;
+  --green-700: #37794e;
+  --red-400:   #e05a4e;
+  --red-500:   #d8463a;
+  --red-700:   #b5342a;
+  --gold-400:  #ecb24a;
+  --gold-500:  #dd9b28;
+  --gold-700:  #ac7613;
+
+  /* Pure */
+  --white: #ffffff;
+  --black: #000000;
+}

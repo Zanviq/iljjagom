@@ -3,7 +3,7 @@ import { cn } from "@/lib/cn";
 /**
  * 로딩 문구(페이지설명 §7 톤). role="status" aria-live="polite"로 SR에 알림.
  * 무엇을 기다리는지 명시한다("이야기를 준비하는 중이에요…").
- * card=true면 흰 카드로 감싼다(읽기 전 단독 표시용).
+ * card=true면 카드로 감싼다(읽기 전 단독 표시용).
  */
 export function Loading({
   children,
@@ -19,8 +19,9 @@ export function Loading({
       role="status"
       aria-live="polite"
       className={cn(
-        "text-muted",
-        card && "rounded-card bg-surface p-6 ring-1 ring-border",
+        "text-ink-2",
+        card &&
+          "rounded-[var(--radius-card)] bg-surface p-6 border border-line shadow-[var(--elev-sm)]",
         className,
       )}
     >

@@ -1,24 +1,16 @@
-import { cn } from "@/lib/cn";
+import { Badge, type BadgeTone } from "@/components/ui/Badge";
+import { Card } from "@/components/ui/Card";
 import type { SafetyFlag } from "@/lib/types";
 
 /** 안전 신호 심각도 배지(severity 문자열 기반, 미지정값은 중립). */
 export function SeverityBadge({ severity }: { severity: string }) {
-  const map: Record<string, string> = {
-    high: "bg-danger/10 text-danger",
-    med: "bg-accent/50 text-foreground",
-    medium: "bg-accent/50 text-foreground",
-    low: "bg-black/5 text-muted",
+  const map: Record<string, BadgeTone> = {
+    high: "danger",
+    med: "warning",
+    medium: "warning",
+    low: "neutral",
   };
-  return (
-    <span
-      className={cn(
-        "rounded-full px-2.5 py-0.5 text-xs font-bold",
-        map[severity] ?? "bg-black/5 text-muted",
-      )}
-    >
-      {severity}
-    </span>
-  );
+  return <Badge tone={map[severity] ?? "neutral"}>{severity}</Badge>;
 }
 
 function fmt(ts: string): string {
@@ -29,34 +21,25 @@ function fmt(ts: string): string {
 /** 안전 신호 읽기 전용 목록(관리자 콘솔 드릴다운용). 카드 스타일. */
 export function SafetyFlagList({ flags }: { flags: SafetyFlag[] }) {
   return (
-    <ul className="space-y-3">
+    <div className="flex flex-col gap-3">
       {flags.map((f) => (
-        <li key={f.id} className="rounded-card bg-surface p-4 ring-1 ring-border">
+        <Card key={f.id} padding="md">
           <div className="flex flex-wrap items-center gap-2">
             <SeverityBadge severity={f.severity} />
-            <span className="rounded-full bg-black/5 px-2.5 py-0.5 text-xs font-bold text-muted">
-              {f.source}
-            </span>
-            {f.category && (
-              <span className="rounded-full bg-black/5 px-2.5 py-0.5 text-xs font-bold text-muted">
-                {f.category}
-              </span>
-            )}
-            <span
-              className={cn(
-                "ml-auto rounded-full px-2.5 py-0.5 text-xs font-bold",
-                f.status === "open"
-                  ? "bg-danger/10 text-danger"
-                  : "bg-success/15 text-success-strong",
-              )}
-            >
-              {f.status === "open" ? "미처리" : "종결"}
+            <Badge tone="neutral">{f.source}</Badge>
+            {f.category && <Badge tone="neutral">{f.category}</Badge>}
+            <span className="ml-auto">
+              <Badge tone={f.status === "open" ? "danger" : "success"}>
+                {f.status === "open" ? "미처리" : "종결"}
+              </Badge>
             </span>
           </div>
-          <p className="mt-2 text-sm">{f.reason}</p>
-          <p className="mt-1 text-xs text-muted">{fmt(f.createdAt)}</p>
-        </li>
+          <p className="mt-2 text-[length:var(--text-sm)] text-ink">{f.reason}</p>
+          <p className="mt-1 text-[length:var(--text-xs)] text-ink-3">
+            {fmt(f.createdAt)}
+          </p>
+        </Card>
       ))}
-    </ul>
+    </div>
   );
 }

@@ -43,3 +43,35 @@ export function answerAiSession(
     body: answer,
   });
 }
+
+/**
+ * 총괄(Overseer) AI — 곰 작가 사이드바 (디자인 03 키스톤 §5 / 03-기능명세서 §4.2).
+ * 학생이 메인에서 말하면 본인 데이터를 보고 reply + 이동 액션을 돌려준다.
+ * actions[].to 는 화이트리스트 라우트만(백엔드 보장) → 프론트는 router.push만 수행.
+ */
+export interface OverseerAction {
+  type: "navigate";
+  to: string;
+  label: string;
+  auto?: boolean;
+}
+
+export interface OverseerReply {
+  sessionId: string;
+  reply: string;
+  actions: OverseerAction[];
+}
+
+/** 곰 작가에게 한 턴 보내기. `POST /ai/overseer/messages` (학생 인증 필수). */
+export function postOverseerMessage(
+  token: string | null,
+  message: string,
+  sessionId: string | null,
+  route: string,
+): Promise<OverseerReply> {
+  return apiFetch<OverseerReply>("/ai/overseer/messages", {
+    token,
+    method: "POST",
+    body: { message, sessionId, route },
+  });
+}

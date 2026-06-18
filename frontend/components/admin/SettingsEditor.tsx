@@ -3,8 +3,10 @@
 import { useRouter } from "next/navigation";
 import { useState } from "react";
 
-import { buttonClass } from "@/components/ui/Button";
+import { Button } from "@/components/ui/Button";
+import { Card } from "@/components/ui/Card";
 import { ErrorText } from "@/components/ui/ErrorText";
+import { Textarea } from "@/components/ui/Textarea";
 import { ApiError, putAdminSettings } from "@/lib/api";
 import { getClientAccessToken } from "@/lib/auth/client";
 
@@ -19,14 +21,14 @@ export function SettingsEditor({
 }) {
   const keys = Object.keys(settings);
   if (keys.length === 0) {
-    return <p className="text-muted">편집 가능한 설정이 없어요.</p>;
+    return <p className="text-ink-2">편집 가능한 설정이 없어요.</p>;
   }
   return (
-    <ul className="space-y-4">
+    <div className="flex flex-col gap-4">
       {keys.map((k) => (
         <SettingRow key={k} settingKey={k} value={settings[k]} />
       ))}
-    </ul>
+    </div>
   );
 }
 
@@ -66,14 +68,19 @@ function SettingRow({
   }
 
   return (
-    <li className="rounded-card bg-surface p-4 ring-1 ring-border">
+    <Card padding="md">
       <div className="flex items-center justify-between">
-        <code className="font-bold">{settingKey}</code>
+        <code className="font-bold text-primary-text">{settingKey}</code>
         {saved && (
-          <span className="text-sm font-bold text-success-strong">저장됨</span>
+          <span
+            className="text-[length:var(--text-sm)] font-bold"
+            style={{ color: "var(--success-text)" }}
+          >
+            저장됨
+          </span>
         )}
       </div>
-      <textarea
+      <Textarea
         value={text}
         onChange={(e) => {
           setText(e.target.value);
@@ -81,16 +88,13 @@ function SettingRow({
         }}
         rows={Math.min(10, text.split("\n").length + 1)}
         spellCheck={false}
-        className="mt-2 w-full rounded-xl border-2 border-border bg-background p-3 font-mono text-sm"
+        className="mt-2"
+        style={{ fontFamily: "var(--font-mono)", fontSize: 13 }}
       />
       {error && <ErrorText className="mt-2">{error}</ErrorText>}
-      <button
-        onClick={() => void save()}
-        disabled={pending}
-        className={buttonClass("primary", "md", "mt-3")}
-      >
+      <Button onClick={() => void save()} disabled={pending} loading={pending} className="mt-3">
         {pending ? "저장 중…" : "저장"}
-      </button>
-    </li>
+      </Button>
+    </Card>
   );
 }

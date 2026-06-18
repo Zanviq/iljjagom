@@ -1,0 +1,85 @@
+/* ── Iljjagom · Admin "Control Room" theme ─────────────────────────
+   Dark. Deep navy surfaces, mono numerals, cyan/lime signal accents,
+   amber+red alerts with glow. Dense metric grids, every indicator at a
+   glance. Apply by wrapping any subtree in .theme-admin.
+   ------------------------------------------------------------------ */
+
+.theme-admin {
+  --env-name: "admin"; /* @kind other */
+
+  /* Surfaces */
+  --bg: var(--abyss-950);
+  --bg-tint: var(--abyss-900);
+  --surface: var(--abyss-850);
+  --surface-2: var(--abyss-800);
+  --surface-inset: var(--abyss-900);
+  --surface-raised: var(--abyss-700);
+
+  /* Text */
+  --text-1: #e9edf4;
+  --text-2: #9aa6b8;
+  --text-3: #6c7a8f;
+  --text-faint: #4d5870;
+
+  /* Lines */
+  --line: var(--abyss-700);
+  --line-soft: var(--abyss-800);
+  --line-strong: var(--abyss-600);
+
+  /* Primary (cyan signal) */
+  --primary: var(--cyan-400);
+  --primary-hover: #54e0cf;
+  --primary-press: var(--cyan-500);
+  --primary-text: var(--cyan-400);
+  --primary-tint: rgba(61, 214, 196, 0.12);
+  --on-primary: var(--abyss-950);
+
+  /* Accent (lime) */
+  --accent: var(--lime-400);
+  --accent-hover: #b4ec70;
+  --accent-text: var(--lime-400);
+  --accent-tint: rgba(163, 224, 90, 0.12);
+  --on-accent: var(--abyss-950);
+
+  --highlight: var(--violet-400);
+  --highlight-tint: rgba(148, 133, 242, 0.14);
+
+  /* Status — bright on dark */
+  --success: #4fd07e;
+  --success-text: #6fe098;
+  --success-tint: rgba(79, 208, 126, 0.12);
+  --danger: var(--red-400);
+  --danger-text: #f0726a;
+  --danger-tint: rgba(224, 90, 78, 0.14);
+  --warning: var(--gold-400);
+  --warning-text: #f0c061;
+  --warning-tint: rgba(236, 178, 74, 0.14);
+  --info: var(--cyan-400);
+  --info-text: var(--cyan-400);
+  --info-tint: rgba(61, 214, 196, 0.12);
+
+  --ring: var(--cyan-400);
+
+  /* Geometry — technical, modest radii */
+  --radius-card: var(--radius-sm);
+  --radius-control: var(--radius-xs);
+  --radius-input: var(--radius-xs);
+  --radius-chip: var(--radius-xs);
+
+  /* Elevation — depth + glow */
+  --elev-sm: var(--shadow-a-sm);
+  --elev-md: var(--shadow-a-md);
+  --elev-lg: var(--shadow-a-lg);
+  --elev-pop: var(--glow-cyan);
+
+  /* Motion — snappy */
+  --ease-env: var(--ease-snap);
+  --dur-env: var(--dur-fast);
+
+  /* Fonts — sans UI, mono everywhere data lives */
+  --font-display: var(--font-sans);
+  --font-reading: var(--font-sans);
+
+  background: var(--bg);
+  color: var(--text-1);
+}

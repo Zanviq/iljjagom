@@ -1,3 +1,4 @@
+import { GroupLabel, Metric } from "@/components/admin/Metric";
 import { getAdminUsage } from "@/lib/api";
 import { getAccessToken } from "@/lib/auth/server";
 
@@ -5,104 +6,70 @@ export default async function AdminConsolePage() {
   const token = await getAccessToken();
   const usage = await getAdminUsage(token);
 
+  const num = (n: number) => n.toLocaleString();
+
   return (
-    <section>
-      <h1 className="text-3xl font-extrabold">개요</h1>
-      <p className="mt-1 text-muted">사용량과 안전 신호를 한눈에 봐요.</p>
-
-      <h2 className="mb-3 mt-8 text-lg font-bold">사용자</h2>
-      <dl className="grid grid-cols-2 gap-3 sm:grid-cols-4">
-        <Stat label="전체" value={usage.users.total} />
-        <Stat label="학생" value={usage.users.students} />
-        <Stat label="교사" value={usage.users.teachers} />
-        <Stat label="관리자" value={usage.users.admins} />
-      </dl>
-
-      <h2 className="mb-3 mt-8 text-lg font-bold">콘텐츠</h2>
-      <dl className="grid grid-cols-2 gap-3 sm:grid-cols-4">
-        <Stat label="학급" value={usage.classrooms} />
-        <Stat label="발제" value={usage.prompts} />
-        <Stat label="책(전체)" value={usage.books.total} />
-        <Stat label="집필 챕터" value={usage.chaptersWritten} />
-      </dl>
-      <dl className="mt-3 grid grid-cols-2 gap-3 sm:grid-cols-3">
-        <Stat label="기획 중" value={usage.books.planning} />
-        <Stat label="집필 중" value={usage.books.writing} />
-        <Stat label="완독" value={usage.books.done} />
-      </dl>
-
-      <h2 className="mb-3 mt-8 text-lg font-bold">안전 신호</h2>
-      <dl className="grid grid-cols-2 gap-3 sm:grid-cols-4">
-        <Stat
-          label="미처리"
+    <div>
+      <div className="grid gap-3.5 [grid-template-columns:repeat(2,1fr)] sm:[grid-template-columns:repeat(4,1fr)]">
+        {usage.completionRate !== undefined && (
+          <Metric
+            label="완독률"
+            value={Math.round(usage.completionRate * 100)}
+            unit="%"
+            accent="var(--primary)"
+          />
+        )}
+        {usage.revisitRate !== undefined && (
+          <Metric
+            label="재방문률"
+            value={Math.round(usage.revisitRate * 100)}
+            unit="%"
+            accent="var(--accent)"
+          />
+        )}
+        {usage.eventsTotal !== undefined && (
+          <Metric label="이벤트" value={num(usage.eventsTotal)} />
+        )}
+        <Metric
+          label="미처리 안전신호"
           value={usage.safetyFlags.open}
-          highlight={usage.safetyFlags.open > 0}
+          unit={`/ ${usage.safetyFlags.total}`}
+          flag={usage.safetyFlags.open > 0}
         />
-        <Stat label="전체" value={usage.safetyFlags.total} />
-      </dl>
+      </div>
 
-      {(usage.completionRate !== undefined ||
-        usage.revisitRate !== undefined ||
-        usage.eventsTotal !== undefined) && (
-        <>
-          <h2 className="mb-3 mt-8 text-lg font-bold">측정</h2>
-          <dl className="grid grid-cols-2 gap-3 sm:grid-cols-4">
-            {usage.completionRate !== undefined && (
-              <Stat
-                label="완독률"
-                value={`${Math.round(usage.completionRate * 100)}%`}
-              />
-            )}
-            {usage.revisitRate !== undefined && (
-              <Stat
-                label="재방문률"
-                value={`${Math.round(usage.revisitRate * 100)}%`}
-              />
-            )}
-            {usage.eventsTotal !== undefined && (
-              <Stat label="이벤트" value={usage.eventsTotal} />
-            )}
-          </dl>
-        </>
-      )}
+      <GroupLabel>사용자</GroupLabel>
+      <div className="grid gap-3.5 [grid-template-columns:repeat(2,1fr)] sm:[grid-template-columns:repeat(4,1fr)]">
+        <Metric label="전체" value={num(usage.users.total)} />
+        <Metric label="학생" value={num(usage.users.students)} unit="명" />
+        <Metric label="교사" value={usage.users.teachers} unit="명" />
+        <Metric label="관리자" value={usage.users.admins} unit="명" />
+      </div>
+
+      <GroupLabel>콘텐츠</GroupLabel>
+      <div className="grid gap-3.5 [grid-template-columns:repeat(2,1fr)] sm:[grid-template-columns:repeat(4,1fr)]">
+        <Metric label="학급" value={num(usage.classrooms)} />
+        <Metric label="발제" value={num(usage.prompts)} />
+        <Metric label="책 (전체)" value={num(usage.books.total)} />
+        <Metric label="집필 챕터" value={num(usage.chaptersWritten)} />
+      </div>
+      <div className="mt-3.5 grid gap-3.5 [grid-template-columns:repeat(3,1fr)]">
+        <Metric label="기획 중" value={usage.books.planning} />
+        <Metric label="집필 중" value={usage.books.writing} accent="var(--primary)" />
+        <Metric label="완독" value={num(usage.books.done)} accent="var(--success-text)" />
+      </div>
 
       {usage.learningResults && (
-        <dl className="mt-3 grid grid-cols-2 gap-3 sm:grid-cols-4">
-          <Stat label="퀴즈" value={usage.learningResults.quiz} />
-          <Stat label="독후감" value={usage.learningResults.essay} />
-          <Stat label="감정" value={usage.learningResults.emotion} />
-          <Stat label="편지" value={usage.learningResults.letter} />
-        </dl>
+        <>
+          <GroupLabel>학습 결과</GroupLabel>
+          <div className="grid gap-3.5 [grid-template-columns:repeat(2,1fr)] sm:[grid-template-columns:repeat(4,1fr)]">
+            <Metric label="퀴즈" value={num(usage.learningResults.quiz)} />
+            <Metric label="독후감" value={num(usage.learningResults.essay)} />
+            <Metric label="감정" value={num(usage.learningResults.emotion)} />
+            <Metric label="편지" value={num(usage.learningResults.letter)} />
+          </div>
+        </>
       )}
-    </section>
-  );
-}
-
-function Stat({
-  label,
-  value,
-  highlight,
-}: {
-  label: string;
-  value: number | string;
-  highlight?: boolean;
-}) {
-  return (
-    <div
-      className={`rounded-card p-4 ring-1 ${
-        highlight
-          ? "bg-danger/10 ring-danger"
-          : "bg-surface ring-border"
-      }`}
-    >
-      <dt className="text-xs font-bold text-muted">{label}</dt>
-      <dd
-        className={`mt-1 text-2xl font-extrabold ${
-          highlight ? "text-danger" : ""
-        }`}
-      >
-        {value}
-      </dd>
     </div>
   );
 }
