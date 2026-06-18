@@ -9,7 +9,8 @@ import { Button } from "@/components/ui/Button";
 import { Card } from "@/components/ui/Card";
 import { ChatBubble } from "@/components/ui/ChatBubble";
 import { ErrorText } from "@/components/ui/ErrorText";
-import { Input } from "@/components/ui/Input";
+import { Textarea } from "@/components/ui/Textarea";
+import { TypingIndicator } from "@/components/ui/TypingIndicator";
 import { ApiError, getBook, postDesign, postPlanMessage } from "@/lib/api";
 import { answerAiSession } from "@/lib/ai";
 import type { AskUserAnswer, AskUserPrompt } from "@/lib/ai";
@@ -133,8 +134,8 @@ export function PlanChat({ bookId }: { bookId: string }) {
             </ChatBubble>
           ))}
           {sending && (
-            <ChatBubble from="ai" name="곰 작가" streaming>
-              생각하고 있어요
+            <ChatBubble from="ai" name="곰 작가">
+              <TypingIndicator />
             </ChatBubble>
           )}
           <div ref={endRef} />
@@ -158,16 +159,19 @@ export function PlanChat({ bookId }: { bookId: string }) {
             e.preventDefault();
             void send();
           }}
-          className={`flex items-center gap-2.5 border-t border-line bg-surface-inset p-4 ${
+          className={`flex items-end gap-2.5 border-t border-line bg-surface-inset p-4 ${
             ask ? "hidden" : ""
           }`}
         >
-          <Input
+          <Textarea
             value={input}
             onChange={(e) => setInput(e.target.value)}
+            onSubmit={() => void send()}
+            autoGrow
             placeholder="여기에 이야기를 적어요"
             disabled={designing}
             aria-label="이야기 입력"
+            className="flex-1"
           />
           <Button
             type="submit"
