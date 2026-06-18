@@ -51,6 +51,7 @@ import type {
   SettingPut,
   TokenUsageReport,
   TrackEvent,
+  UpdatePromptRequest,
   Word,
 } from "./types";
 
@@ -209,6 +210,32 @@ export function getPrompts(
 ): Promise<{ prompts: Prompt[] }> {
   return apiFetch<{ prompts: Prompt[] }>(`/classes/${classId}/prompts`, {
     token,
+  });
+}
+
+/** 발제 수정(04 기능개선 교사/02). */
+export function updatePrompt(
+  token: string | null,
+  classId: string,
+  promptId: string,
+  body: UpdatePromptRequest,
+): Promise<Prompt> {
+  return apiFetch<Prompt>(`/classes/${classId}/prompts/${promptId}`, {
+    token,
+    method: "PATCH",
+    body,
+  });
+}
+
+/** 발제 마감(신규 책 생성 차단). */
+export function closePrompt(
+  token: string | null,
+  classId: string,
+  promptId: string,
+): Promise<Prompt> {
+  return apiFetch<Prompt>(`/classes/${classId}/prompts/${promptId}/close`, {
+    token,
+    method: "POST",
   });
 }
 

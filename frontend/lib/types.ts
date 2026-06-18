@@ -74,6 +74,24 @@ export interface Prompt {
   assessment: Assessment;
   language: string;
   createdAt: string;
+  /* 04 기능개선 교사/02 확장(선택) */
+  gradeBand?: number | null;
+  chaptersPlanned?: number | null;
+  dueAt?: string | null;
+  status?: "open" | "closed";
+  safetyLevel?: SafetyLevel;
+}
+
+/** PATCH /classes/{classId}/prompts/{promptId} 요청(부분 수정) */
+export interface UpdatePromptRequest {
+  topic?: string;
+  learningObjectives?: string[];
+  assessment?: Assessment;
+  language?: string;
+  gradeBand?: number | null;
+  chaptersPlanned?: number | null;
+  dueAt?: string | null;
+  safetyLevel?: SafetyLevel;
 }
 
 /** POST /classes/{classId}/prompts 요청 */
