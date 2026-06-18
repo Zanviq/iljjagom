@@ -2,8 +2,10 @@
 
 import { useId, useState } from "react";
 
-import { buttonClass } from "@/components/ui/Button";
+import { Button } from "@/components/ui/Button";
 import { ErrorText } from "@/components/ui/ErrorText";
+import { Icon } from "@/components/ui/Icon";
+import { Textarea } from "@/components/ui/Textarea";
 import { cn } from "@/lib/cn";
 import type { AskUserAnswer, AskUserPrompt } from "@/lib/ai";
 
@@ -45,12 +47,11 @@ export function AskUserPanel({
     <section
       role="group"
       aria-label="이야기 친구의 질문"
-      className="rounded-card bg-surface p-5 ring-2 ring-primary/40"
+      className="rounded-[var(--radius-card)] bg-surface p-5"
+      style={{ border: "2px solid color-mix(in oklab, var(--primary) 45%, transparent)" }}
     >
-      <p className="flex items-start gap-2 text-lg font-bold">
-        <span aria-hidden className="text-xl">
-          💬
-        </span>
+      <p className="flex items-start gap-2 text-[length:var(--text-md)] font-bold text-ink">
+        <Icon name="message-circle" size={20} style={{ color: "var(--primary)" }} />
         <span>{prompt.question}</span>
       </p>
 
@@ -69,10 +70,10 @@ export function AskUserPanel({
                   setText("");
                 }}
                 className={cn(
-                  "rounded-card border-2 px-4 py-3 text-left text-lg font-bold transition disabled:opacity-50",
+                  "rounded-[var(--radius-input)] border-2 px-4 py-3 text-left text-[length:var(--text-md)] font-bold transition disabled:opacity-50",
                   active
-                    ? "border-primary bg-primary/10 text-foreground"
-                    : "border-border bg-background hover:border-primary",
+                    ? "border-primary bg-primary-tint text-ink"
+                    : "border-line-strong bg-surface-2 hover:border-primary",
                 )}
               >
                 {choice}
@@ -86,11 +87,11 @@ export function AskUserPanel({
         <div className="mt-4">
           <label
             htmlFor={textId}
-            className="mb-1 block text-sm font-bold text-muted"
+            className="mb-1 block text-[length:var(--text-sm)] font-bold text-ink-2"
           >
             {prompt.choices.length > 0 ? "아니면 직접 적어볼래?" : "여기에 적어줘"}
           </label>
-          <textarea
+          <Textarea
             id={textId}
             value={text}
             onChange={(e) => {
@@ -100,21 +101,22 @@ export function AskUserPanel({
             rows={2}
             disabled={pending}
             placeholder="내 생각을 적어줘…"
-            className="w-full resize-none rounded-xl border-2 border-border bg-background px-4 py-3 text-lg"
           />
         </div>
       )}
 
       {error && <ErrorText className="mt-3">{error}</ErrorText>}
 
-      <button
+      <Button
         type="button"
         onClick={submit}
         disabled={!canSend}
-        className={buttonClass("primary", "md", "mt-4 w-full")}
+        fullWidth
+        loading={pending}
+        className="mt-4"
       >
         {pending ? "전하는 중…" : "이걸로 할래!"}
-      </button>
+      </Button>
     </section>
   );
 }

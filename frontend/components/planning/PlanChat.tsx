@@ -5,8 +5,11 @@ import { useEffect, useRef, useState } from "react";
 
 import { AskUserPanel } from "@/components/ai/AskUserPanel";
 import { CharacterCard } from "@/components/planning/CharacterCard";
-import { buttonClass } from "@/components/ui/Button";
+import { Button } from "@/components/ui/Button";
+import { Card } from "@/components/ui/Card";
+import { ChatBubble } from "@/components/ui/ChatBubble";
 import { ErrorText } from "@/components/ui/ErrorText";
+import { Input } from "@/components/ui/Input";
 import { ApiError, getBook, postDesign, postPlanMessage } from "@/lib/api";
 import { answerAiSession } from "@/lib/ai";
 import type { AskUserAnswer, AskUserPrompt } from "@/lib/ai";
@@ -26,7 +29,7 @@ interface Message {
 
 const INTRO: Message = {
   who: "ai",
-  text: "안녕! 우리 함께 멋진 이야기를 만들어 보자. 어떤 주인공이 나오면 좋겠어?",
+  text: "안녕! 오늘은 어떤 주인공이 나오는 이야기를 만들어 볼까?",
 };
 
 const sleep = (ms: number) => new Promise((r) => setTimeout(r, ms));
@@ -67,9 +70,7 @@ export function PlanChat({ bookId }: { bookId: string }) {
       setReadyToWrite(reply.readyToWrite);
       setAsk(extractAsk(reply));
     } catch (e) {
-      setError(
-        e instanceof ApiError ? e.message : "메시지를 보내지 못했어요.",
-      );
+      setError(e instanceof ApiError ? e.message : "메시지를 보내지 못했어요.");
     } finally {
       setSending(false);
     }
@@ -87,9 +88,7 @@ export function PlanChat({ bookId }: { bookId: string }) {
       setAsk(null);
       // 흐름 재개 응답 형태는 백엔드 확정 대기(handoff). 확정되면 후속 reply를 이어붙인다.
     } catch (e) {
-      setAskError(
-        e instanceof ApiError ? e.message : "대답을 전하지 못했어요.",
-      );
+      setAskError(e instanceof ApiError ? e.message : "대답을 전하지 못했어요.");
     } finally {
       setAnswering(false);
     }
@@ -115,30 +114,36 @@ export function PlanChat({ bookId }: { bookId: string }) {
       }
       router.push(readPath);
     } catch (e) {
-      setError(
-        e instanceof ApiError ? e.message : "이야기를 시작하지 못했어요.",
-      );
+      setError(e instanceof ApiError ? e.message : "이야기를 시작하지 못했어요.");
       setDesigning(false);
     }
   }
 
   return (
-    <div className="grid gap-6 md:grid-cols-[1fr_18rem]">
-      <div className="flex min-h-[60vh] flex-col rounded-card bg-surface ring-1 ring-border">
-        <div className="flex-1 space-y-4 overflow-y-auto p-5">
+    <div className="grid items-start gap-[22px] [grid-template-columns:1fr] md:[grid-template-columns:1.55fr_1fr]">
+      <Card padding="none" style={{ display: "flex", flexDirection: "column", height: 460, overflow: "hidden" }}>
+        <div className="flex flex-1 flex-col gap-4 overflow-y-auto p-[22px]">
           {messages.map((m, i) => (
-            <Bubble key={i} who={m.who} text={m.text} />
+            <ChatBubble
+              key={i}
+              from={m.who === "child" ? "me" : "ai"}
+              name={m.who === "ai" ? "곰 작가" : undefined}
+            >
+              <span className="whitespace-pre-wrap">{m.text}</span>
+            </ChatBubble>
           ))}
-          {sending && <Bubble who="ai" text="음… 생각 중이야 ✏️" muted />}
+          {sending && (
+            <ChatBubble from="ai" name="곰 작가" streaming>
+              생각하고 있어요
+            </ChatBubble>
+          )}
           <div ref={endRef} />
         </div>
 
-        {error && (
-          <ErrorText className="px-5 pb-2">{error}</ErrorText>
-        )}
+        {error && <ErrorText className="px-[22px] pb-2">{error}</ErrorText>}
 
         {ask && (
-          <div className="border-t border-border p-4">
+          <div className="border-t border-line p-4">
             <AskUserPanel
               prompt={ask}
               pending={answering}
@@ -153,78 +158,44 @@ export function PlanChat({ bookId }: { bookId: string }) {
             e.preventDefault();
             void send();
           }}
-          className={`flex items-end gap-2 border-t border-border p-4 ${
+          className={`flex items-center gap-2.5 border-t border-line bg-surface-inset p-4 ${
             ask ? "hidden" : ""
           }`}
         >
-          <textarea
+          <Input
             value={input}
             onChange={(e) => setInput(e.target.value)}
-            onKeyDown={(e) => {
-              if (e.key === "Enter" && !e.shiftKey) {
-                e.preventDefault();
-                void send();
-              }
-            }}
-            rows={1}
-            placeholder="이야기를 들려줘…"
+            placeholder="여기에 이야기를 적어요"
             disabled={designing}
-            className="max-h-32 flex-1 resize-none rounded-xl border-2 border-border bg-background px-4 py-3 text-lg"
+            aria-label="이야기 입력"
           />
-          <button
+          <Button
             type="submit"
+            icon="send"
             disabled={sending || designing || !input.trim()}
-            className={buttonClass("primary", "md")}
+            className="flex-none"
           >
             보내기
-          </button>
+          </Button>
         </form>
-      </div>
+      </Card>
 
-      <div className="space-y-4">
+      <div className="flex flex-col gap-4">
         <CharacterCard draft={draft} />
-
-        <div className="rounded-card bg-surface p-5 ring-1 ring-border">
-          <p className="text-sm text-muted">
-            {readyToWrite
-              ? "이제 이야기를 시작할 준비가 됐어요!"
-              : "주인공과 이야기를 더 들려주면 시작 버튼이 켜져요."}
-          </p>
-          <button
-            onClick={() => void startWriting()}
-            disabled={!readyToWrite || designing}
-            className={buttonClass("secondary", "lg", "mt-3 w-full")}
-          >
-            {designing ? "이야기 준비 중…" : "✨ 이야기 시작하기"}
-          </button>
-        </div>
-      </div>
-    </div>
-  );
-}
-
-function Bubble({
-  who,
-  text,
-  muted,
-}: {
-  who: "child" | "ai";
-  text: string;
-  muted?: boolean;
-}) {
-  const isChild = who === "child";
-  return (
-    <div className={isChild ? "flex justify-end" : "flex justify-start"}>
-      <div
-        className={[
-          "max-w-[80%] whitespace-pre-wrap rounded-2xl px-4 py-3 text-lg",
-          isChild
-            ? "bg-primary text-primary-foreground"
-            : "bg-background ring-1 ring-border",
-          muted ? "opacity-70" : "",
-        ].join(" ")}
-      >
-        {text}
+        <Button
+          size="lg"
+          icon="wand-sparkles"
+          fullWidth
+          onClick={() => void startWriting()}
+          disabled={!readyToWrite || designing}
+        >
+          {designing ? "이야기 준비 중…" : "이야기 시작하기"}
+        </Button>
+        <p className="text-center text-[length:var(--text-sm)] text-ink-3">
+          {readyToWrite
+            ? "이제 이야기를 시작할 준비가 됐어요!"
+            : "주인공과 이야기를 더 들려주면 시작 버튼이 켜져요."}
+        </p>
       </div>
     </div>
   );
