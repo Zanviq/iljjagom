@@ -9,6 +9,7 @@
 from __future__ import annotations
 
 import asyncio
+import logging
 import uuid
 from dataclasses import dataclass
 
@@ -17,10 +18,12 @@ from fastapi import Depends, Request
 from jwt import PyJWKClient
 
 from app.config import Settings, get_settings
-from app.errors import consent_required, forbidden, unauthorized
+from app.errors import ApiError, consent_required, forbidden, unauthorized
 from app.store import get_store
 from app.store.base import Store
 from app.store.records import ProfileRecord
+
+logger = logging.getLogger("app.deps")
 
 _DEV_NAMESPACE = uuid.UUID("00000000-0000-0000-0000-00000000d39e")
 _SUPABASE_AUD = "authenticated"
@@ -73,14 +76,15 @@ def _resolve_identity(token: str, settings: Settings) -> tuple[str, str]:
 
 
 def _verify_supabase_jwt(token: str, settings: Settings) -> dict:
-    """Supabase 사용자 JWT 검증. 헤더 alg 로 ES256(JWKS)/HS256(레거시) 분기."""
+    """Supabase 사용자 JWT 검증. 헤더 alg 로 ES256(JWKS)/HS256(레거시) 분기.
+
+    검증 실패는 **항상 401(unauthorized)** 로 매핑한다(fail-closed). 만료·위조 등 PyJWT 오류뿐
+    아니라 JWKS HTTP 비정상 응답(json 디코드 실패)·네트워크 등 예기치 못한 예외도 401 로 처리해
+    프론트가 로그인으로 리다이렉트하도록 한다(500 금지).
+    """
     try:
         header = jwt.get_unverified_header(token)
-    except jwt.PyJWTError:
-        raise unauthorized("토큰 형식이 올바르지 않습니다.")
-    alg = header.get("alg")
-
-    try:
+        alg = header.get("alg")
         if alg in _ASYM_ALGS:
             if not settings.supabase_jwks_url:
                 raise unauthorized("서버에 JWKS 설정이 없습니다.")
@@ -104,8 +108,14 @@ def _verify_supabase_jwt(token: str, settings: Settings) -> dict:
                 options={"verify_aud": True},
             )
         raise unauthorized("지원하지 않는 토큰 서명 방식입니다.")
+    except ApiError:
+        raise  # 이미 401 등으로 의도된 응답
     except jwt.PyJWTError:
+        # 만료(ExpiredSignatureError)·위조·aud/iss 불일치·형식 오류·JWKS 키 없음 등.
         raise unauthorized("토큰이 유효하지 않거나 만료되었습니다.")
+    except Exception as exc:  # noqa: BLE001 — JWKS HTTP 비정상/네트워크 등도 401 로 fail-closed
+        logger.warning("토큰 검증 중 예기치 못한 오류 → 401 처리: %r", exc)
+        raise unauthorized("토큰을 확인할 수 없어요. 다시 로그인해 주세요.")
 
 
 def get_store_dep() -> Store:

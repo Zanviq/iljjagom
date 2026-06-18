@@ -71,6 +71,31 @@ def test_es256_rejects_bad_issuer_aud_expiry_tamper(monkeypatch):
             deps._resolve_identity(bad, settings)
 
 
+def test_jwks_non_jwt_error_maps_to_401(monkeypatch):
+    # JWKS HTTP 비정상(예: 비-JSON 응답 → JSONDecodeError) 등 PyJWTError 아닌 예외도 401 로 fail-closed.
+    import json as _json
+
+    priv = ec.generate_private_key(ec.SECP256R1())
+
+    class _BoomJWKS:
+        def get_signing_key_from_jwt(self, token):
+            raise _json.JSONDecodeError("Expecting value", "<html>", 0)
+
+    monkeypatch.setattr(deps, "_jwks_client", lambda url: _BoomJWKS())
+    settings = Settings(supabase_url="https://proj.supabase.co", supabase_service_role_key="x")
+    tok = jwt.encode(_claims(), priv, algorithm="ES256")
+    with pytest.raises(ApiError) as ei:
+        deps._resolve_identity(tok, settings)
+    assert ei.value.status_code == 401
+
+
+def test_malformed_token_maps_to_401():
+    settings = Settings(supabase_url="https://proj.supabase.co", supabase_service_role_key="x")
+    with pytest.raises(ApiError) as ei:
+        deps._resolve_identity("this.is.not-a-real-jwt", settings)
+    assert ei.value.status_code == 401
+
+
 def test_hs256_legacy_verify(monkeypatch):
     settings = Settings(supabase_jwt_secret="test-secret-at-least-32-bytes-long!!", supabase_url="")
     tok = jwt.encode(_claims(), "test-secret-at-least-32-bytes-long!!", algorithm="HS256")
