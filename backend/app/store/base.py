@@ -12,6 +12,7 @@ from app.store.records import (
     BookRecord,
     ChapterRecord,
     ChunkRecord,
+    ClassPostRecord,
     ClassroomRecord,
     EventRecord,
     LearningArtifactRecord,
@@ -156,6 +157,25 @@ class Store(ABC):
 
     @abstractmethod
     def list_writing_turns(self, chapter_id: str) -> list[WritingTurnRecord]: ...
+
+    # --- 학급 게시판 (학생/15 §4) ---
+    @abstractmethod
+    def add_class_post(
+        self, classroom_id: str, book_id: str, student_id: str, title: str,
+        intro: str | None, snapshot: dict[str, Any], status: str,
+    ) -> ClassPostRecord: ...
+
+    @abstractmethod
+    def get_class_post(self, post_id: str) -> ClassPostRecord | None: ...
+
+    @abstractmethod
+    def get_class_post_by_book(self, book_id: str) -> ClassPostRecord | None: ...
+
+    @abstractmethod
+    def list_class_posts(self, classroom_id: str) -> list[ClassPostRecord]: ...
+
+    @abstractmethod
+    def update_class_post(self, post_id: str, **fields: Any) -> ClassPostRecord: ...
 
     # --- RAG chunks ---
     @abstractmethod

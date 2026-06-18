@@ -18,6 +18,7 @@ from app.store.records import (
     BookRecord,
     ChapterRecord,
     ChunkRecord,
+    ClassPostRecord,
     ClassroomRecord,
     EventRecord,
     LearningArtifactRecord,
@@ -47,6 +48,7 @@ class InMemoryStore(Store):
         self.plan_messages: list[PlanMessageRecord] = []
         self.paragraphs: list[ParagraphRecord] = []
         self.writing_turns: list[WritingTurnRecord] = []
+        self.class_posts: list[ClassPostRecord] = []
         self.chunks: list[ChunkRecord] = []
         self.safety_flags: list[SafetyFlagRecord] = []
         self.letters: list[LetterRecord] = []
@@ -297,6 +299,36 @@ class InMemoryStore(Store):
             (t for t in self.writing_turns if t.chapter_id == chapter_id),
             key=lambda t: t.created_at,
         )
+
+    # --- 학급 게시판 ---
+    def add_class_post(
+        self, classroom_id: str, book_id: str, student_id: str, title: str,
+        intro: str | None, snapshot: dict[str, Any], status: str,
+    ) -> ClassPostRecord:
+        rec = ClassPostRecord(
+            id=new_id(), classroom_id=classroom_id, book_id=book_id, student_id=student_id,
+            title=title, intro=intro, snapshot=snapshot, status=status, created_at=now_iso(),
+        )
+        self.class_posts.append(rec)
+        return rec
+
+    def get_class_post(self, post_id: str) -> ClassPostRecord | None:
+        return next((p for p in self.class_posts if p.id == post_id), None)
+
+    def get_class_post_by_book(self, book_id: str) -> ClassPostRecord | None:
+        return next((p for p in self.class_posts if p.book_id == book_id), None)
+
+    def list_class_posts(self, classroom_id: str) -> list[ClassPostRecord]:
+        return sorted(
+            (p for p in self.class_posts if p.classroom_id == classroom_id),
+            key=lambda p: p.created_at, reverse=True,
+        )
+
+    def update_class_post(self, post_id: str, **fields: Any) -> ClassPostRecord:
+        rec = self.get_class_post(post_id)
+        for k, v in fields.items():
+            setattr(rec, k, v)
+        return rec
 
     # --- RAG chunks ---
     def add_chunk(

@@ -19,6 +19,7 @@ from app.store.records import (
     BookRecord,
     ChapterRecord,
     ChunkRecord,
+    ClassPostRecord,
     ClassroomRecord,
     EventRecord,
     LearningArtifactRecord,
@@ -378,6 +379,47 @@ class SupabaseStore(Store):
             .execute()
         )
         return [WritingTurnRecord(**r) for r in rows]
+
+    # --- 학급 게시판 ---
+    def add_class_post(
+        self, classroom_id: str, book_id: str, student_id: str, title: str,
+        intro: str | None, snapshot: dict[str, Any], status: str,
+    ) -> ClassPostRecord:
+        row = self._one(
+            self.client.table("class_posts")
+            .insert({"classroom_id": classroom_id, "book_id": book_id, "student_id": student_id,
+                     "title": title, "intro": intro, "snapshot": snapshot, "status": status})
+            .execute()
+        )
+        return ClassPostRecord(**row)
+
+    def get_class_post(self, post_id: str) -> ClassPostRecord | None:
+        row = self._one(
+            self.client.table("class_posts").select("*").eq("id", post_id).limit(1).execute()
+        )
+        return ClassPostRecord(**row) if row else None
+
+    def get_class_post_by_book(self, book_id: str) -> ClassPostRecord | None:
+        row = self._one(
+            self.client.table("class_posts").select("*").eq("book_id", book_id).limit(1).execute()
+        )
+        return ClassPostRecord(**row) if row else None
+
+    def list_class_posts(self, classroom_id: str) -> list[ClassPostRecord]:
+        rows = self._rows(
+            self.client.table("class_posts")
+            .select("*")
+            .eq("classroom_id", classroom_id)
+            .order("created_at", desc=True)
+            .execute()
+        )
+        return [ClassPostRecord(**r) for r in rows]
+
+    def update_class_post(self, post_id: str, **fields: Any) -> ClassPostRecord:
+        row = self._one(
+            self.client.table("class_posts").update(fields).eq("id", post_id).execute()
+        )
+        return ClassPostRecord(**row)
 
     # --- RAG chunks ---
     def add_chunk(
