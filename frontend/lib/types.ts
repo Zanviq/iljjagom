@@ -41,6 +41,25 @@ export interface ClassSummary {
   code: string;
 }
 
+/* ── 학급 설정 컨트롤러 (04 기능개선 교사/02, §4 D·§7) ── */
+export type SafetyLevel = "relaxed" | "standard" | "strict";
+
+export interface ClassSettings {
+  safetyLevel: SafetyLevel;
+  /** 학생 기능 on/off (boardAutoPublish·intermediateActivities·… 백엔드가 키 등록) */
+  featureToggles: Record<string, boolean>;
+}
+
+/** GET /classes/{id}/settings — 행 없어도 200(lazy), defaults 동봉 */
+export interface ClassSettingsResponse {
+  value: ClassSettings;
+  defaults: ClassSettings;
+}
+
+export interface ClassSettingsPut {
+  value: Partial<ClassSettings>;
+}
+
 export interface Assessment {
   type: AssessmentType;
   detail: string;

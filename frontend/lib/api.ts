@@ -26,6 +26,8 @@ import type {
   BoardPostStatus,
   BookCreated,
   BookSummary,
+  ClassSettingsPut,
+  ClassSettingsResponse,
   ClassSummary,
   CollabReply,
   CollabState,
@@ -176,6 +178,29 @@ export function rotateClassCode(
     `/classes/${classId}/rotate-code`,
     { token, method: "POST" },
   );
+}
+
+/** 학급 설정 조회(04 기능개선 교사/02). 행 없어도 200(defaults 동봉). */
+export function getClassSettings(
+  token: string | null,
+  classId: string,
+): Promise<ClassSettingsResponse> {
+  return apiFetch<ClassSettingsResponse>(`/classes/${classId}/settings`, {
+    token,
+  });
+}
+
+/** 학급 설정 부분 병합 저장. */
+export function putClassSettings(
+  token: string | null,
+  classId: string,
+  value: ClassSettingsPut["value"],
+): Promise<ClassSettingsResponse> {
+  return apiFetch<ClassSettingsResponse>(`/classes/${classId}/settings`, {
+    token,
+    method: "PUT",
+    body: { value },
+  });
 }
 
 export function getPrompts(

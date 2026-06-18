@@ -104,6 +104,13 @@ export function TeacherSidebar({ me }: { me: Me }) {
         active: pathname.endsWith("/safety"),
         badge: openFlags,
       },
+      {
+        key: "settings",
+        label: "학급 설정",
+        icon: "sliders-horizontal",
+        href: `/classes/${classId}/settings`,
+        active: pathname.endsWith("/settings"),
+      },
     );
   }
 
