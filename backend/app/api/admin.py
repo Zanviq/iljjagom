@@ -3,8 +3,9 @@ from __future__ import annotations
 
 from fastapi import APIRouter, Depends, Query
 
+from app.config import Settings, get_settings
 from app.deps import CurrentUser, get_store_dep, require_role
-from app.models.schemas import AdminUsageResponse, AdminUserPatch, serialize
+from app.models.schemas import AdminUsageResponse, AdminUserPatch, SettingPut, serialize
 from app.services import admin as svc
 from app.store.base import Store
 
@@ -62,3 +63,32 @@ async def list_messages(
     store: Store = Depends(get_store_dep),
 ) -> dict:
     return serialize(svc.list_messages(store, user_id, book_id, kind, since, until, limit))
+
+
+@router.get("/admin/settings")
+async def get_settings_view(
+    user: CurrentUser = Depends(require_role("admin")),
+    store: Store = Depends(get_store_dep),
+    settings: Settings = Depends(get_settings),
+) -> dict:
+    return serialize(svc.get_settings_view(store, settings))
+
+
+@router.put("/admin/settings")
+async def put_settings(
+    payload: SettingPut,
+    user: CurrentUser = Depends(require_role("admin")),
+    store: Store = Depends(get_store_dep),
+) -> dict:
+    return serialize(svc.put_settings(store, user, payload))
+
+
+@router.get("/admin/usage/tokens")
+async def usage_tokens(
+    group_by: str = Query(default="model", alias="groupBy"),
+    since: str | None = Query(default=None, alias="from"),
+    until: str | None = Query(default=None, alias="to"),
+    user: CurrentUser = Depends(require_role("admin")),
+    store: Store = Depends(get_store_dep),
+) -> dict:
+    return serialize(svc.token_usage(store, group_by, since, until))

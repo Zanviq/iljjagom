@@ -69,6 +69,40 @@ async def test_admin_messages(client):
     assert any(m["content"] == "안녕하세요" for m in msgs)
 
 
+async def test_admin_settings_get_put(client):
+    await client.get("/me", headers=ADMIN)
+    view = (await client.get("/admin/settings", headers=ADMIN)).json()
+    assert "env" in view and "googleApiKey" in view["env"]
+    assert view["env"]["googleApiKey"] is False  # 테스트 환경엔 키 없음
+
+    # 허용 키 변경
+    r = await client.put("/admin/settings", headers=ADMIN, json={"key": "notify_interval_sec", "value": 120})
+    assert r.status_code == 200
+    assert r.json()["settings"]["notify_interval_sec"] == 120
+
+    # 시크릿/미허용 키 거부
+    bad = await client.put("/admin/settings", headers=ADMIN, json={"key": "google_api_key", "value": "x"})
+    assert bad.status_code == 400
+
+
+async def test_admin_usage_tokens(client):
+    from app.store import get_store
+
+    await client.get("/me", headers=ADMIN)
+    store = get_store()
+    sess = store.create_ai_session("book-t", "writer", "gemini-2.5-flash")
+    store.add_token_usage(sess.id, "gemini-2.5-flash", 100, 50, 0.001)
+    store.add_token_usage(sess.id, "gemini-2.5-flash", 20, 10, 0.0002)
+    r = await client.get("/admin/usage/tokens", headers=ADMIN, params={"groupBy": "model"})
+    assert r.status_code == 200
+    body = r.json()
+    assert body["groupBy"] == "model"
+    flash = next(b for b in body["buckets"] if b["key"] == "gemini-2.5-flash")
+    assert flash["calls"] == 2
+    assert flash["tokensIn"] == 120
+    assert body["total"]["tokensOut"] == 60
+
+
 async def test_admin_sessions_enriched(client):
     th, sh, _ = await _seed(client)
     # 설계 흐름으로 designer 세션 생성

@@ -6,17 +6,27 @@ from __future__ import annotations
 
 from typing import Any
 
+from app.config import Settings
 from app.deps import CurrentUser
-from app.errors import conflict, not_found
+from app.errors import conflict, not_found, validation_error
 from app.models.schemas import (
     AdminMessage,
     AdminMessagesResponse,
+    AdminSettingsResponse,
     AdminUser,
     AdminUserPatch,
     AdminUsersResponse,
+    SettingPut,
+    TokenUsageBucket,
+    TokenUsageResponse,
 )
 from app.store.base import Store
 from app.store.records import ProfileRecord
+
+# app_settings 에 허용되는 비-시크릿 런타임 키(시크릿 저장 방지).
+ALLOWED_SETTING_KEYS = {
+    "models", "feature_toggles", "rate_limits", "notify_interval_sec", "safety_level",
+}
 
 
 def audit(store: Store, admin: CurrentUser, action: str, target: str | None, detail: dict) -> None:
@@ -120,4 +130,58 @@ def list_messages(
             )
             for m in rows
         ]
+    )
+
+
+# --- settings (런타임 설정) ---
+def get_settings_view(store: Store, settings: Settings) -> AdminSettingsResponse:
+    return AdminSettingsResponse(
+        settings=store.all_settings(),
+        env={
+            "googleApiKey": bool(settings.google_api_key),
+            "supabaseUrl": bool(settings.supabase_url),
+            "supabaseServiceRoleKey": bool(settings.supabase_service_role_key),
+            "supabaseJwtSecret": bool(settings.supabase_jwt_secret),
+        },
+    )
+
+
+def put_settings(
+    store: Store, admin: CurrentUser, payload: SettingPut
+) -> AdminSettingsResponse:
+    updates: dict[str, Any] = {}
+    if payload.settings is not None:
+        updates.update(payload.settings)
+    if payload.key is not None:
+        updates[payload.key] = payload.value
+    if not updates:
+        raise validation_error("변경할 설정이 없습니다.")
+    bad = [k for k in updates if k not in ALLOWED_SETTING_KEYS]
+    if bad:
+        raise validation_error(
+            f"허용되지 않은 설정 키: {', '.join(bad)} (시크릿은 환경변수로만).",
+            {"allowed": sorted(ALLOWED_SETTING_KEYS)},
+        )
+    for k, v in updates.items():
+        store.set_setting(k, v, updated_by=admin.id)
+    # 런타임 반영 — rate limit 설정 캐시 무효화.
+    from app.ratelimit import reset as ratelimit_reset
+
+    ratelimit_reset()
+    audit(store, admin, "put_settings", None, {"keys": sorted(updates.keys())})
+    from app.config import get_settings as _gs
+
+    return get_settings_view(store, _gs())
+
+
+# --- token usage ---
+def token_usage(
+    store: Store, group_by: str, since: str | None, until: str | None
+) -> TokenUsageResponse:
+    gb = group_by if group_by in ("model", "role", "day") else "model"
+    agg = store.token_usage_buckets(group_by=gb, since=since, until=until)
+    return TokenUsageResponse(
+        group_by=gb,
+        buckets=[TokenUsageBucket(**b) for b in agg["buckets"]],
+        total=TokenUsageBucket(**agg["total"]),
     )

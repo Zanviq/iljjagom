@@ -322,6 +322,13 @@ class Store(ABC):
     @abstractmethod
     def token_usage_summary(self, since: str | None = None) -> dict[str, Any]: ...
 
+    @abstractmethod
+    def token_usage_buckets(
+        self, group_by: str = "model", since: str | None = None, until: str | None = None
+    ) -> dict[str, Any]:
+        """groupBy(model|role|day) 별 토큰/비용 집계. {buckets:[{key,calls,...}], total}."""
+        ...
+
     # --- notifications (00 §6) ---
     @abstractmethod
     def create_notification(

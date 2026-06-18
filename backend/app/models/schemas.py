@@ -391,6 +391,31 @@ class AdminMessagesResponse(CamelModel):
     messages: list[AdminMessage] = []
 
 
+class TokenUsageBucket(CamelModel):
+    key: str
+    calls: int = 0
+    tokens_in: int = 0
+    tokens_out: int = 0
+    est_cost: float = 0.0
+
+
+class TokenUsageResponse(CamelModel):
+    group_by: str
+    buckets: list[TokenUsageBucket] = []
+    total: TokenUsageBucket = TokenUsageBucket(key="total")
+
+
+class AdminSettingsResponse(CamelModel):
+    settings: dict[str, Any] = {}
+    env: dict[str, bool] = {}
+
+
+class SettingPut(CamelModel):
+    key: str | None = None
+    value: Any | None = None
+    settings: dict[str, Any] | None = None
+
+
 class AdminUsageResponse(CamelModel):
     users: UsersStat = UsersStat()
     classrooms: int = 0

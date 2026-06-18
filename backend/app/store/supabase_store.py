@@ -825,6 +825,46 @@ class SupabaseStore(Store):
             "by_model": by_model,
         }
 
+    def token_usage_buckets(
+        self, group_by: str = "model", since: str | None = None, until: str | None = None
+    ) -> dict[str, Any]:
+        # role 그룹은 세션 role 임베드 조인. 그 외는 token_usage 컬럼만.
+        select = "model, tokens_in, tokens_out, est_cost, created_at"
+        if group_by == "role":
+            select += ", ai_sessions(role)"
+        q = self.client.table("token_usage").select(select)
+        if since is not None:
+            q = q.gte("created_at", since)
+        if until is not None:
+            q = q.lte("created_at", until)
+        rows = self._rows(q.limit(10000).execute())
+
+        def key_of(r: dict) -> str:
+            if group_by == "day":
+                return (r.get("created_at") or "")[:10]
+            if group_by == "role":
+                sess = r.get("ai_sessions") or {}
+                if isinstance(sess, list):
+                    sess = sess[0] if sess else {}
+                return (sess or {}).get("role") or "unknown"
+            return r.get("model") or "unknown"
+
+        buckets: dict[str, dict[str, Any]] = {}
+        total = {"calls": 0, "tokens_in": 0, "tokens_out": 0, "est_cost": 0.0}
+        for r in rows:
+            b = buckets.setdefault(
+                key_of(r), {"calls": 0, "tokens_in": 0, "tokens_out": 0, "est_cost": 0.0}
+            )
+            for agg, val in (("calls", 1), ("tokens_in", r.get("tokens_in") or 0),
+                             ("tokens_out", r.get("tokens_out") or 0),
+                             ("est_cost", float(r.get("est_cost") or 0))):
+                b[agg] += val
+                total[agg] += val
+        return {
+            "buckets": [{"key": k, **v} for k, v in sorted(buckets.items())],
+            "total": {"key": "total", **total},
+        }
+
     # --- notifications ---
     def create_notification(
         self, title: str, body: str | None = None, level: str = "info",

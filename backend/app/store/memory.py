@@ -631,6 +631,38 @@ class InMemoryStore(Store):
             "by_model": by_model,
         }
 
+    def token_usage_buckets(
+        self, group_by: str = "model", since: str | None = None, until: str | None = None
+    ) -> dict[str, Any]:
+        rows = [
+            u for u in self.token_usage
+            if (since is None or u.created_at >= since)
+            and (until is None or u.created_at <= until)
+        ]
+
+        def key_of(u) -> str:
+            if group_by == "day":
+                return (u.created_at or "")[:10]
+            if group_by == "role":
+                sess = self.ai_sessions.get(u.session_id) if u.session_id else None
+                return sess.role if sess else "unknown"
+            return u.model
+
+        buckets: dict[str, dict[str, Any]] = {}
+        total = {"calls": 0, "tokens_in": 0, "tokens_out": 0, "est_cost": 0.0}
+        for u in rows:
+            b = buckets.setdefault(
+                key_of(u), {"calls": 0, "tokens_in": 0, "tokens_out": 0, "est_cost": 0.0}
+            )
+            for agg, val in (("calls", 1), ("tokens_in", u.tokens_in),
+                             ("tokens_out", u.tokens_out), ("est_cost", u.est_cost)):
+                b[agg] += val
+                total[agg] += val
+        return {
+            "buckets": [{"key": k, **v} for k, v in sorted(buckets.items())],
+            "total": {"key": "total", **total},
+        }
+
     # --- notifications ---
     def create_notification(
         self, title: str, body: str | None = None, level: str = "info",
