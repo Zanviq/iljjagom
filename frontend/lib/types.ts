@@ -569,6 +569,8 @@ export interface AdminSettingsResponse {
   settings: Record<string, unknown>;
   /** env 키 존재 여부만(값 비노출) */
   env: Record<string, boolean>;
+  /** 04 기능개선 관리자/02: 키별 컨트롤 메타(백엔드 노출 시) — 미제공이면 프론트 기본 스키마 */
+  schema?: Record<string, unknown>;
 }
 export interface SettingPut {
   key?: string;
