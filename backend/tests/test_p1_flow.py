@@ -344,7 +344,9 @@ async def test_learning_artifacts(client):
     assert len(body["emotion"]) >= 1
     assert body["emotion"][0]["chapterIdx"] == 1
     assert len(body["quiz"]) >= 1
-    assert body["quiz"][0]["answerIndex"] == 0
+    # 학생/10: 정답 인덱스는 choices 범위 안의 유효 위치(고정 0 아님).
+    for q in body["quiz"]:
+        assert 0 <= q["answerIndex"] < len(q["choices"])
     assert len(body["essayBlanks"]) >= 1
 
 

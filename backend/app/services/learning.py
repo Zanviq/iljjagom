@@ -5,6 +5,9 @@
 """
 from __future__ import annotations
 
+import asyncio
+import random
+
 from app.ai import chat
 from app.ai.gemini import GeminiClient
 from app.ai.safety import check_input
@@ -26,6 +29,31 @@ from app.store.base import Store
 _EMOTION_LABELS = ["설렘", "호기심", "긴장", "용기", "감동", "뿌듯함"]
 
 
+def _make_quiz_item(obj: str, seed_key: str) -> QuizItem:
+    """정답 위치를 결정적(book_id+문항 시드)으로 셔플 → 캐싱·mock 결정성 유지하며 분산(학생/10)."""
+    correct = f"{obj}을(를) 보여주는 장면"
+    choices = [correct, "이야기와 관계없는 이야기", "전혀 다른 과목 내용"]
+    random.Random(seed_key).shuffle(choices)
+    return QuizItem(
+        question=f"이 이야기에서 '{obj}'와(과) 가장 관련 있는 것은 무엇일까요?",
+        choices=choices,
+        answer_index=choices.index(correct),
+    )
+
+
+def _build_quiz(objectives: list[str], book_id: str) -> list[QuizItem]:
+    quiz = [_make_quiz_item(obj, f"{book_id}:{i}") for i, obj in enumerate(objectives[:5])]
+    # 쏠림 가드: 정답이 전부 같은 인덱스면 마지막 문항만 한 칸 회전(전부 0 방지).
+    if len(quiz) > 1 and len({q.answer_index for q in quiz}) == 1:
+        last = quiz[-1]
+        rot = (last.answer_index + 1) % len(last.choices)
+        last.choices[last.answer_index], last.choices[rot] = (
+            last.choices[rot], last.choices[last.answer_index],
+        )
+        last.answer_index = rot
+    return quiz
+
+
 async def build_learning(
     store: Store, gemini: GeminiClient, user: CurrentUser, book_id: str
 ) -> LearningResponse:
@@ -44,27 +72,18 @@ async def build_learning(
                 terms.append(w)
     # 뜻풀이는 외부 AI 호출이라 일시 오류(503)가 날 수 있다 → 실패한 단어는 건너뛰고
     # 나머지 학습 활동(quiz/essay/emotion)은 그대로 제공(부분 강등).
-    vocab: list[Word] = []
-    for t in terms[:8]:
-        try:
-            vocab.append(await words.lookup(gemini, t))
-        except Exception:
-            continue
+    # 병렬 호출(학생/10): 8회 직렬 대기 → gather 로 체감 딜레이 완화. 순서 보존.
+    results = await asyncio.gather(
+        *(words.lookup(gemini, t) for t in terms[:8]), return_exceptions=True
+    )
+    vocab: list[Word] = [r for r in results if isinstance(r, Word)]
 
-    # 2) 퀴즈: 학습목표(이벤트별 objective, 없으면 발제 목표)에서 생성.
+    # 2) 퀴즈: 학습목표(이벤트별 objective, 없으면 발제 목표)에서 생성. 정답 위치 결정적 분산.
     objectives = [e.get("objective") for e in bible.get("events", []) if e.get("objective")]
     if not objectives and book.prompt_id:
         prompt = store.get_prompt(book.prompt_id)
         objectives = list(prompt.learning_objectives) if prompt else []
-    quiz: list[QuizItem] = []
-    for obj in objectives[:5]:
-        quiz.append(
-            QuizItem(
-                question=f"이 이야기에서 '{obj}'와(과) 가장 관련 있는 것은 무엇일까요?",
-                choices=[f"{obj}을(를) 보여주는 장면", "이야기와 관계없는 이야기", "전혀 다른 과목 내용"],
-                answer_index=0,
-            )
-        )
+    quiz = _build_quiz([o for o in objectives if o], book_id)
 
     # 3) 독후감 빈칸: 인물/제목 기반 일반 프롬프트.
     char_names = [c.get("name", "") for c in bible.get("characters", []) if c.get("name")]
