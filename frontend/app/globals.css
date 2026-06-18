@@ -12,6 +12,7 @@
 @import "./design/tokens/theme-teacher.css"; /* .theme-teacher */
 @import "./design/tokens/theme-admin.css"; /* .theme-admin */
 @import "./design/tokens/base.css"; /* reset · .ijg-* · focus */
+@import "./design/components.css"; /* 컴포넌트 hover/focus/checked (universal) */
 
 /* next/font 연결: typography.css의 폴백 체인 앞에 자체 호스팅 폰트를 첫 순위로.
    (Pretendard는 layout.tsx에서 npm 패키지로 자체 호스팅) */
