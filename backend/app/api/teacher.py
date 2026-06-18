@@ -7,7 +7,6 @@ from app.deps import CurrentUser, get_current_user, get_store_dep, require_role
 from app.models.schemas import (
     ClassesResponse,
     CreatePromptRequest,
-    DashboardResponse,
     PromptsResponse,
     serialize,
 )

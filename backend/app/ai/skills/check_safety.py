@@ -29,6 +29,7 @@ class CheckSafety(Skill):
             "reason": result.reason,
             "suggestion": result.suggestion,
             "risk": result.risk,
+            "category": result.category,
             "severity": severity,
             "kind": kind,
         }

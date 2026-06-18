@@ -6,6 +6,7 @@ from __future__ import annotations
 
 import time
 from collections import defaultdict, deque
+from dataclasses import asdict
 from typing import Any
 
 from app.store.base import Store
@@ -18,6 +19,9 @@ from app.store.records import (
     ChapterRecord,
     ChunkRecord,
     ClassroomRecord,
+    EventRecord,
+    LearningArtifactRecord,
+    LetterRecord,
     MessageRecord,
     NotificationRecord,
     PlanMessageRecord,
@@ -41,6 +45,9 @@ class InMemoryStore(Store):
         self.plan_messages: list[PlanMessageRecord] = []
         self.chunks: list[ChunkRecord] = []
         self.safety_flags: list[SafetyFlagRecord] = []
+        self.letters: list[LetterRecord] = []
+        self.events: list[EventRecord] = []
+        self.learning_artifacts: list[LearningArtifactRecord] = []
         # 추가기능(03)
         self.ai_sessions: dict[str, AiSessionRecord] = {}
         self.ai_steps: list[AiStepRecord] = []
@@ -58,8 +65,33 @@ class InMemoryStore(Store):
     def upsert_profile(self, profile: ProfileRecord) -> ProfileRecord:
         if not profile.created_at:
             profile.created_at = now_iso()
+        # 기존 status 보존(없던 프로필이면 active 기본).
+        existing = self.profiles.get(profile.id)
+        if existing and not profile.status:
+            profile.status = existing.status
         self.profiles[profile.id] = profile
         return profile
+
+    def list_profiles(
+        self, query: str | None = None, role: str | None = None, limit: int = 200
+    ) -> list[ProfileRecord]:
+        q = (query or "").lower()
+        rows = [
+            p for p in self.profiles.values()
+            if (not q or q in p.email.lower())
+            and (role is None or p.role == role)
+        ]
+        rows.sort(key=lambda p: p.created_at, reverse=True)
+        return rows[:limit]
+
+    def update_profile_fields(self, user_id: str, **fields: Any) -> ProfileRecord:
+        rec = self.profiles[user_id]
+        for k, v in fields.items():
+            setattr(rec, k, v)
+        return rec
+
+    def count_profiles_by_role(self, role: str) -> int:
+        return sum(1 for p in self.profiles.values() if p.role == role)
 
     # --- classrooms / enrollments ---
     def create_classroom(
@@ -246,7 +278,14 @@ class InMemoryStore(Store):
 
     # --- safety ---
     def add_safety_flag(
-        self, book_id: str | None, student_id: str | None, source: str, reason: str
+        self,
+        book_id: str | None,
+        student_id: str | None,
+        source: str,
+        reason: str,
+        category: str | None = None,
+        severity: str = "normal",
+        letter_id: str | None = None,
     ) -> SafetyFlagRecord:
         rec = SafetyFlagRecord(
             id=new_id(),
@@ -255,10 +294,154 @@ class InMemoryStore(Store):
             source=source,
             reason=reason,
             status="open",
+            category=category,
+            severity=severity,
+            letter_id=letter_id,
             created_at=now_iso(),
         )
         self.safety_flags.append(rec)
         return rec
+
+    def _book_ids_for_class(self, class_id: str) -> set[str]:
+        return {b.id for b in self.books.values() if b.classroom_id == class_id}
+
+    def get_safety_flag(self, flag_id: str) -> SafetyFlagRecord | None:
+        return next((f for f in self.safety_flags if f.id == flag_id), None)
+
+    def list_safety_flags(
+        self,
+        class_id: str | None = None,
+        book_id: str | None = None,
+        status: str | None = None,
+        source: str | None = None,
+        limit: int = 100,
+    ) -> list[SafetyFlagRecord]:
+        class_books = self._book_ids_for_class(class_id) if class_id else None
+        rows = [
+            f for f in self.safety_flags
+            if (book_id is None or f.book_id == book_id)
+            and (class_books is None or f.book_id in class_books)
+            and (status is None or f.status == status)
+            and (source is None or f.source == source)
+        ]
+        rows.sort(key=lambda f: f.created_at, reverse=True)
+        return rows[:limit]
+
+    def update_safety_flag(self, flag_id: str, **fields: Any) -> SafetyFlagRecord:
+        rec = self.get_safety_flag(flag_id)
+        if rec is None:
+            raise KeyError(flag_id)
+        for k, v in fields.items():
+            setattr(rec, k, v)
+        return rec
+
+    # --- letters ---
+    def add_letter(
+        self,
+        book_id: str,
+        student_id: str | None,
+        recipient: str,
+        body: str,
+        status: str = "pending",
+        reply: str | None = None,
+        reply_source: str | None = None,
+    ) -> LetterRecord:
+        rec = LetterRecord(
+            id=new_id(), book_id=book_id, student_id=student_id, recipient=recipient,
+            body=body, status=status, reply=reply, reply_source=reply_source,
+            created_at=now_iso(),
+        )
+        self.letters.append(rec)
+        return rec
+
+    def get_letter(self, letter_id: str) -> LetterRecord | None:
+        return next((m for m in self.letters if m.id == letter_id), None)
+
+    def list_letters(
+        self,
+        class_id: str | None = None,
+        book_id: str | None = None,
+        status: str | None = None,
+        limit: int = 100,
+    ) -> list[LetterRecord]:
+        class_books = self._book_ids_for_class(class_id) if class_id else None
+        rows = [
+            m for m in self.letters
+            if (book_id is None or m.book_id == book_id)
+            and (class_books is None or m.book_id in class_books)
+            and (status is None or m.status == status)
+        ]
+        rows.sort(key=lambda m: m.created_at, reverse=True)
+        return rows[:limit]
+
+    def update_letter(self, letter_id: str, **fields: Any) -> LetterRecord:
+        rec = self.get_letter(letter_id)
+        if rec is None:
+            raise KeyError(letter_id)
+        for k, v in fields.items():
+            setattr(rec, k, v)
+        return rec
+
+    # --- events ---
+    def add_events(self, student_id: str, items: list[dict[str, Any]]) -> int:
+        n = 0
+        for it in items:
+            self.events.append(
+                EventRecord(
+                    id=new_id(), book_id=it.get("book_id"), student_id=student_id,
+                    type=it["type"], payload=it.get("payload") or {}, created_at=now_iso(),
+                )
+            )
+            n += 1
+        return n
+
+    def list_events(
+        self,
+        class_id: str | None = None,
+        book_id: str | None = None,
+        student_id: str | None = None,
+        type: str | None = None,
+        since: str | None = None,
+        limit: int = 1000,
+    ) -> list[EventRecord]:
+        class_books = self._book_ids_for_class(class_id) if class_id else None
+        rows = [
+            e for e in self.events
+            if (book_id is None or e.book_id == book_id)
+            and (class_books is None or e.book_id in class_books)
+            and (student_id is None or e.student_id == student_id)
+            and (type is None or e.type == type)
+            and (since is None or e.created_at >= since)
+        ]
+        rows.sort(key=lambda e: e.created_at, reverse=True)
+        return rows[:limit]
+
+    # --- learning_artifacts ---
+    def add_learning_artifact(
+        self, book_id: str, type: str, data: dict[str, Any], chapter_id: str | None = None
+    ) -> LearningArtifactRecord:
+        rec = LearningArtifactRecord(
+            id=new_id(), book_id=book_id, type=type, data=data,
+            chapter_id=chapter_id, created_at=now_iso(),
+        )
+        self.learning_artifacts.append(rec)
+        return rec
+
+    def list_learning_artifacts(
+        self,
+        book_id: str | None = None,
+        class_id: str | None = None,
+        type: str | None = None,
+    ) -> list[LearningArtifactRecord]:
+        class_books = self._book_ids_for_class(class_id) if class_id else None
+        rows = [
+            a for a in self.learning_artifacts
+            if (book_id is None or a.book_id == book_id)
+            and (class_books is None or a.book_id in class_books)
+            and (type is None or a.type == type)
+        ]
+        rows.sort(key=lambda a: a.created_at, reverse=True)
+        return rows
 
     # --- 관리자 집계 ---
     def usage_counts(self) -> dict[str, Any]:
@@ -291,6 +474,32 @@ class InMemoryStore(Store):
                 "open": sum(1 for f in self.safety_flags if f.status == "open"),
                 "total": len(self.safety_flags),
             },
+            **self._measurement_counts(),
+        }
+
+    def _measurement_counts(self) -> dict[str, Any]:
+        opened = {e.student_id for e in self.events if e.type == "chapter_open"}
+        finished = {e.student_id for e in self.events if e.type == "book_finished"}
+        completion = round(len(finished & opened) / len(opened), 2) if opened else 0.0
+        days: dict[str, set[str]] = {}
+        for e in self.events:
+            if e.type in ("chapter_open", "learning_open") and e.student_id:
+                days.setdefault(e.student_id, set()).add((e.created_at or "")[:10])
+        active = len(days)
+        revisitors = sum(1 for d in days.values() if len(d) >= 2)
+        revisit = round(revisitors / active, 2) if active else 0.0
+
+        def la_n(t: str) -> int:
+            return sum(1 for a in self.learning_artifacts if a.type == t)
+
+        return {
+            "completion_rate": completion,
+            "revisit_rate": revisit,
+            "events_total": len(self.events),
+            "learning_results": {
+                "quiz": la_n("quiz"), "essay": la_n("essay"),
+                "emotion": la_n("emotion"), "letter": la_n("letter"),
+            },
         }
 
     # --- AI 세션 / ReAct 트레이스 ---
@@ -314,12 +523,21 @@ class InMemoryStore(Store):
         return self.ai_sessions.get(session_id)
 
     def list_ai_sessions(
-        self, book_id: str | None = None, status: str | None = None, limit: int = 50
+        self,
+        book_id: str | None = None,
+        status: str | None = None,
+        role: str | None = None,
+        since: str | None = None,
+        until: str | None = None,
+        limit: int = 50,
     ) -> list[AiSessionRecord]:
         rows = [
             s for s in self.ai_sessions.values()
             if (book_id is None or s.book_id == book_id)
             and (status is None or s.status == status)
+            and (role is None or s.role == role)
+            and (since is None or s.started_at >= since)
+            and (until is None or s.started_at <= until)
         ]
         rows.sort(key=lambda s: s.started_at, reverse=True)
         return rows[:limit]
@@ -362,6 +580,26 @@ class InMemoryStore(Store):
             key=lambda m: m.created_at,
         )
 
+    def list_messages_admin(
+        self,
+        user_id: str | None = None,
+        book_id: str | None = None,
+        kind: str | None = None,
+        since: str | None = None,
+        until: str | None = None,
+        limit: int = 100,
+    ) -> list[MessageRecord]:
+        rows = [
+            m for m in self.messages
+            if (user_id is None or m.user_id == user_id)
+            and (book_id is None or m.book_id == book_id)
+            and (kind is None or m.kind == kind)
+            and (since is None or m.created_at >= since)
+            and (until is None or m.created_at <= until)
+        ]
+        rows.sort(key=lambda m: m.created_at, reverse=True)
+        return rows[:limit]
+
     # --- token_usage ---
     def add_token_usage(
         self, session_id: str | None, model: str,
@@ -392,6 +630,38 @@ class InMemoryStore(Store):
             "tokens_out": sum(u.tokens_out for u in rows),
             "est_cost": sum(u.est_cost for u in rows),
             "by_model": by_model,
+        }
+
+    def token_usage_buckets(
+        self, group_by: str = "model", since: str | None = None, until: str | None = None
+    ) -> dict[str, Any]:
+        rows = [
+            u for u in self.token_usage
+            if (since is None or u.created_at >= since)
+            and (until is None or u.created_at <= until)
+        ]
+
+        def key_of(u) -> str:
+            if group_by == "day":
+                return (u.created_at or "")[:10]
+            if group_by == "role":
+                sess = self.ai_sessions.get(u.session_id) if u.session_id else None
+                return sess.role if sess else "unknown"
+            return u.model
+
+        buckets: dict[str, dict[str, Any]] = {}
+        total = {"calls": 0, "tokens_in": 0, "tokens_out": 0, "est_cost": 0.0}
+        for u in rows:
+            b = buckets.setdefault(
+                key_of(u), {"calls": 0, "tokens_in": 0, "tokens_out": 0, "est_cost": 0.0}
+            )
+            for agg, val in (("calls", 1), ("tokens_in", u.tokens_in),
+                             ("tokens_out", u.tokens_out), ("est_cost", u.est_cost)):
+                b[agg] += val
+                total[agg] += val
+        return {
+            "buckets": [{"key": k, **v} for k, v in sorted(buckets.items())],
+            "total": {"key": "total", **total},
         }
 
     # --- notifications ---
@@ -456,6 +726,85 @@ class InMemoryStore(Store):
 
     def list_audit(self, limit: int = 100) -> list[AuditRecord]:
         return sorted(self.audit, key=lambda a: a.created_at, reverse=True)[:limit]
+
+    # --- backup ---
+    def _dict_tables(self) -> dict[str, tuple[dict, Any, str]]:
+        return {
+            "profiles": (self.profiles, ProfileRecord, "id"),
+            "classrooms": (self.classrooms, ClassroomRecord, "id"),
+            "prompts": (self.prompts, PromptRecord, "id"),
+            "books": (self.books, BookRecord, "id"),
+            "bibles": (self.bibles, BibleRecord, "book_id"),
+            "chapters": (self.chapters, ChapterRecord, "id"),
+            "ai_sessions": (self.ai_sessions, AiSessionRecord, "id"),
+        }
+
+    def _list_tables(self) -> dict[str, tuple[list, Any]]:
+        return {
+            "plan_messages": (self.plan_messages, PlanMessageRecord),
+            "learning_artifacts": (self.learning_artifacts, LearningArtifactRecord),
+            "events": (self.events, EventRecord),
+            "safety_flags": (self.safety_flags, SafetyFlagRecord),
+            "letters": (self.letters, LetterRecord),
+            "ai_steps": (self.ai_steps, AiStepRecord),
+            "messages": (self.messages, MessageRecord),
+            "token_usage": (self.token_usage, TokenUsageRecord),
+            "notifications": (self.notifications, NotificationRecord),
+            "audit_log": (self.audit, AuditRecord),
+        }
+
+    def export_tables(self, tables: list[str]) -> dict[str, list[dict[str, Any]]]:
+        dt, lt = self._dict_tables(), self._list_tables()
+        out: dict[str, list[dict[str, Any]]] = {}
+        for t in tables:
+            if t in dt:
+                out[t] = [asdict(v) for v in dt[t][0].values()]
+            elif t in lt:
+                out[t] = [asdict(v) for v in lt[t][0]]
+            elif t == "enrollments":
+                out[t] = [{"classroom_id": c, "student_id": s} for (c, s) in self.enrollments]
+            elif t == "app_settings":
+                out[t] = [{"key": k, "value": v} for k, v in self.settings.items()]
+            else:
+                out[t] = []
+        return out
+
+    def import_tables(
+        self, mode: str, tables: dict[str, list[dict[str, Any]]]
+    ) -> dict[str, int]:
+        dt, lt = self._dict_tables(), self._list_tables()
+        counts: dict[str, int] = {}
+        for t, rows in tables.items():
+            n = 0
+            if t in dt:
+                coll, cls, key = dt[t]
+                if mode == "overwrite":
+                    coll.clear()
+                for r in rows:
+                    rec = cls(**r)
+                    coll[getattr(rec, key)] = rec
+                    n += 1
+            elif t in lt:
+                coll, cls = lt[t]
+                if mode == "overwrite":
+                    coll.clear()
+                for r in rows:
+                    coll.append(cls(**r))
+                    n += 1
+            elif t == "enrollments":
+                if mode == "overwrite":
+                    self.enrollments.clear()
+                for r in rows:
+                    self.enrollments.add((r["classroom_id"], r["student_id"]))
+                    n += 1
+            elif t == "app_settings":
+                if mode == "overwrite":
+                    self.settings.clear()
+                for r in rows:
+                    self.settings[r["key"]] = r["value"]
+                    n += 1
+            counts[t] = n
+        return counts
 
     # --- rate limit ---
     def rate_hit(self, bucket: str, user_id: str, window: float) -> int:

@@ -84,12 +84,22 @@ class DashboardStudent(CamelModel):
     total_chapters: int | None = None
 
 
+class ObjectiveAchievement(CamelModel):
+    objective: str
+    rate: float = 0.0
+
+
 class DashboardSummary(CamelModel):
     student_count: int = 0
     books_started: int = 0
     books_done: int = 0
-    completion_rate: float = 0.0
+    completion_rate: float = 0.0  # book_finished 기준(과도기 status 폴백)
     vocab_count: int = 0
+    # 추가기능 04 — 실데이터 지표
+    revisit_rate: float = 0.0
+    vocab_quiz_accuracy: float = 0.0
+    objective_achievement: list[ObjectiveAchievement] = []
+    essays_submitted: int = 0
 
 
 class DashboardResponse(CamelModel):
@@ -213,6 +223,108 @@ class LetterRequest(CamelModel):
 class LetterResponse(CamelModel):
     status: Literal["answered", "held"]
     reply: str | None = None
+    letter_id: str | None = None
+
+
+# --- 안전·교사검토 (추가기능 03) ---
+class Letter(CamelModel):
+    id: str
+    book_id: str
+    student_id: str | None = None
+    recipient: str
+    body: str
+    status: str  # pending|answered|held|approved|rejected
+    reply: str | None = None
+    reply_source: str | None = None
+    reviewed_by: str | None = None
+    reviewed_at: str | None = None
+    created_at: str = ""
+
+
+class LettersResponse(CamelModel):
+    letters: list[Letter] = []
+
+
+class SafetyFlag(CamelModel):
+    id: str
+    book_id: str | None = None
+    student_id: str | None = None
+    source: str
+    reason: str
+    category: str | None = None
+    severity: str = "normal"
+    status: str  # open|reviewed|resolved
+    letter_id: str | None = None
+    reviewed_by: str | None = None
+    reviewed_at: str | None = None
+    note: str | None = None
+    created_at: str = ""
+
+
+class SafetyFlagsResponse(CamelModel):
+    flags: list[SafetyFlag] = []
+
+
+class SafetyFlagDetail(SafetyFlag):
+    letter: Letter | None = None
+
+
+class ResolveRequest(CamelModel):
+    note: str | None = None
+
+
+class LetterApproveRequest(CamelModel):
+    reply: str | None = None
+    use_ai_reply: bool = False
+
+
+class LetterRejectRequest(CamelModel):
+    note: str | None = None
+
+
+# --- 측정(추가기능 04) ---
+class TrackEvent(CamelModel):
+    book_id: str | None = None
+    type: str = Field(min_length=1)
+    payload: dict[str, Any] = {}
+    client_ts: str | None = None
+
+
+class EventsRequest(CamelModel):
+    events: list[TrackEvent] = Field(min_length=1, max_length=50)
+
+
+class EventsResponse(CamelModel):
+    accepted: int = 0
+
+
+class LearningResultCreate(CamelModel):
+    type: Literal["quiz", "essay", "emotion"]
+    data: dict[str, Any] = {}
+
+
+class LearningResult(CamelModel):
+    id: str
+    type: str
+    data: dict[str, Any] = {}
+    created_at: str = ""
+
+
+class LearningResultCreated(CamelModel):
+    id: str
+    type: str
+    created_at: str = ""
+
+
+class LearningResultsResponse(CamelModel):
+    results: list[LearningResult] = []
+
+
+class Ask(CamelModel):
+    session_id: str
+    question: str
+    choices: list[str] = []
+    allow_text: bool = True
 
 
 # --- 관리자(FR-M1, 최소) ---
@@ -235,6 +347,118 @@ class SafetyStat(CamelModel):
     total: int = 0
 
 
+class LearningResultsStat(CamelModel):
+    quiz: int = 0
+    essay: int = 0
+    emotion: int = 0
+    letter: int = 0
+
+
+class AdminUser(CamelModel):
+    id: str
+    email: str
+    role: str
+    class_id: str | None = None
+    class_name: str | None = None
+    grade: int | None = None
+    guardian_consent: bool = False
+    status: str = "active"
+    created_at: str = ""
+
+
+class AdminUsersResponse(CamelModel):
+    users: list[AdminUser] = []
+
+
+class AdminUserPatch(CamelModel):
+    role: Role | None = None
+    class_id: str | None = None
+    guardian_consent: bool | None = None
+
+
+class AdminMessage(CamelModel):
+    id: str
+    book_id: str | None = None
+    user_id: str | None = None
+    role: str
+    kind: str
+    content: str
+    session_id: str | None = None
+    created_at: str = ""
+
+
+class AdminMessagesResponse(CamelModel):
+    messages: list[AdminMessage] = []
+
+
+class TokenUsageBucket(CamelModel):
+    key: str
+    calls: int = 0
+    tokens_in: int = 0
+    tokens_out: int = 0
+    est_cost: float = 0.0
+
+
+class TokenUsageResponse(CamelModel):
+    group_by: str
+    buckets: list[TokenUsageBucket] = []
+    total: TokenUsageBucket = TokenUsageBucket(key="total")
+
+
+class AdminSettingsResponse(CamelModel):
+    settings: dict[str, Any] = {}
+    env: dict[str, bool] = {}
+
+
+class SettingPut(CamelModel):
+    key: str | None = None
+    value: Any | None = None
+    settings: dict[str, Any] | None = None
+
+
+class Notification(CamelModel):
+    id: str
+    target_user_id: str | None = None
+    target_role: str | None = None
+    is_broadcast: bool = False
+    title: str
+    body: str | None = None
+    level: str = "info"
+    read_at: str | None = None
+    created_at: str = ""
+
+
+class NotificationsResponse(CamelModel):
+    notifications: list[Notification] = []
+
+
+class NotificationCreate(CamelModel):
+    target_user_id: str | None = None
+    target_role: Role | None = None
+    is_broadcast: bool = False
+    title: str = Field(min_length=1)
+    body: str | None = None
+    level: Literal["info", "warn", "error"] = "info"
+
+
+class BackupExportRequest(CamelModel):
+    tables: list[str] | None = None
+
+
+class BackupExportResponse(CamelModel):
+    exported_at: str
+    tables: dict[str, list[dict[str, Any]]] = {}
+
+
+class BackupImportRequest(CamelModel):
+    mode: Literal["merge", "overwrite"] = "merge"
+    tables: dict[str, list[dict[str, Any]]] = {}
+
+
+class BackupImportResponse(CamelModel):
+    imported: dict[str, int] = {}
+
+
 class AdminUsageResponse(CamelModel):
     users: UsersStat = UsersStat()
     classrooms: int = 0
@@ -242,6 +466,11 @@ class AdminUsageResponse(CamelModel):
     books: BooksStat = BooksStat()
     chapters_written: int = 0
     safety_flags: SafetyStat = SafetyStat()
+    # 추가기능 04 — 전체 지표
+    completion_rate: float = 0.0
+    revisit_rate: float = 0.0
+    events_total: int = 0
+    learning_results: LearningResultsStat = LearningResultsStat()
 
 
 # --- AI 세션 / ReAct 트레이스 (관리자 관측 · 03 §4.2) ---
@@ -267,6 +496,12 @@ class AiSessionView(CamelModel):
     error: str | None = None
     started_at: str = ""
     ended_at: str | None = None
+    # 추가기능 06 — 관리자 콘솔 enrich(목록)
+    user_id: str | None = None
+    user_email: str | None = None
+    step_count: int | None = None
+    tokens_in: int | None = None
+    tokens_out: int | None = None
 
 
 class AiSessionsResponse(CamelModel):

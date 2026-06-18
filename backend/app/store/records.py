@@ -12,6 +12,7 @@ class ProfileRecord:
     role: str = "student"
     guardian_consent: bool = False
     grade: int | None = None
+    status: str = "active"  # active|deactivated (추가기능 06)
     created_at: str = ""
 
 
@@ -101,9 +102,50 @@ class SafetyFlagRecord:
     id: str
     book_id: str | None
     student_id: str | None
-    source: str
+    source: str  # letter|revise|plan|output|image
     reason: str
-    status: str = "open"
+    status: str = "open"  # open|reviewed|resolved
+    category: str | None = None  # violence|hate|sexual|self_harm|profanity ...
+    severity: str = "normal"  # normal|high
+    letter_id: str | None = None
+    reviewed_by: str | None = None
+    reviewed_at: str | None = None
+    note: str | None = None
+    created_at: str = ""
+
+
+@dataclass
+class EventRecord:
+    id: str
+    book_id: str | None
+    student_id: str | None
+    type: str
+    payload: dict[str, Any] = field(default_factory=dict)
+    created_at: str = ""
+
+
+@dataclass
+class LearningArtifactRecord:
+    id: str
+    book_id: str
+    type: str  # vocab|quiz|essay|letter|emotion
+    data: dict[str, Any] = field(default_factory=dict)
+    chapter_id: str | None = None
+    created_at: str = ""
+
+
+@dataclass
+class LetterRecord:
+    id: str
+    book_id: str
+    student_id: str | None
+    recipient: str
+    body: str
+    status: str = "pending"  # pending|answered|held|approved|rejected
+    reply: str | None = None
+    reply_source: str | None = None  # ai|teacher
+    reviewed_by: str | None = None
+    reviewed_at: str | None = None
     created_at: str = ""
 
 

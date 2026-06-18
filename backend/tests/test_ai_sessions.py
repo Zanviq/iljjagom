@@ -16,7 +16,7 @@ async def _student_book(client):
     )
     prompt_id = (await client.get(f"/classes/{class_id}/prompts", headers=th)).json()["prompts"][0]["id"]
     sh = auth("kid_sess@test", "student")
-    await client.post("/onboarding", headers=sh, json={"role": "student", "classCode": code})
+    await client.post("/onboarding", headers=sh, json={"role": "student", "classCode": code, "guardianConsent": True})
     book_id = (await client.post("/books", headers=sh, json={"promptId": prompt_id})).json()["id"]
     await client.post(f"/books/{book_id}/plan/messages", headers=sh, json={"message": "용감한 토끼"})
     await client.post(f"/books/{book_id}/design", headers=sh)

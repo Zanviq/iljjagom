@@ -38,6 +38,12 @@ def forbidden(message: str = "권한이 없습니다.", detail: dict | None = No
     return ApiError(status.HTTP_403_FORBIDDEN, "forbidden", message, detail)
 
 
+def consent_required(
+    message: str = "보호자 동의가 필요해요.", detail: dict | None = None
+) -> ApiError:
+    return ApiError(status.HTTP_403_FORBIDDEN, "consent_required", message, detail)
+
+
 def not_found(message: str = "리소스를 찾을 수 없습니다.", detail: dict | None = None) -> ApiError:
     return ApiError(status.HTTP_404_NOT_FOUND, "not_found", message, detail)
 

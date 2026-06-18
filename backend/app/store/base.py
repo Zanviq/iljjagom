@@ -13,6 +13,9 @@ from app.store.records import (
     ChapterRecord,
     ChunkRecord,
     ClassroomRecord,
+    EventRecord,
+    LearningArtifactRecord,
+    LetterRecord,
     MessageRecord,
     NotificationRecord,
     PlanMessageRecord,
@@ -30,6 +33,17 @@ class Store(ABC):
 
     @abstractmethod
     def upsert_profile(self, profile: ProfileRecord) -> ProfileRecord: ...
+
+    @abstractmethod
+    def list_profiles(
+        self, query: str | None = None, role: str | None = None, limit: int = 200
+    ) -> list[ProfileRecord]: ...
+
+    @abstractmethod
+    def update_profile_fields(self, user_id: str, **fields: Any) -> ProfileRecord: ...
+
+    @abstractmethod
+    def count_profiles_by_role(self, role: str) -> int: ...
 
     # --- classrooms / enrollments ---
     @abstractmethod
@@ -137,8 +151,90 @@ class Store(ABC):
     # --- safety ---
     @abstractmethod
     def add_safety_flag(
-        self, book_id: str | None, student_id: str | None, source: str, reason: str
+        self,
+        book_id: str | None,
+        student_id: str | None,
+        source: str,
+        reason: str,
+        category: str | None = None,
+        severity: str = "normal",
+        letter_id: str | None = None,
     ) -> SafetyFlagRecord: ...
+
+    @abstractmethod
+    def get_safety_flag(self, flag_id: str) -> SafetyFlagRecord | None: ...
+
+    @abstractmethod
+    def list_safety_flags(
+        self,
+        class_id: str | None = None,
+        book_id: str | None = None,
+        status: str | None = None,
+        source: str | None = None,
+        limit: int = 100,
+    ) -> list[SafetyFlagRecord]: ...
+
+    @abstractmethod
+    def update_safety_flag(self, flag_id: str, **fields: Any) -> SafetyFlagRecord: ...
+
+    # --- letters (교사 검토 루프) ---
+    @abstractmethod
+    def add_letter(
+        self,
+        book_id: str,
+        student_id: str | None,
+        recipient: str,
+        body: str,
+        status: str = "pending",
+        reply: str | None = None,
+        reply_source: str | None = None,
+    ) -> LetterRecord: ...
+
+    @abstractmethod
+    def get_letter(self, letter_id: str) -> LetterRecord | None: ...
+
+    @abstractmethod
+    def list_letters(
+        self,
+        class_id: str | None = None,
+        book_id: str | None = None,
+        status: str | None = None,
+        limit: int = 100,
+    ) -> list[LetterRecord]: ...
+
+    @abstractmethod
+    def update_letter(self, letter_id: str, **fields: Any) -> LetterRecord: ...
+
+    # --- events (행동 로그, 04) ---
+    @abstractmethod
+    def add_events(self, student_id: str, items: list[dict[str, Any]]) -> int:
+        """배치 적재. items=[{book_id, type, payload}]. 적재 수 반환."""
+        ...
+
+    @abstractmethod
+    def list_events(
+        self,
+        class_id: str | None = None,
+        book_id: str | None = None,
+        student_id: str | None = None,
+        type: str | None = None,
+        since: str | None = None,
+        limit: int = 1000,
+    ) -> list[EventRecord]: ...
+
+    # --- learning_artifacts (학습결과, 04 — 신규 테이블 대신 재사용) ---
+    @abstractmethod
+    def add_learning_artifact(
+        self, book_id: str, type: str, data: dict[str, Any], chapter_id: str | None = None
+    ) -> LearningArtifactRecord: ...
+
+    @abstractmethod
+    def list_learning_artifacts(
+        self,
+        book_id: str | None = None,
+        class_id: str | None = None,
+        type: str | None = None,
+    ) -> list[LearningArtifactRecord]: ...
 
     # --- 관리자 집계 ---
     @abstractmethod
@@ -161,6 +257,9 @@ class Store(ABC):
         self,
         book_id: str | None = None,
         status: str | None = None,
+        role: str | None = None,
+        since: str | None = None,
+        until: str | None = None,
         limit: int = 50,
     ) -> list[AiSessionRecord]: ...
 
@@ -198,6 +297,17 @@ class Store(ABC):
         self, book_id: str, kind: str | None = None
     ) -> list[MessageRecord]: ...
 
+    @abstractmethod
+    def list_messages_admin(
+        self,
+        user_id: str | None = None,
+        book_id: str | None = None,
+        kind: str | None = None,
+        since: str | None = None,
+        until: str | None = None,
+        limit: int = 100,
+    ) -> list[MessageRecord]: ...
+
     # --- token_usage ---
     @abstractmethod
     def add_token_usage(
@@ -211,6 +321,13 @@ class Store(ABC):
 
     @abstractmethod
     def token_usage_summary(self, since: str | None = None) -> dict[str, Any]: ...
+
+    @abstractmethod
+    def token_usage_buckets(
+        self, group_by: str = "model", since: str | None = None, until: str | None = None
+    ) -> dict[str, Any]:
+        """groupBy(model|role|day) 별 토큰/비용 집계. {buckets:[{key,calls,...}], total}."""
+        ...
 
     # --- notifications (00 §6) ---
     @abstractmethod
@@ -254,6 +371,15 @@ class Store(ABC):
 
     @abstractmethod
     def list_audit(self, limit: int = 100) -> list[AuditRecord]: ...
+
+    # --- backup (06 §3.9) ---
+    @abstractmethod
+    def export_tables(self, tables: list[str]) -> dict[str, list[dict[str, Any]]]: ...
+
+    @abstractmethod
+    def import_tables(
+        self, mode: str, tables: dict[str, list[dict[str, Any]]]
+    ) -> dict[str, int]: ...
 
     # --- rate limit (무상태화, §3.4) ---
     @abstractmethod

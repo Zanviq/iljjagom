@@ -104,10 +104,24 @@ async def write_letter(
     assert_owner_student(user, book)
 
     # 안전 게이트: 부적절/정서 위험 신호 시 답장 보류 + 교사 확인.
+    # 보류 편지는 원문을 letters 에 저장하고 safety_flags 와 연결해 교사 검토로 종결한다.
     safety = check_input(body)
     if not safety.ok or safety.risk:
-        store.add_safety_flag(book_id, user.id, "letter", safety.reason or "정서 위험 신호 감지")
-        return LetterResponse(status="held", reply=None)
+        letter = store.add_letter(book_id, user.id, to, body, status="held")
+        severity = "high" if safety.risk else "normal"
+        store.add_safety_flag(
+            book_id, user.id, "letter",
+            safety.reason or "정서 위험 신호 감지",
+            category=getattr(safety, "category", None),
+            severity=severity,
+            letter_id=letter.id,
+        )
+        # 학습결과(편지)도 함께 기록(04 측정 — 신규 엔드포인트 불필요).
+        store.add_learning_artifact(
+            book_id, "letter",
+            {"to": to, "body": body, "status": "held", "replySaved": False},
+        )
+        return LetterResponse(status="held", reply=None, letter_id=letter.id)
 
     bible_rec = store.get_bible(book_id)
     characters = bible_rec.data.get("characters", []) if bible_rec else []
@@ -118,4 +132,10 @@ async def write_letter(
     reply = await chat.persona_reply(
         gemini, character.get("name", to), character.get("traits", []), body
     )
-    return LetterResponse(status="answered", reply=reply)
+    letter = store.add_letter(
+        book_id, user.id, to, body, status="answered", reply=reply, reply_source="ai"
+    )
+    store.add_learning_artifact(
+        book_id, "letter", {"to": to, "body": body, "status": "answered", "replySaved": True}
+    )
+    return LetterResponse(status="answered", reply=reply, letter_id=letter.id)

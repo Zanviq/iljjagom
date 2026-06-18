@@ -20,6 +20,9 @@ from app.store.records import (
     ChapterRecord,
     ChunkRecord,
     ClassroomRecord,
+    EventRecord,
+    LearningArtifactRecord,
+    LetterRecord,
     MessageRecord,
     NotificationRecord,
     PlanMessageRecord,
@@ -58,6 +61,7 @@ class SupabaseStore(Store):
         return ProfileRecord(**row) if row else None
 
     def upsert_profile(self, profile: ProfileRecord) -> ProfileRecord:
+        # status 는 보내지 않아 기존 값/DB 기본(active) 보존(관리자 deactivate 덮어쓰기 방지).
         payload = {
             "id": profile.id,
             "email": profile.email,
@@ -67,6 +71,27 @@ class SupabaseStore(Store):
         }
         row = self._one(self.client.table("profiles").upsert(payload).execute())
         return ProfileRecord(**row) if row else profile
+
+    def list_profiles(
+        self, query: str | None = None, role: str | None = None, limit: int = 200
+    ) -> list[ProfileRecord]:
+        q = self.client.table("profiles").select("*")
+        if role is not None:
+            q = q.eq("role", role)
+        if query:
+            # ilike 값(패턴)은 PostgREST 가 파라미터로 처리. %/_ 는 와일드카드.
+            q = q.ilike("email", f"%{query}%")
+        rows = self._rows(q.order("created_at", desc=True).limit(limit).execute())
+        return [ProfileRecord(**r) for r in rows]
+
+    def update_profile_fields(self, user_id: str, **fields: Any) -> ProfileRecord:
+        row = self._one(
+            self.client.table("profiles").update(fields).eq("id", user_id).execute()
+        )
+        return ProfileRecord(**row)
+
+    def count_profiles_by_role(self, role: str) -> int:
+        return self._count("profiles", role=role)
 
     # --- classrooms / enrollments ---
     def create_classroom(
@@ -369,7 +394,14 @@ class SupabaseStore(Store):
 
     # --- safety ---
     def add_safety_flag(
-        self, book_id: str | None, student_id: str | None, source: str, reason: str
+        self,
+        book_id: str | None,
+        student_id: str | None,
+        source: str,
+        reason: str,
+        category: str | None = None,
+        severity: str = "normal",
+        letter_id: str | None = None,
     ) -> SafetyFlagRecord:
         row = self._one(
             self.client.table("safety_flags")
@@ -380,14 +412,185 @@ class SupabaseStore(Store):
                     "source": source,
                     "reason": reason,
                     "status": "open",
+                    "category": category,
+                    "severity": severity,
+                    "letter_id": letter_id,
                 }
             )
             .execute()
         )
         return SafetyFlagRecord(**row) if row else SafetyFlagRecord(
             id="", book_id=book_id, student_id=student_id, source=source, reason=reason,
-            created_at=now_iso(),
+            category=category, severity=severity, letter_id=letter_id, created_at=now_iso(),
         )
+
+    def _class_book_ids(self, class_id: str) -> list[str]:
+        rows = self._rows(
+            self.client.table("books").select("id").eq("classroom_id", class_id).execute()
+        )
+        return [r["id"] for r in rows]
+
+    def get_safety_flag(self, flag_id: str) -> SafetyFlagRecord | None:
+        row = self._one(
+            self.client.table("safety_flags").select("*").eq("id", flag_id).limit(1).execute()
+        )
+        return SafetyFlagRecord(**row) if row else None
+
+    def list_safety_flags(
+        self,
+        class_id: str | None = None,
+        book_id: str | None = None,
+        status: str | None = None,
+        source: str | None = None,
+        limit: int = 100,
+    ) -> list[SafetyFlagRecord]:
+        q = self.client.table("safety_flags").select("*")
+        if book_id is not None:
+            q = q.eq("book_id", book_id)
+        if class_id is not None:
+            ids = self._class_book_ids(class_id)
+            if not ids:
+                return []
+            q = q.in_("book_id", ids)
+        if status is not None:
+            q = q.eq("status", status)
+        if source is not None:
+            q = q.eq("source", source)
+        rows = self._rows(q.order("created_at", desc=True).limit(limit).execute())
+        return [SafetyFlagRecord(**r) for r in rows]
+
+    def update_safety_flag(self, flag_id: str, **fields: Any) -> SafetyFlagRecord:
+        row = self._one(
+            self.client.table("safety_flags").update(fields).eq("id", flag_id).execute()
+        )
+        return SafetyFlagRecord(**row)
+
+    # --- letters ---
+    def add_letter(
+        self,
+        book_id: str,
+        student_id: str | None,
+        recipient: str,
+        body: str,
+        status: str = "pending",
+        reply: str | None = None,
+        reply_source: str | None = None,
+    ) -> LetterRecord:
+        row = self._one(
+            self.client.table("letters")
+            .insert(
+                {
+                    "book_id": book_id, "student_id": student_id, "recipient": recipient,
+                    "body": body, "status": status, "reply": reply, "reply_source": reply_source,
+                }
+            )
+            .execute()
+        )
+        return LetterRecord(**row)
+
+    def get_letter(self, letter_id: str) -> LetterRecord | None:
+        row = self._one(
+            self.client.table("letters").select("*").eq("id", letter_id).limit(1).execute()
+        )
+        return LetterRecord(**row) if row else None
+
+    def list_letters(
+        self,
+        class_id: str | None = None,
+        book_id: str | None = None,
+        status: str | None = None,
+        limit: int = 100,
+    ) -> list[LetterRecord]:
+        q = self.client.table("letters").select("*")
+        if book_id is not None:
+            q = q.eq("book_id", book_id)
+        if class_id is not None:
+            ids = self._class_book_ids(class_id)
+            if not ids:
+                return []
+            q = q.in_("book_id", ids)
+        if status is not None:
+            q = q.eq("status", status)
+        rows = self._rows(q.order("created_at", desc=True).limit(limit).execute())
+        return [LetterRecord(**r) for r in rows]
+
+    def update_letter(self, letter_id: str, **fields: Any) -> LetterRecord:
+        row = self._one(
+            self.client.table("letters").update(fields).eq("id", letter_id).execute()
+        )
+        return LetterRecord(**row)
+
+    # --- events ---
+    def add_events(self, student_id: str, items: list[dict[str, Any]]) -> int:
+        if not items:
+            return 0
+        payload = [
+            {
+                "book_id": it.get("book_id"),
+                "student_id": student_id,
+                "type": it["type"],
+                "payload": it.get("payload") or {},
+            }
+            for it in items
+        ]
+        rows = self._rows(self.client.table("events").insert(payload).execute())
+        return len(rows) if rows else len(payload)
+
+    def list_events(
+        self,
+        class_id: str | None = None,
+        book_id: str | None = None,
+        student_id: str | None = None,
+        type: str | None = None,
+        since: str | None = None,
+        limit: int = 1000,
+    ) -> list[EventRecord]:
+        q = self.client.table("events").select("*")
+        if book_id is not None:
+            q = q.eq("book_id", book_id)
+        if class_id is not None:
+            ids = self._class_book_ids(class_id)
+            if not ids:
+                return []
+            q = q.in_("book_id", ids)
+        if student_id is not None:
+            q = q.eq("student_id", student_id)
+        if type is not None:
+            q = q.eq("type", type)
+        if since is not None:
+            q = q.gte("created_at", since)
+        rows = self._rows(q.order("created_at", desc=True).limit(limit).execute())
+        return [EventRecord(**r) for r in rows]
+
+    # --- learning_artifacts ---
+    def add_learning_artifact(
+        self, book_id: str, type: str, data: dict[str, Any], chapter_id: str | None = None
+    ) -> LearningArtifactRecord:
+        row = self._one(
+            self.client.table("learning_artifacts")
+            .insert({"book_id": book_id, "type": type, "data": data, "chapter_id": chapter_id})
+            .execute()
+        )
+        return LearningArtifactRecord(**row)
+
+    def list_learning_artifacts(
+        self,
+        book_id: str | None = None,
+        class_id: str | None = None,
+        type: str | None = None,
+    ) -> list[LearningArtifactRecord]:
+        q = self.client.table("learning_artifacts").select("*")
+        if book_id is not None:
+            q = q.eq("book_id", book_id)
+        if class_id is not None:
+            ids = self._class_book_ids(class_id)
+            if not ids:
+                return []
+            q = q.in_("book_id", ids)
+        if type is not None:
+            q = q.eq("type", type)
+        rows = self._rows(q.order("created_at", desc=True).execute())
+        return [LearningArtifactRecord(**r) for r in rows]
 
     # --- 관리자 집계 ---
     def _count(self, table: str, **eq: Any) -> int:
@@ -425,6 +628,40 @@ class SupabaseStore(Store):
                 "open": self._count("safety_flags", status="open"),
                 "total": self._count("safety_flags"),
             },
+            **self._measurement_counts(),
+        }
+
+    def _measurement_counts(self) -> dict[str, Any]:
+        events_total = self._count("events")
+        # 완독률/재방문률: 이벤트를 가져와 distinct 학생 기준 산출(관리자 관측, 상한 적용).
+        rows = self._rows(
+            self.client.table("events")
+            .select("student_id, type, created_at")
+            .in_("type", ["chapter_open", "book_finished", "learning_open"])
+            .order("created_at", desc=True)
+            .limit(5000)
+            .execute()
+        )
+        opened = {r["student_id"] for r in rows if r["type"] == "chapter_open"}
+        finished = {r["student_id"] for r in rows if r["type"] == "book_finished"}
+        completion = round(len(finished & opened) / len(opened), 2) if opened else 0.0
+        days: dict[str, set[str]] = {}
+        for r in rows:
+            if r["type"] in ("chapter_open", "learning_open") and r.get("student_id"):
+                days.setdefault(r["student_id"], set()).add((r.get("created_at") or "")[:10])
+        active = len(days)
+        revisitors = sum(1 for d in days.values() if len(d) >= 2)
+        revisit = round(revisitors / active, 2) if active else 0.0
+        return {
+            "completion_rate": completion,
+            "revisit_rate": revisit,
+            "events_total": events_total,
+            "learning_results": {
+                "quiz": self._count("learning_artifacts", type="quiz"),
+                "essay": self._count("learning_artifacts", type="essay"),
+                "emotion": self._count("learning_artifacts", type="emotion"),
+                "letter": self._count("learning_artifacts", type="letter"),
+            },
         }
 
     # --- AI 세션 / ReAct 트레이스 ---
@@ -451,13 +688,25 @@ class SupabaseStore(Store):
         return AiSessionRecord(**row) if row else None
 
     def list_ai_sessions(
-        self, book_id: str | None = None, status: str | None = None, limit: int = 50
+        self,
+        book_id: str | None = None,
+        status: str | None = None,
+        role: str | None = None,
+        since: str | None = None,
+        until: str | None = None,
+        limit: int = 50,
     ) -> list[AiSessionRecord]:
         q = self.client.table("ai_sessions").select("*")
         if book_id is not None:
             q = q.eq("book_id", book_id)
         if status is not None:
             q = q.eq("status", status)
+        if role is not None:
+            q = q.eq("role", role)
+        if since is not None:
+            q = q.gte("started_at", since)
+        if until is not None:
+            q = q.lte("started_at", until)
         rows = self._rows(q.order("started_at", desc=True).limit(limit).execute())
         return [AiSessionRecord(**r) for r in rows]
 
@@ -506,6 +755,29 @@ class SupabaseStore(Store):
         rows = self._rows(q.order("created_at").execute())
         return [MessageRecord(**r) for r in rows]
 
+    def list_messages_admin(
+        self,
+        user_id: str | None = None,
+        book_id: str | None = None,
+        kind: str | None = None,
+        since: str | None = None,
+        until: str | None = None,
+        limit: int = 100,
+    ) -> list[MessageRecord]:
+        q = self.client.table("messages").select("*")
+        if user_id is not None:
+            q = q.eq("user_id", user_id)
+        if book_id is not None:
+            q = q.eq("book_id", book_id)
+        if kind is not None:
+            q = q.eq("kind", kind)
+        if since is not None:
+            q = q.gte("created_at", since)
+        if until is not None:
+            q = q.lte("created_at", until)
+        rows = self._rows(q.order("created_at", desc=True).limit(limit).execute())
+        return [MessageRecord(**r) for r in rows]
+
     # --- token_usage ---
     def add_token_usage(
         self, session_id: str | None, model: str,
@@ -551,6 +823,46 @@ class SupabaseStore(Store):
             "tokens_out": sum(r.get("tokens_out") or 0 for r in rows),
             "est_cost": sum(float(r.get("est_cost") or 0) for r in rows),
             "by_model": by_model,
+        }
+
+    def token_usage_buckets(
+        self, group_by: str = "model", since: str | None = None, until: str | None = None
+    ) -> dict[str, Any]:
+        # role 그룹은 세션 role 임베드 조인. 그 외는 token_usage 컬럼만.
+        select = "model, tokens_in, tokens_out, est_cost, created_at"
+        if group_by == "role":
+            select += ", ai_sessions(role)"
+        q = self.client.table("token_usage").select(select)
+        if since is not None:
+            q = q.gte("created_at", since)
+        if until is not None:
+            q = q.lte("created_at", until)
+        rows = self._rows(q.limit(10000).execute())
+
+        def key_of(r: dict) -> str:
+            if group_by == "day":
+                return (r.get("created_at") or "")[:10]
+            if group_by == "role":
+                sess = r.get("ai_sessions") or {}
+                if isinstance(sess, list):
+                    sess = sess[0] if sess else {}
+                return (sess or {}).get("role") or "unknown"
+            return r.get("model") or "unknown"
+
+        buckets: dict[str, dict[str, Any]] = {}
+        total = {"calls": 0, "tokens_in": 0, "tokens_out": 0, "est_cost": 0.0}
+        for r in rows:
+            b = buckets.setdefault(
+                key_of(r), {"calls": 0, "tokens_in": 0, "tokens_out": 0, "est_cost": 0.0}
+            )
+            for agg, val in (("calls", 1), ("tokens_in", r.get("tokens_in") or 0),
+                             ("tokens_out", r.get("tokens_out") or 0),
+                             ("est_cost", float(r.get("est_cost") or 0))):
+                b[agg] += val
+                total[agg] += val
+        return {
+            "buckets": [{"key": k, **v} for k, v in sorted(buckets.items())],
+            "total": {"key": "total", **total},
         }
 
     # --- notifications ---
@@ -628,6 +940,34 @@ class SupabaseStore(Store):
             .select("*").order("created_at", desc=True).limit(limit).execute()
         )
         return [AuditRecord(**r) for r in rows]
+
+    # --- backup ---
+    def export_tables(self, tables: list[str]) -> dict[str, list[dict[str, Any]]]:
+        out: dict[str, list[dict[str, Any]]] = {}
+        for t in tables:
+            try:
+                out[t] = self._rows(self.client.table(t).select("*").limit(10000).execute())
+            except Exception:
+                out[t] = []
+        return out
+
+    def import_tables(
+        self, mode: str, tables: dict[str, list[dict[str, Any]]]
+    ) -> dict[str, int]:
+        counts: dict[str, int] = {}
+        for t, rows in tables.items():
+            n = 0
+            try:
+                if mode == "overwrite":
+                    # 전체 삭제(가짜 조건으로 모든 행) 후 삽입.
+                    self.client.table(t).delete().neq("id", "00000000-0000-0000-0000-000000000000").execute()
+                if rows:
+                    self.client.table(t).upsert(rows).execute()
+                    n = len(rows)
+            except Exception:
+                n = 0
+            counts[t] = n
+        return counts
 
     # --- rate limit (무상태, 멀티 워커 정합) ---
     def rate_hit(self, bucket: str, user_id: str, window: float) -> int:

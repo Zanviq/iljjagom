@@ -12,28 +12,49 @@ from typing import Any
 from app.ai.gemini import GeminiClient
 
 
-def build_prompt(bible: dict[str, Any], event: dict[str, Any], rag_context: str) -> str:
+def build_prompt(
+    bible: dict[str, Any], event: dict[str, Any], rag_context: str, is_final: bool = False
+) -> str:
     chars = ", ".join(c.get("name", "") for c in bible.get("characters", []))
     tone = bible.get("world", {}).get("tone", "따뜻한")
     objective = event.get("objective")
     obj_line = f"이 장에서 자연스럽게 담을 학습 내용: {objective}\n" if objective else ""
+    if is_final:
+        # 마지막 장: 비공개 후반 큰줄기(secretArc)를 회수해 자연스럽게 매듭짓는다.
+        arc = (bible.get("secretArc") or {}).get("outline", "")
+        ending_line = (
+            "이 장은 이야기의 마지막 장이다. 다음 큰 흐름을 자연스럽게 매듭지어 결말을 완성한다: "
+            f"{arc}\n"
+        )
+    else:
+        ending_line = "결말을 미리 드러내지 말고 이 장면만 생생히 묘사한다.\n"
     return (
         "너는 어린이 동화 작가다. 초등학생이 읽기 쉬운 한국어로 한 챕터를 쓴다. "
         f"분위기는 {tone}. 등장인물: {chars}. "
-        "결말을 미리 드러내지 말고 이 장면만 생생히 묘사한다.\n"
+        f"{ending_line}"
         f"{obj_line}"
         f"참고(설정/이전 내용):\n{rag_context}\n\n"
         f"이번 장 개요: {event.get('summary', '')}\n\n본문:"
     )
 
 
-def _mock_chapter_text(bible: dict[str, Any], event: dict[str, Any]) -> str:
+def _mock_chapter_text(
+    bible: dict[str, Any], event: dict[str, Any], is_final: bool = False
+) -> str:
     hero = "주인공"
     chars = bible.get("characters", [])
     if chars:
         hero = chars[0].get("name", "주인공")
     objective = event.get("objective") or "새로운 것"
     idx = event.get("chapterIdx", 1)
+    if is_final:
+        arc = (bible.get("secretArc") or {}).get("outline", "모두가 성장했어요")
+        return (
+            f"{idx}장.\n"
+            f"{hero}은(는) 그동안 배운 '{objective}'을(를) 모두 떠올렸어요. "
+            f"마침내 모든 실마리가 하나로 모였어요.\n"
+            f"{arc} 그렇게 이야기는 따뜻하게 매듭지어졌답니다. 끝."
+        )
     return (
         f"{idx}장.\n"
         f"{hero}은(는) 오늘도 호기심 가득한 눈으로 길을 나섰어요. "
@@ -62,17 +83,18 @@ async def stream_chapter(
     bible: dict[str, Any],
     event: dict[str, Any],
     rag_context: str,
+    is_final: bool = False,
 ) -> AsyncIterator[str]:
-    """본문 토큰 스트림."""
+    """본문 토큰 스트림. is_final 이면 마지막 장 결말(secretArc) 회수."""
     if gemini.mock:
-        text = _mock_chapter_text(bible, event)
+        text = _mock_chapter_text(bible, event, is_final)
         # 글자 단위 흐름을 흉내 내어 작은 조각으로 흘린다.
         for i in range(0, len(text), 4):
             await asyncio.sleep(0)  # 이벤트 루프 양보
             yield text[i : i + 4]
         return
 
-    prompt = build_prompt(bible, event, rag_context)
+    prompt = build_prompt(bible, event, rag_context, is_final)
     async for chunk in gemini.stream_text(gemini.settings.gemini_model_flash, prompt):
         yield chunk
 
