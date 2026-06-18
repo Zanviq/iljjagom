@@ -81,6 +81,21 @@ def _find_event(bible: dict, idx: int) -> dict | None:
     return next((e for e in bible.get("events", []) if e.get("chapterIdx") == idx), None)
 
 
+def _student_grade(store: Store, book_id: str) -> int | None:
+    """낱말 난이도 반영용 학생 학년(학생/05). 없으면 None."""
+    try:
+        book = store.get_book(book_id)
+        prof = store.get_profile(book.student_id) if book and book.student_id else None
+        return prof.grade if prof else None
+    except Exception:
+        return None
+
+
+def _character_names(bible: dict) -> list[str]:
+    """작품 고유명사(인물명) — 낱말 후보에서 제외(학생/05)."""
+    return [c.get("name", "") for c in bible.get("characters", []) if c.get("name")]
+
+
 def _record_complete(store: Store, book_id: str, total: int | None) -> None:
     """완독(마지막 장) 서버 파생 이벤트 — book_finished. 측정(04) 완독률 산출."""
     try:
@@ -227,7 +242,9 @@ async def _produce(
             body, running = await _stream_body(
                 queue, gemini, bible, event, context, is_final, from_offset
             )
-            words = writer.select_words(body)
+            words = writer.select_words(
+                body, _student_grade(store, book_id), _character_names(bible)
+            )
             store.update_chapter(
                 chapter.id, body=body, char_count=len(body), words=words, review_status="pending"
             )
@@ -355,7 +372,9 @@ async def run_first_draft_review(
             chapter.id,
             body=reviewed,
             char_count=len(reviewed),
-            words=writer.select_words(reviewed),
+            words=writer.select_words(
+                reviewed, _student_grade(store, book_id), _character_names(bible_rec.data)
+            ),
             review_status=result.review_status,
         )
     else:
@@ -409,7 +428,7 @@ async def prefetch_chapter(
         if not body:
             trace.end(status="error", error="empty_prefetch")
             return
-        words = writer.select_words(body)
+        words = writer.select_words(body, _student_grade(store, book_id), _character_names(bible))
         store.update_chapter(
             chapter.id, body=body, char_count=len(body), words=words,
             review_status="pending", prefetched=True,  # 진입 전까지 chaptersDone 제외
@@ -484,7 +503,9 @@ async def run_revise(
         chapter.id,
         body=revised_body,
         char_count=len(revised_body),
-        words=writer.select_words(revised_body),
+        words=writer.select_words(
+            revised_body, _student_grade(store, book_id), _character_names(bible)
+        ),
         review_status=result.review_status,
     )
     store.update_book(book_id)  # 마지막 활동 시각 갱신(이어 읽기 정렬)

@@ -71,16 +71,73 @@ def _mock_chapter_text(
     )
 
 
-def select_words(text: str) -> list[str]:
-    """본문에서 단어 도움 대상 후보를 뽑는다(P1 최소: 길이 기준)."""
-    seen: list[str] = []
+# 조사·어미 접미(긴 것 우선 절단 → 표제어 근사). 형태소 분석기 없이 휴리스틱(학생/05).
+_JOSA = (
+    "으로써", "으로서", "에서의", "에게서", "이라고", "에서", "에게", "께서", "라고",
+    "으로", "로서", "로써", "처럼", "보다", "마저", "조차", "까지", "부터", "이나",
+    "에는", "에도", "에만", "한테", "이라", "에", "의", "을", "를", "은", "는",
+    "이", "가", "와", "과", "도", "만", "랑", "께", "로", "야",
+)
+# 흔한 기능어·빈출어(학습 가치 낮음) 제외.
+_STOPWORDS = {
+    "이야기", "우리", "그것", "그리고", "그래서", "하지만", "그러나", "오늘", "정말",
+    "너무", "모두", "다시", "조금", "많이", "서로", "무엇", "어떻게", "그때", "이제",
+    "처음", "사람", "생각", "마음", "모습", "소리", "이렇게", "저렇게", "그렇게", "자신",
+}
+# 용언(동사/형용사) 활용 어미 — 명사 위주 선정을 위해 제외('도착했어요'·'따스한' 등).
+_PREDICATE_END = (
+    "습니다", "았어요", "었어요", "였어요", "했어요", "겠어요", "드려요", "았다", "었다",
+    "였다", "한다", "는다", "해요", "돼요", "아요", "어요", "여요", "았던", "었던", "한",
+)
+
+
+def _lemma(token: str) -> str:
+    """어절에서 조사/어미를 한 번 잘라 표제 근사('계곡에'→'계곡')."""
+    for j in sorted(_JOSA, key=len, reverse=True):
+        if token.endswith(j) and len(token) - len(j) >= 2:
+            return token[: -len(j)]
+    return token
+
+
+def _has_korean(s: str) -> bool:
+    return any("가" <= ch <= "힣" for ch in s)
+
+
+def select_words(
+    text: str, grade: int | None = None, exclude: list[str] | None = None
+) -> list[str]:
+    """단어 도움 후보 선정(학생/05): 표제어화·불용어/고유명사 제외·학년 난이도·전체 스캔 상위 N.
+
+    grade 낮으면 짧은 단어도 허용, 높으면 더 긴(어려운) 단어 우선. exclude 는 작품 고유명사.
+    """
+    # 고학년(5+)은 짧은(쉬운) 단어를 배제해 난도를 올린다. 그 외는 2글자 명사 허용.
+    min_len = 3 if (grade or 3) >= 5 else 2
+    exclude_set: set[str] = set()
+    for name in exclude or []:
+        if name:
+            exclude_set.add(name)
+            exclude_set.add(_lemma(name))
+
+    freq: dict[str, int] = {}
+    order: list[str] = []
     for raw in text.replace("\n", " ").split(" "):
-        token = "".join(ch for ch in raw if ch.isalnum())
-        if len(token) >= 3 and token not in seen:
-            seen.append(token)
-        if len(seen) >= 5:
-            break
-    return seen
+        tok = "".join(ch for ch in raw if ch.isalnum())
+        if not tok or not _has_korean(tok) or tok.endswith(_PREDICATE_END):
+            continue  # 빈 토큰·비한글·용언(활용형) 제외
+        lemma = _lemma(tok)
+        if (
+            len(lemma) < min_len
+            or lemma in _STOPWORDS
+            or lemma in exclude_set
+        ):
+            continue
+        if lemma not in freq:
+            order.append(lemma)
+        freq[lemma] = freq.get(lemma, 0) + 1
+
+    # 점수: 긴 단어(어려움) 우선, 희소(빈도 낮음) 우선, 동점은 본문 등장 순.
+    ranked = sorted(order, key=lambda w: (-len(w), freq[w], order.index(w)))
+    return ranked[:5]
 
 
 async def stream_chapter(
