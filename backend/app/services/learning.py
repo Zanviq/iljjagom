@@ -14,9 +14,11 @@ from app.ai.safety import check_input
 from app.deps import CurrentUser
 from app.errors import validation_error
 from app.models.schemas import (
+    EmotionFrame,
     EmotionPoint,
     EssayBlank,
     LearningResponse,
+    LetterCharacter,
     LetterResponse,
     QuizItem,
     Word,
@@ -26,8 +28,8 @@ from app.services import words
 from app.services.books import assert_can_access_book, assert_owner_student, get_book_or_404
 from app.store.base import Store
 
-# 감정 곡선 라벨(기승전결 흐름). 챕터 진행도에 매핑.
-_EMOTION_LABELS = ["설렘", "호기심", "긴장", "용기", "감동", "뿌듯함"]
+# 감정 팔레트(학생/11 입력 활동). 학생이 장마다 직접 고른다.
+_EMOTION_LABELS = ["설렘", "호기심", "긴장", "용기", "슬픔", "감동", "뿌듯함"]
 
 
 def _make_quiz_item(obj: str, seed_key: str) -> QuizItem:
@@ -78,11 +80,15 @@ async def build_learning(
     sig = _source_sig(chapters)
 
     # 1) 캐시 조회: 같은 sig 의 learning_set 가 있으면 어휘 LLM 호출 없이 즉시 반환.
+    #    (구버전 스냅샷 형태는 검증 실패 시 무시하고 재생성 — emotion 객체화 등 스키마 진화 안전.)
     if chapters:
         for a in store.list_learning_artifacts(book_id=book_id, type=LEARNING_SET):
             if a.data.get("sourceSig") == sig:
                 payload = {k: v for k, v in a.data.items() if k != "sourceSig"}
-                return LearningResponse.model_validate(payload)
+                try:
+                    return LearningResponse.model_validate(payload)
+                except Exception:
+                    break  # 형태 불일치 → 재생성
 
     # 2) 미스 → 생성.
     result = await _generate_learning(store, gemini, book, chapters)
@@ -137,16 +143,23 @@ async def _generate_learning(
         ),
     ]
 
-    # 4) 감정 곡선: 집필된 챕터 순서대로 결정적 값.
-    total = bible.get("totalChaptersPlanned") or len(chapters) or 1
-    emotion: list[EmotionPoint] = []
-    for c in chapters:
-        label = _EMOTION_LABELS[(c.idx - 1) % len(_EMOTION_LABELS)]
-        value = round(min(0.95, 0.3 + 0.6 * (c.idx / total)), 2)
-        emotion.append(EmotionPoint(chapter_idx=c.idx, label=label, value=value))
+    # 4) 감정 곡선: 시스템 자동 곡선 제거 → 학생 입력 틀(장 목록 + 라벨 팔레트, 학생/11).
+    emotion = EmotionFrame(
+        labels=list(_EMOTION_LABELS),
+        points=[EmotionPoint(chapter_idx=c.idx, label=None, value=None) for c in chapters],
+    )
+
+    # 5) 편지 인물 선택지(학생/12): Bible characters 에서 id·name·traits 만.
+    letter_characters = [
+        LetterCharacter(
+            id=c.get("id") or c.get("name", ""), name=c.get("name", ""), traits=c.get("traits", [])
+        )
+        for c in bible.get("characters", []) if c.get("name")
+    ]
 
     return LearningResponse(
-        vocab=vocab, quiz=quiz, essay_blanks=essay_blanks, emotion=emotion
+        vocab=vocab, quiz=quiz, essay_blanks=essay_blanks, emotion=emotion,
+        letter_characters=letter_characters,
     )
 
 

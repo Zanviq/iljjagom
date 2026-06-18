@@ -340,9 +340,11 @@ async def test_learning_artifacts(client):
     r = await client.get(f"/books/{book_id}/learning", headers=sh)
     assert r.status_code == 200
     body = r.json()
-    assert {"vocab", "quiz", "essayBlanks", "emotion"} <= set(body)
-    assert len(body["emotion"]) >= 1
-    assert body["emotion"][0]["chapterIdx"] == 1
+    assert {"vocab", "quiz", "essayBlanks", "emotion", "letterCharacters"} <= set(body)
+    # 학생/11: emotion 은 입력 틀(labels + points[value/label=null]).
+    assert body["emotion"]["labels"]
+    assert body["emotion"]["points"][0]["chapterIdx"] == 1
+    assert body["emotion"]["points"][0]["value"] is None
     assert len(body["quiz"]) >= 1
     # 학생/10: 정답 인덱스는 choices 범위 안의 유효 위치(고정 0 아님).
     for q in body["quiz"]:
