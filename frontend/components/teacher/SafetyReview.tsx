@@ -4,8 +4,13 @@ import { useRouter } from "next/navigation";
 import { useState } from "react";
 
 import { SeverityBadge } from "@/components/admin/SafetyFlagList";
-import { buttonClass } from "@/components/ui/Button";
+import { Badge } from "@/components/ui/Badge";
+import { Button } from "@/components/ui/Button";
+import { Card } from "@/components/ui/Card";
+import { Checkbox } from "@/components/ui/Checkbox";
+import { EmptyState } from "@/components/ui/EmptyState";
 import { ErrorText } from "@/components/ui/ErrorText";
+import { Textarea } from "@/components/ui/Textarea";
 import {
   approveLetter,
   ApiError,
@@ -27,38 +32,34 @@ export function SafetyReview({
   flags: SafetyFlag[];
 }) {
   return (
-    <div className="space-y-10">
+    <div className="flex flex-col gap-9">
       <section>
-        <h2 className="mb-3 text-lg font-bold">
+        <h2 className="mb-3 text-[length:var(--text-md)] font-extrabold text-ink">
           보류된 편지 ({letters.length})
         </h2>
         {letters.length === 0 ? (
-          <p className="rounded-card bg-surface p-5 text-muted ring-1 ring-border">
-            검토할 편지가 없어요. 👍
-          </p>
+          <EmptyState icon="mail-check" title="검토할 편지가 없어요" />
         ) : (
-          <ul className="space-y-3">
+          <div className="flex flex-col gap-3">
             {letters.map((l) => (
               <LetterCard key={l.id} letter={l} />
             ))}
-          </ul>
+          </div>
         )}
       </section>
 
       <section>
-        <h2 className="mb-3 text-lg font-bold">
+        <h2 className="mb-3 text-[length:var(--text-md)] font-extrabold text-ink">
           미처리 안전 신호 ({flags.length})
         </h2>
         {flags.length === 0 ? (
-          <p className="rounded-card bg-surface p-5 text-muted ring-1 ring-border">
-            미처리 신호가 없어요. 👍
-          </p>
+          <EmptyState icon="shield-check" title="미처리 신호가 없어요" />
         ) : (
-          <ul className="space-y-3">
+          <div className="flex flex-col gap-3">
             {flags.map((f) => (
               <FlagCard key={f.id} flag={f} />
             ))}
-          </ul>
+          </div>
         )}
       </section>
     </div>
@@ -87,51 +88,43 @@ function LetterCard({ letter }: { letter: Letter }) {
   }
 
   return (
-    <li className="rounded-card bg-surface p-4 ring-1 ring-border">
-      <p className="text-sm font-bold text-muted">받는 인물: {letter.recipient}</p>
-      <p className="mt-1 whitespace-pre-wrap">{letter.body}</p>
+    <Card padding="lg">
+      <p className="text-[length:var(--text-sm)] font-bold text-ink-3">
+        받는 인물: {letter.recipient}
+      </p>
+      <p className="mt-1 whitespace-pre-wrap text-ink">{letter.body}</p>
 
       {mode === "none" && (
         <div className="mt-3 flex gap-2">
-          <button
-            onClick={() => setMode("approve")}
-            className={buttonClass("primary", "md")}
-          >
-            답장 승인
-          </button>
-          <button
-            onClick={() => setMode("reject")}
-            className={buttonClass("outline", "md")}
-          >
+          <Button onClick={() => setMode("approve")}>답장 승인</Button>
+          <Button variant="outline" onClick={() => setMode("reject")}>
             미발송
-          </button>
+          </Button>
         </div>
       )}
 
       {mode === "approve" && (
         <div className="mt-3">
-          <label className="flex items-center gap-2 text-sm font-bold">
-            <input
-              type="checkbox"
-              checked={useAi}
-              onChange={(e) => setUseAi(e.target.checked)}
-              className="h-5 w-5 accent-[var(--primary)]"
-            />
-            AI 페르소나 답장 생성
-          </label>
+          <Checkbox
+            label="AI 페르소나 답장 생성"
+            checked={useAi}
+            onChange={(e) => setUseAi(e.target.checked)}
+          />
           {!useAi && (
-            <textarea
+            <Textarea
               value={reply}
               onChange={(e) => setReply(e.target.value)}
               rows={3}
               placeholder="직접 답장을 적어요"
-              className="mt-2 w-full resize-none rounded-xl border-2 border-border bg-background p-3 text-lg"
+              className="mt-2"
             />
           )}
           {error && <ErrorText className="mt-2">{error}</ErrorText>}
           <div className="mt-3 flex gap-2">
-            <button
+            <Button
               disabled={pending || (!useAi && !reply.trim())}
+              loading={pending}
+              className="flex-1"
               onClick={() =>
                 void run(async () => {
                   const token = await getClientAccessToken();
@@ -141,53 +134,47 @@ function LetterCard({ letter }: { letter: Letter }) {
                   });
                 })
               }
-              className={buttonClass("primary", "md", "flex-1")}
             >
               {pending ? "처리 중…" : "승인하고 보내기"}
-            </button>
-            <button
-              onClick={() => setMode("none")}
-              className={buttonClass("ghost", "md")}
-            >
+            </Button>
+            <Button variant="ghost" onClick={() => setMode("none")}>
               취소
-            </button>
+            </Button>
           </div>
         </div>
       )}
 
       {mode === "reject" && (
         <div className="mt-3">
-          <textarea
+          <Textarea
             value={note}
             onChange={(e) => setNote(e.target.value)}
             rows={2}
             placeholder="메모(선택)"
-            className="w-full resize-none rounded-xl border-2 border-border bg-background p-3 text-lg"
           />
           {error && <ErrorText className="mt-2">{error}</ErrorText>}
           <div className="mt-3 flex gap-2">
-            <button
+            <Button
+              variant="danger"
               disabled={pending}
+              loading={pending}
+              className="flex-1"
               onClick={() =>
                 void run(async () => {
                   const token = await getClientAccessToken();
                   await rejectLetter(token, letter.id, note.trim() || undefined);
                 })
               }
-              className={buttonClass("danger", "md", "flex-1")}
             >
               {pending ? "처리 중…" : "미발송 처리"}
-            </button>
-            <button
-              onClick={() => setMode("none")}
-              className={buttonClass("ghost", "md")}
-            >
+            </Button>
+            <Button variant="ghost" onClick={() => setMode("none")}>
               취소
-            </button>
+            </Button>
           </div>
         </div>
       )}
-    </li>
+    </Card>
   );
 }
 
@@ -212,49 +199,41 @@ function FlagCard({ flag }: { flag: SafetyFlag }) {
   }
 
   return (
-    <li className="rounded-card bg-surface p-4 ring-1 ring-border">
+    <Card padding="lg" accentEdge="warning">
       <div className="flex flex-wrap items-center gap-2">
         <SeverityBadge severity={flag.severity} />
-        <span className="rounded-full bg-black/5 px-2.5 py-0.5 text-xs font-bold text-muted">
-          {flag.source}
-        </span>
+        <Badge tone="neutral">{flag.source}</Badge>
       </div>
-      <p className="mt-2 text-sm">{flag.reason}</p>
+      <p className="mt-2 text-[length:var(--text-sm)] text-ink">{flag.reason}</p>
 
       {open ? (
         <div className="mt-3">
-          <textarea
+          <Textarea
             value={note}
             onChange={(e) => setNote(e.target.value)}
             rows={2}
             placeholder="종결 메모(선택)"
-            className="w-full resize-none rounded-xl border-2 border-border bg-background p-3 text-lg"
           />
           {error && <ErrorText className="mt-2">{error}</ErrorText>}
           <div className="mt-3 flex gap-2">
-            <button
+            <Button
               disabled={pending}
+              loading={pending}
+              className="flex-1"
               onClick={() => void resolve()}
-              className={buttonClass("primary", "md", "flex-1")}
             >
               {pending ? "처리 중…" : "종결하기"}
-            </button>
-            <button
-              onClick={() => setOpen(false)}
-              className={buttonClass("ghost", "md")}
-            >
+            </Button>
+            <Button variant="ghost" onClick={() => setOpen(false)}>
               취소
-            </button>
+            </Button>
           </div>
         </div>
       ) : (
-        <button
-          onClick={() => setOpen(true)}
-          className={buttonClass("outline", "md", "mt-3")}
-        >
+        <Button variant="outline" icon="check" className="mt-3" onClick={() => setOpen(true)}>
           종결 처리
-        </button>
+        </Button>
       )}
-    </li>
+    </Card>
   );
 }
