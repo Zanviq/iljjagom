@@ -272,8 +272,14 @@ async def _produce(
             )
         )
     except Exception:
+        # retryAfter: 프론트 지수 백오프 정합용 권장 재시도 간격(초). 생성 지연은 선생성(06)으로 흡수.
         await queue.put(
-            _sse("error", {"code": "ai_unavailable", "message": "본문 생성 중 오류가 발생했어요.", "retryable": True})
+            _sse("error", {
+                "code": "ai_unavailable",
+                "message": "본문 생성 중 오류가 발생했어요.",
+                "retryable": True,
+                "retryAfter": 2,
+            })
         )
     finally:
         await queue.put(None)
