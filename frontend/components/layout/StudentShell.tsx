@@ -1,5 +1,6 @@
 import Link from "next/link";
 
+import { AiAssistant } from "@/components/ai/AiAssistant";
 import { Avatar } from "@/components/ui/Avatar";
 import { Badge } from "@/components/ui/Badge";
 import { Button } from "@/components/ui/Button";
@@ -59,6 +60,7 @@ export function StudentShell({
         </div>
       </header>
       <main className="flex-1">{children}</main>
+      <AiAssistant />
     </div>
   );
 }
