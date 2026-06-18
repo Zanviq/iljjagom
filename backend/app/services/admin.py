@@ -16,17 +16,31 @@ from app.models.schemas import (
     AdminUser,
     AdminUserPatch,
     AdminUsersResponse,
+    BackupExportResponse,
+    BackupImportResponse,
+    Notification,
+    NotificationCreate,
+    NotificationsResponse,
     SettingPut,
     TokenUsageBucket,
     TokenUsageResponse,
 )
 from app.store.base import Store
-from app.store.records import ProfileRecord
+from app.store.records import NotificationRecord, ProfileRecord
+from app.util import now_iso
 
 # app_settings 에 허용되는 비-시크릿 런타임 키(시크릿 저장 방지).
 ALLOWED_SETTING_KEYS = {
     "models", "feature_toggles", "rate_limits", "notify_interval_sec", "safety_level",
 }
+
+# 백업 대상 화이트리스트(임베딩·rate 카운터 제외).
+ALLOWED_BACKUP_TABLES = [
+    "profiles", "schools", "classrooms", "enrollments", "prompts", "books", "bibles",
+    "chapters", "plan_messages", "learning_artifacts", "events", "safety_flags", "letters",
+    "ai_sessions", "ai_steps", "messages", "token_usage", "notifications", "app_settings",
+    "audit_log",
+]
 
 
 def audit(store: Store, admin: CurrentUser, action: str, target: str | None, detail: dict) -> None:
@@ -185,3 +199,82 @@ def token_usage(
         buckets=[TokenUsageBucket(**b) for b in agg["buckets"]],
         total=TokenUsageBucket(**agg["total"]),
     )
+
+
+# --- notifications ---
+def _notif_view(n: NotificationRecord) -> Notification:
+    return Notification(
+        id=n.id, target_user_id=n.target_user_id, target_role=n.target_role,
+        is_broadcast=n.is_broadcast, title=n.title, body=n.body, level=n.level,
+        read_at=n.read_at, created_at=n.created_at,
+    )
+
+
+def list_notifications(
+    store: Store, user: CurrentUser, unread: bool, limit: int
+) -> NotificationsResponse:
+    rows = store.list_notifications(user.id, user.role, unread_only=unread, limit=limit)
+    return NotificationsResponse(notifications=[_notif_view(n) for n in rows])
+
+
+def create_notification(
+    store: Store, admin: CurrentUser, payload: NotificationCreate
+) -> Notification:
+    rec = store.create_notification(
+        title=payload.title, body=payload.body, level=payload.level,
+        target_user_id=payload.target_user_id, target_role=payload.target_role,
+        is_broadcast=payload.is_broadcast,
+    )
+    audit(store, admin, "send_notification", rec.id,
+          {"target": payload.target_user_id or payload.target_role or "broadcast"})
+    return _notif_view(rec)
+
+
+def mark_notification_read(store: Store, user: CurrentUser, notif_id: str) -> dict:
+    store.mark_notification_read(notif_id, user.id)
+    return {"id": notif_id, "readAt": now_iso()}
+
+
+# --- backup ---
+def export_backup(store: Store, admin: CurrentUser, tables: list[str] | None) -> BackupExportResponse:
+    targets = [t for t in (tables or ALLOWED_BACKUP_TABLES) if t in ALLOWED_BACKUP_TABLES]
+    data = store.export_tables(targets)
+    audit(store, admin, "backup_export", None, {"tables": targets})
+    return BackupExportResponse(exported_at=now_iso(), tables=data)
+
+
+def import_backup(
+    store: Store, admin: CurrentUser, mode: str, tables: dict
+) -> BackupImportResponse:
+    safe = {t: rows for t, rows in (tables or {}).items() if t in ALLOWED_BACKUP_TABLES}
+    counts = store.import_tables(mode, safe)
+    audit(store, admin, "backup_import", None, {"mode": mode, "tables": list(safe.keys())})
+    return BackupImportResponse(imported=counts)
+
+
+# --- 백그라운드 자동 알림(06 §3.8) ---
+def run_notify_cycle(store: Store) -> int:
+    """새 안전신호/오류 세션을 감지해 관리자 알림 생성. 마지막 점검 시각으로 dedup."""
+    last = store.get_setting("_notify_last_check")
+    created = 0
+    try:
+        open_flags = store.list_safety_flags(status="open", limit=500)
+        new_flags = [f for f in open_flags if last is None or (f.created_at or "") > last]
+        if new_flags:
+            store.create_notification(
+                title=f"미처리 안전 신호 {len(new_flags)}건",
+                body="검토가 필요한 안전 신호가 있습니다.", level="warn", target_role="admin",
+            )
+            created += 1
+        err_sessions = store.list_ai_sessions(status="error", limit=500)
+        new_err = [s for s in err_sessions if last is None or (s.started_at or "") > last]
+        if new_err:
+            store.create_notification(
+                title=f"오류 세션 {len(new_err)}건",
+                body="실패한 AI 세션이 있습니다.", level="error", target_role="admin",
+            )
+            created += 1
+    except Exception:
+        pass
+    store.set_setting("_notify_last_check", now_iso())
+    return created

@@ -6,6 +6,7 @@ from __future__ import annotations
 
 import time
 from collections import defaultdict, deque
+from dataclasses import asdict
 from typing import Any
 
 from app.store.base import Store
@@ -725,6 +726,85 @@ class InMemoryStore(Store):
 
     def list_audit(self, limit: int = 100) -> list[AuditRecord]:
         return sorted(self.audit, key=lambda a: a.created_at, reverse=True)[:limit]
+
+    # --- backup ---
+    def _dict_tables(self) -> dict[str, tuple[dict, Any, str]]:
+        return {
+            "profiles": (self.profiles, ProfileRecord, "id"),
+            "classrooms": (self.classrooms, ClassroomRecord, "id"),
+            "prompts": (self.prompts, PromptRecord, "id"),
+            "books": (self.books, BookRecord, "id"),
+            "bibles": (self.bibles, BibleRecord, "book_id"),
+            "chapters": (self.chapters, ChapterRecord, "id"),
+            "ai_sessions": (self.ai_sessions, AiSessionRecord, "id"),
+        }
+
+    def _list_tables(self) -> dict[str, tuple[list, Any]]:
+        return {
+            "plan_messages": (self.plan_messages, PlanMessageRecord),
+            "learning_artifacts": (self.learning_artifacts, LearningArtifactRecord),
+            "events": (self.events, EventRecord),
+            "safety_flags": (self.safety_flags, SafetyFlagRecord),
+            "letters": (self.letters, LetterRecord),
+            "ai_steps": (self.ai_steps, AiStepRecord),
+            "messages": (self.messages, MessageRecord),
+            "token_usage": (self.token_usage, TokenUsageRecord),
+            "notifications": (self.notifications, NotificationRecord),
+            "audit_log": (self.audit, AuditRecord),
+        }
+
+    def export_tables(self, tables: list[str]) -> dict[str, list[dict[str, Any]]]:
+        dt, lt = self._dict_tables(), self._list_tables()
+        out: dict[str, list[dict[str, Any]]] = {}
+        for t in tables:
+            if t in dt:
+                out[t] = [asdict(v) for v in dt[t][0].values()]
+            elif t in lt:
+                out[t] = [asdict(v) for v in lt[t][0]]
+            elif t == "enrollments":
+                out[t] = [{"classroom_id": c, "student_id": s} for (c, s) in self.enrollments]
+            elif t == "app_settings":
+                out[t] = [{"key": k, "value": v} for k, v in self.settings.items()]
+            else:
+                out[t] = []
+        return out
+
+    def import_tables(
+        self, mode: str, tables: dict[str, list[dict[str, Any]]]
+    ) -> dict[str, int]:
+        dt, lt = self._dict_tables(), self._list_tables()
+        counts: dict[str, int] = {}
+        for t, rows in tables.items():
+            n = 0
+            if t in dt:
+                coll, cls, key = dt[t]
+                if mode == "overwrite":
+                    coll.clear()
+                for r in rows:
+                    rec = cls(**r)
+                    coll[getattr(rec, key)] = rec
+                    n += 1
+            elif t in lt:
+                coll, cls = lt[t]
+                if mode == "overwrite":
+                    coll.clear()
+                for r in rows:
+                    coll.append(cls(**r))
+                    n += 1
+            elif t == "enrollments":
+                if mode == "overwrite":
+                    self.enrollments.clear()
+                for r in rows:
+                    self.enrollments.add((r["classroom_id"], r["student_id"]))
+                    n += 1
+            elif t == "app_settings":
+                if mode == "overwrite":
+                    self.settings.clear()
+                for r in rows:
+                    self.settings[r["key"]] = r["value"]
+                    n += 1
+            counts[t] = n
+        return counts
 
     # --- rate limit ---
     def rate_hit(self, bucket: str, user_id: str, window: float) -> int:

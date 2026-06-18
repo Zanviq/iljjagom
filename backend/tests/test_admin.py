@@ -103,6 +103,57 @@ async def test_admin_usage_tokens(client):
     assert body["total"]["tokensOut"] == 60
 
 
+async def test_notifications_send_list_read(client):
+    await client.get("/me", headers=ADMIN)
+    r = await client.post("/admin/notifications", headers=ADMIN, json={
+        "isBroadcast": True, "title": "점검 안내", "body": "오늘 밤 점검", "level": "info",
+    })
+    assert r.status_code == 201
+    nid = r.json()["id"]
+    lst = (await client.get("/admin/notifications", headers=ADMIN)).json()["notifications"]
+    assert any(n["id"] == nid for n in lst)
+    rr = await client.post(f"/notifications/{nid}/read", headers=ADMIN)
+    assert rr.status_code == 200
+    unread = (await client.get("/admin/notifications", headers=ADMIN, params={"unread": "true"})).json()["notifications"]
+    assert nid not in [n["id"] for n in unread]
+
+
+async def test_backup_export_import_roundtrip(client):
+    from app.store import get_store
+
+    await client.get("/me", headers=ADMIN)
+    store = get_store()
+    store.create_notification("백업대상", body="b", is_broadcast=True)
+    exp = (await client.post("/admin/backup/export", headers=ADMIN, json={"tables": ["notifications"]})).json()
+    assert "notifications" in exp["tables"]
+    assert len(exp["tables"]["notifications"]) >= 1
+    # 미허용 테이블은 무시
+    exp2 = (await client.post("/admin/backup/export", headers=ADMIN, json={"tables": ["rate_hits", "notifications"]})).json()
+    assert "rate_hits" not in exp2["tables"]
+
+    imp = (await client.post("/admin/backup/import", headers=ADMIN, json={
+        "mode": "merge",
+        "tables": {"notifications": [{
+            "id": "11111111-1111-1111-1111-111111111111", "target_user_id": None,
+            "target_role": None, "is_broadcast": True, "title": "복원됨", "body": None,
+            "level": "info", "read_at": None, "created_at": "2026-06-18T00:00:00+00:00",
+        }]},
+    })).json()
+    assert imp["imported"]["notifications"] == 1
+
+
+def test_run_notify_cycle_dedup():
+    from app.services.admin import run_notify_cycle
+    from app.store.memory import InMemoryStore
+
+    store = InMemoryStore()
+    store.add_safety_flag("book1", "u1", "letter", "위험 신호")
+    first = run_notify_cycle(store)
+    assert first >= 1  # 새 안전신호 → 알림 생성
+    second = run_notify_cycle(store)
+    assert second == 0  # 새 신호 없음 → dedup
+
+
 async def test_admin_sessions_enriched(client):
     th, sh, _ = await _seed(client)
     # 설계 흐름으로 designer 세션 생성

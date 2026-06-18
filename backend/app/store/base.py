@@ -372,6 +372,15 @@ class Store(ABC):
     @abstractmethod
     def list_audit(self, limit: int = 100) -> list[AuditRecord]: ...
 
+    # --- backup (06 §3.9) ---
+    @abstractmethod
+    def export_tables(self, tables: list[str]) -> dict[str, list[dict[str, Any]]]: ...
+
+    @abstractmethod
+    def import_tables(
+        self, mode: str, tables: dict[str, list[dict[str, Any]]]
+    ) -> dict[str, int]: ...
+
     # --- rate limit (무상태화, §3.4) ---
     @abstractmethod
     def rate_hit(self, bucket: str, user_id: str, window: float) -> int:

@@ -1,13 +1,37 @@
-"""FastAPI 앱 진입점 — 라우터 등록, CORS, 예외 핸들러."""
+"""FastAPI 앱 진입점 — 라우터 등록, CORS, 예외 핸들러, 백그라운드 알림."""
 from __future__ import annotations
 
 import asyncio
+import logging
+from contextlib import asynccontextmanager
 
 from fastapi import FastAPI, Response
 from fastapi.middleware.cors import CORSMiddleware
 
-from app.config import get_settings
+from app.config import Settings, get_settings
 from app.errors import register_exception_handlers
+
+logger = logging.getLogger("app.main")
+
+
+async def _notify_loop(settings: Settings) -> None:
+    """상시 가동 백그라운드 — 주기적으로 새 안전신호/오류 세션 감지 → 관리자 알림(06 §3.8).
+
+    주기는 app_settings.notify_interval_sec(기본 180s). 점검은 to_thread(동기 Store).
+    """
+    from app.services.admin import run_notify_cycle
+    from app.store import get_store
+
+    while True:
+        try:
+            interval = float(get_store().get_setting("notify_interval_sec") or 180)
+        except Exception:
+            interval = 180.0
+        await asyncio.sleep(max(30.0, interval))
+        try:
+            await asyncio.to_thread(run_notify_cycle, get_store())
+        except Exception:
+            logger.warning("notify cycle 실패(무시)", exc_info=False)
 
 
 def create_app() -> FastAPI:
@@ -28,10 +52,23 @@ def create_app() -> FastAPI:
             "APP_ENV=prod 인데 Supabase 자격(SUPABASE_URL/SUPABASE_SERVICE_ROLE_KEY)이 없습니다. "
             "운영에서는 인메모리 폴백이 금지됩니다."
         )
+    @asynccontextmanager
+    async def lifespan(_app: FastAPI):
+        task = None
+        # 운영(상시 가동)에서만 백그라운드 알림 루프. 테스트는 결정성 위해 비활성.
+        if not settings.is_test and settings.use_supabase:
+            task = asyncio.create_task(_notify_loop(settings))
+        try:
+            yield
+        finally:
+            if task:
+                task.cancel()
+
     app = FastAPI(
         title="일짜곰 백엔드",
         version="0.1.0",
         description="아이가 직접 만드는 어린이 도서 플랫폼 — P1 골격",
+        lifespan=lifespan,
     )
 
     app.add_middleware(

@@ -416,6 +416,49 @@ class SettingPut(CamelModel):
     settings: dict[str, Any] | None = None
 
 
+class Notification(CamelModel):
+    id: str
+    target_user_id: str | None = None
+    target_role: str | None = None
+    is_broadcast: bool = False
+    title: str
+    body: str | None = None
+    level: str = "info"
+    read_at: str | None = None
+    created_at: str = ""
+
+
+class NotificationsResponse(CamelModel):
+    notifications: list[Notification] = []
+
+
+class NotificationCreate(CamelModel):
+    target_user_id: str | None = None
+    target_role: Role | None = None
+    is_broadcast: bool = False
+    title: str = Field(min_length=1)
+    body: str | None = None
+    level: Literal["info", "warn", "error"] = "info"
+
+
+class BackupExportRequest(CamelModel):
+    tables: list[str] | None = None
+
+
+class BackupExportResponse(CamelModel):
+    exported_at: str
+    tables: dict[str, list[dict[str, Any]]] = {}
+
+
+class BackupImportRequest(CamelModel):
+    mode: Literal["merge", "overwrite"] = "merge"
+    tables: dict[str, list[dict[str, Any]]] = {}
+
+
+class BackupImportResponse(CamelModel):
+    imported: dict[str, int] = {}
+
+
 class AdminUsageResponse(CamelModel):
     users: UsersStat = UsersStat()
     classrooms: int = 0

@@ -941,6 +941,34 @@ class SupabaseStore(Store):
         )
         return [AuditRecord(**r) for r in rows]
 
+    # --- backup ---
+    def export_tables(self, tables: list[str]) -> dict[str, list[dict[str, Any]]]:
+        out: dict[str, list[dict[str, Any]]] = {}
+        for t in tables:
+            try:
+                out[t] = self._rows(self.client.table(t).select("*").limit(10000).execute())
+            except Exception:
+                out[t] = []
+        return out
+
+    def import_tables(
+        self, mode: str, tables: dict[str, list[dict[str, Any]]]
+    ) -> dict[str, int]:
+        counts: dict[str, int] = {}
+        for t, rows in tables.items():
+            n = 0
+            try:
+                if mode == "overwrite":
+                    # 전체 삭제(가짜 조건으로 모든 행) 후 삽입.
+                    self.client.table(t).delete().neq("id", "00000000-0000-0000-0000-000000000000").execute()
+                if rows:
+                    self.client.table(t).upsert(rows).execute()
+                    n = len(rows)
+            except Exception:
+                n = 0
+            counts[t] = n
+        return counts
+
     # --- rate limit (무상태, 멀티 워커 정합) ---
     def rate_hit(self, bucket: str, user_id: str, window: float) -> int:
         cutoff = (datetime.now(timezone.utc) - timedelta(seconds=window)).isoformat()
