@@ -6,6 +6,7 @@ GOOGLE_API_KEY 가 없으면 모든 호출이 결정적 mock 으로 대체된다
 from __future__ import annotations
 
 import asyncio
+import contextvars
 import hashlib
 import logging
 import time
@@ -17,6 +18,13 @@ from app.config import Settings, get_settings
 logger = logging.getLogger("app.ai.gemini")
 
 EMBED_DIM = 768
+
+# 마지막 LLM 텍스트 프롬프트 스냅샷(태스크 로컬, 관측용). generate_text/stream_text 가 채우고
+# SkillContext.emit 이 ai_steps.args._prompt 로 1회 적재 후 소비(비운다). 임베딩은 제외(PII·대용량).
+# contextvars 라 요청(=asyncio Task)마다 격리되어 동시성 오염이 없다(관리자/01 §4-B).
+last_prompt_var: contextvars.ContextVar[str | None] = contextvars.ContextVar(
+    "gemini_last_prompt", default=None
+)
 
 # 일시 오류(과부하/한도) 신호 — 짧은 백오프 후 재시도.
 _TRANSIENT_SIGNALS = ("503", "unavailable", "overloaded", "429", "resource_exhausted", "rate")
@@ -98,6 +106,7 @@ class GeminiClient:
             return None
 
     async def generate_text(self, model: str, prompt: str) -> str:
+        last_prompt_var.set(prompt)  # 관측: 다음 emit 이 ai_steps 에 적재
         if self.mock:
             return f"[mock:{model}] {prompt[:60]}"
 
@@ -113,6 +122,7 @@ class GeminiClient:
 
     async def stream_text(self, model: str, prompt: str) -> AsyncIterator[str]:
         """토큰(조각) 단위 비동기 스트림. mock 은 호출자가 조립한다(여기선 단일 반환)."""
+        last_prompt_var.set(prompt)  # 관측: 다음 emit 이 ai_steps 에 적재
         if self.mock:
             yield f"[mock:{model}] {prompt[:60]}"
             return

@@ -12,9 +12,22 @@ from abc import ABC, abstractmethod
 from dataclasses import dataclass, field
 from typing import Any
 
-from app.ai.gemini import GeminiClient
+from app.ai.gemini import GeminiClient, last_prompt_var
 from app.config import Settings
 from app.store.base import Store
+
+# 프롬프트 스냅샷 길이 상한(관측용, 과대 적재 방지). 초과 시 절단 표식.
+_PROMPT_SNAPSHOT_MAX = 8000
+
+
+def _consume_prompt_snapshot() -> dict[str, Any] | None:
+    """직전 LLM 호출 프롬프트를 1회 회수(소비 후 비움). LLM 스텝에만 _prompt 가 붙는다."""
+    raw = last_prompt_var.get()
+    if not raw:
+        return None
+    last_prompt_var.set(None)
+    text = raw if len(raw) <= _PROMPT_SNAPSHOT_MAX else raw[:_PROMPT_SNAPSHOT_MAX] + "…(절단)"
+    return {"user": text, "chars": len(raw)}
 
 
 def estimate_tokens(text: str) -> int:
@@ -97,6 +110,10 @@ class SkillContext:
         self._step_idx += 1
         self.budget.steps_used += 1
         tin, tout = self._last_tokens
+        # LLM 프롬프트 스냅샷이 있으면 args._prompt 로 적재(관리자/01 관측). 없으면 그대로.
+        snapshot = _consume_prompt_snapshot()
+        if snapshot is not None:
+            args = {**args, "_prompt": snapshot}
         if self.session_id:
             try:
                 self.store.add_ai_step(
