@@ -24,11 +24,13 @@ from app.store.records import (
     LetterRecord,
     MessageRecord,
     NotificationRecord,
+    ParagraphRecord,
     PlanMessageRecord,
     ProfileRecord,
     PromptRecord,
     SafetyFlagRecord,
     TokenUsageRecord,
+    WritingTurnRecord,
 )
 from app.util import cosine_similarity, new_id, now_iso
 
@@ -43,6 +45,8 @@ class InMemoryStore(Store):
         self.bibles: dict[str, BibleRecord] = {}
         self.chapters: dict[str, ChapterRecord] = {}
         self.plan_messages: list[PlanMessageRecord] = []
+        self.paragraphs: list[ParagraphRecord] = []
+        self.writing_turns: list[WritingTurnRecord] = []
         self.chunks: list[ChunkRecord] = []
         self.safety_flags: list[SafetyFlagRecord] = []
         self.letters: list[LetterRecord] = []
@@ -260,6 +264,39 @@ class InMemoryStore(Store):
 
     def list_plan_messages(self, book_id: str) -> list[PlanMessageRecord]:
         return [m for m in self.plan_messages if m.book_id == book_id]
+
+    # --- 자유집필 협업 (문단·턴) ---
+    def add_paragraph(
+        self, chapter_id: str, book_id: str, seq: int, body: str, source: str = "collab"
+    ) -> ParagraphRecord:
+        rec = ParagraphRecord(
+            id=new_id(), chapter_id=chapter_id, book_id=book_id, seq=seq, body=body,
+            source=source, created_at=now_iso(),
+        )
+        self.paragraphs.append(rec)
+        return rec
+
+    def list_paragraphs(self, chapter_id: str) -> list[ParagraphRecord]:
+        return sorted(
+            (p for p in self.paragraphs if p.chapter_id == chapter_id), key=lambda p: p.seq
+        )
+
+    def add_writing_turn(
+        self, chapter_id: str, book_id: str, role: str, kind: str, content: str,
+        paragraph_id: str | None = None,
+    ) -> WritingTurnRecord:
+        rec = WritingTurnRecord(
+            id=new_id(), chapter_id=chapter_id, book_id=book_id, role=role, kind=kind,
+            content=content, paragraph_id=paragraph_id, created_at=now_iso(),
+        )
+        self.writing_turns.append(rec)
+        return rec
+
+    def list_writing_turns(self, chapter_id: str) -> list[WritingTurnRecord]:
+        return sorted(
+            (t for t in self.writing_turns if t.chapter_id == chapter_id),
+            key=lambda t: t.created_at,
+        )
 
     # --- RAG chunks ---
     def add_chunk(

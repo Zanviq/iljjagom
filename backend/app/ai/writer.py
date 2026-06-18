@@ -161,6 +161,39 @@ async def stream_chapter(
         yield chunk
 
 
+async def write_paragraph(
+    gemini: GeminiClient,
+    bible: dict[str, Any],
+    event: dict[str, Any],
+    prev_paragraphs: list[str],
+    student_intent: str,
+    rag_context: str,
+) -> str:
+    """학생 의도 + 직전 문단들 + 설정으로 '한 문단'만 생성(학생/15 협업). 통짜 챕터 금지.
+
+    초등 2~4문장. 결말/secretArc 는 미리 드러내지 않는다(기·승 단계). 호출자가 sanitize.
+    """
+    chars = bible.get("characters", [])
+    hero = chars[0].get("name", "주인공") if chars else "주인공"
+    if gemini.mock:
+        intent = " ".join((student_intent or "").split()).rstrip(".!? ")
+        lead = f"{hero}은(는) {intent}." if intent else f"{hero}은(는) 한 걸음 더 나아갔어요."
+        return f"{lead} 그러자 이야기에 작은 변화가 살며시 찾아왔어요."
+
+    tone = bible.get("world", {}).get("tone", "따뜻한")
+    prev = "\n".join(prev_paragraphs[-3:]) or "(이번이 첫 문단)"
+    prompt = (
+        "너는 어린이 동화 작가다. 학생과 한 문단씩 함께 이야기를 짓는다. "
+        f"분위기는 {tone}. 학생의 의도를 살려 **딱 한 문단(2~4문장)** 만 쓴다. 통짜로 길게 쓰지 마라. "
+        "결말이나 앞으로의 줄거리는 미리 드러내지 않는다.\n"
+        f"{_OUTPUT_RULE}\n"
+        f"참고(설정/이전 내용):\n{rag_context}\n\n"
+        f"직전 문단들:\n{prev}\n\n학생의 의도: {student_intent}\n\n이어질 한 문단:"
+    )
+    text = await gemini.generate_text(gemini.settings.gemini_model_flash, prompt)
+    return text.strip()
+
+
 async def revise_text(
     gemini: GeminiClient,
     bible: dict[str, Any],

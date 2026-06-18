@@ -142,6 +142,8 @@ class ChapterMeta(CamelModel):
     mode: ChapterMode
     review_status: ReviewStatus
     has_illustration: bool = False
+    # 자유집필 협업 문단 수(학생/15). free 챕터: 0이면 협업 화면, 차 있으면 독서로 프론트 분기.
+    paragraph_count: int = 0
 
 
 class BookDetail(CamelModel):
@@ -190,6 +192,51 @@ class ReviseRequest(CamelModel):
 
 class ReviseResponse(CamelModel):
     status: Literal["revising"]
+
+
+# --- 자유집필 협업(P2, 학생/15 §2) ---
+class CollabRequest(CamelModel):
+    message: str = Field(min_length=1, max_length=2000)
+    # 직전 AI 지도(coaching) 제안을 받아들였는지. true 면 제안대로 생성.
+    accept: bool = False
+
+
+class CollabParagraph(CamelModel):
+    seq: int
+    body: str
+
+
+class CollabCoaching(CamelModel):
+    text: str
+    reasons: list[str] = []
+
+
+class CollabReply(CamelModel):
+    kind: Literal["paragraph", "coaching", "error"]
+    paragraph: CollabParagraph | None = None
+    coaching: CollabCoaching | None = None
+    question: str | None = None
+    chapter_complete: bool = False
+    message: str | None = None  # kind="error" 안내 문구
+
+
+class CollabTurnView(CamelModel):
+    role: Literal["student", "writer"]
+    kind: Literal["message", "question", "coaching"]
+    content: str
+    created_at: str
+
+
+class CollabParagraphView(CamelModel):
+    seq: int
+    body: str
+    source: str
+
+
+class CollabState(CamelModel):
+    paragraphs: list[CollabParagraphView] = []
+    turns: list[CollabTurnView] = []
+    chapter_complete: bool = False
 
 
 # --- 학습 활동(P3) — FR-S8~S12 ---

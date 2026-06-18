@@ -109,6 +109,7 @@ def get_book_detail(store: Store, user: CurrentUser, book_id: str) -> BookDetail
             mode=c.mode,
             review_status=c.review_status,
             has_illustration=bool(c.illustration_path),
+            paragraph_count=len(store.list_paragraphs(c.id)),
         )
         for c in store.list_chapters(book_id)
     ]

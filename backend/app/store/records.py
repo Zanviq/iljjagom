@@ -101,6 +101,30 @@ class ChunkRecord:
     created_at: str = ""
 
 
+# 자유집필 협업(학생/15 §2): 좌 본문(문단)·우 대화(턴).
+@dataclass
+class ParagraphRecord:
+    id: str
+    chapter_id: str
+    book_id: str
+    seq: int
+    body: str
+    source: str = "collab"  # 'collab' | 'ai' | 'revise'
+    created_at: str = ""
+
+
+@dataclass
+class WritingTurnRecord:
+    id: str
+    chapter_id: str
+    book_id: str
+    role: str  # 'student' | 'writer'
+    kind: str = "message"  # 'message' | 'question' | 'coaching'
+    content: str = ""
+    paragraph_id: str | None = None
+    created_at: str = ""
+
+
 @dataclass
 class SafetyFlagRecord:
     id: str

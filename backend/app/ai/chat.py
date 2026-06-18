@@ -95,6 +95,108 @@ async def guided_prompt(
     return text.strip() or "이 그림 속에서는 무슨 일이 벌어지고 있을까요?"
 
 
+def _content_tokens(text: str) -> set[str]:
+    """본문 흐름 비교용 내용어 토큰(표제어 근사, 2자+ 한글)."""
+    from app.ai.writer import _has_korean, _lemma
+
+    out: set[str] = set()
+    for raw in (text or "").replace("\n", " ").split(" "):
+        tok = "".join(ch for ch in raw if ch.isalnum())
+        lemma = _lemma(tok)
+        if len(lemma) >= 2 and _has_korean(lemma):
+            out.add(lemma)
+    return out
+
+
+def _coach_text(reasons: list[str], objective: str | None) -> str:
+    """지도(coaching) 문구 — 학생 의도 긍정 + 대안 + 근거(사용자 원문 규약, 학생/15)."""
+    bits = []
+    if "흐름" in reasons:
+        bits.append("앞 문단과 자연스럽게 이어지도록")
+    if "주제" in reasons:
+        bits.append(f"'{objective}' 주제가 잘 드러나도록" if objective else "이야기 주제가 잘 드러나도록")
+    why = ", ".join(bits) or "이야기가 더 잘 이어지도록"
+    return f"물론 그것도 좋아! 근데 {why} 살짝 바꿔보면 어떨까?"
+
+
+async def assess_flow(
+    gemini: GeminiClient, bible: dict, prev_paragraph: str, objective: str | None,
+    student_intent: str,
+) -> dict:
+    """학생 의도가 (a)흐름(직전 문단과 자연스러운가)·(b)주제에 맞는지 판정(학생/15 §2.4).
+
+    반환 `{action:'generate'|'coach', reasons:[...], suggestion:str|None}`.
+    결말/secretArc 는 참조·노출하지 않는다(기·승 단계). 지도는 제안일 뿐 강제가 아니다.
+    """
+    if gemini.mock:
+        # 결정적 휴리스틱: 첫 문단이거나 직전 문단과 공통 내용어가 있으면 흐름 OK → generate.
+        if not (prev_paragraph or "").strip():
+            return {"action": "generate", "reasons": [], "suggestion": None}
+        if _content_tokens(prev_paragraph) & _content_tokens(student_intent):
+            return {"action": "generate", "reasons": [], "suggestion": None}
+        reasons = ["흐름"]
+        return {"action": "coach", "reasons": reasons, "suggestion": _coach_text(reasons, objective)}
+
+    obj_line = f"이번 장 학습 주제: {objective}\n" if objective else ""
+    prompt = (
+        "너는 어린이 작가를 돕는 다정한 글쓰기 코치다. 학생이 다음에 쓰고 싶다고 한 내용이 "
+        "(a) 직전 문단과 자연스럽게 이어지는지 (b) 이야기 주제에서 벗어나지 않는지 판단한다. "
+        "이야기의 결말이나 앞으로의 줄거리는 절대 참조·언급하지 않는다. "
+        "괜찮으면 그대로 진행하고, 어색하면 학생 의도를 먼저 긍정한 뒤 더 나은 방향을 근거와 함께 제안한다. "
+        "반드시 아래 JSON 하나만 출력한다(설명·코드블록 금지).\n"
+        '{"action":"generate|coach","reasons":["흐름"|"주제"],'
+        '"suggestion":"coach 일 때 \'물론 그것도 좋아! 근데 …\' 한두 문장, generate 면 null"}\n\n'
+        f"{obj_line}직전 문단: {prev_paragraph or '(아직 없음)'}\n학생이 쓰고 싶은 것: {student_intent}\n\nJSON:"
+    )
+    try:
+        raw = await gemini.generate_text(gemini.settings.gemini_model_flash_lite, prompt)
+        import json
+
+        data = json.loads(_strip_json(raw))
+        if isinstance(data, dict) and data.get("action") in ("generate", "coach"):
+            data.setdefault("reasons", [])
+            data.setdefault("suggestion", None)
+            return data
+    except Exception:
+        pass
+    # 파싱 실패 → 아동 주도성 존중: 생성으로 진행(폴백).
+    return {"action": "generate", "reasons": [], "suggestion": None}
+
+
+async def next_paragraph_question(
+    gemini: GeminiClient, bible: dict, paragraphs_so_far: list[str]
+) -> str:
+    """방금 쓴 문단 뒤 진행 질문 1개(학생/15 §2.4). 결말 비공개."""
+    chars = bible.get("characters", [])
+    who = chars[0].get("name", "주인공") if chars else "주인공"
+    if gemini.mock:
+        return f"좋아! 이제 {who}에게 다음엔 무슨 일이 생길까?"
+    prompt = (
+        f"{_INTERVIEWER_SYSTEM}\n"
+        "지금까지 함께 쓴 이야기 뒤에 이어질 내용을 학생이 상상해 답할 수 있는 '진행 질문' 한 문장을 만든다. "
+        "결말이나 앞으로의 줄거리는 절대 묻지도 드러내지도 않는다.\n"
+        f"지금까지 문단:\n{chr(10).join(paragraphs_so_far[-3:]) or '(아직 없음)'}\n\n진행 질문 한 문장:"
+    )
+    text = await gemini.generate_text(gemini.settings.gemini_model_flash_lite, prompt)
+    return text.strip() or f"이제 {who}에게 무슨 일이 생길까?"
+
+
+def _strip_json(raw: str) -> str:
+    t = (raw or "").strip()
+    if t.startswith("```"):
+        t = t.split("\n", 1)[-1]
+        if t.endswith("```"):
+            t = t[:-3]
+        if t.startswith("json"):
+            t = t[4:]
+    t = t.strip()
+    if not t.startswith("{"):
+        s, e = t.find("{"), t.rfind("}")
+        if s != -1 and e != -1 and e > s:
+            t = t[s : e + 1]
+    return t
+
+
 async def persona_reply(
     gemini: GeminiClient, character_name: str, traits: list[str], letter_body: str
 ) -> str:
