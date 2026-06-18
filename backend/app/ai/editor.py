@@ -35,6 +35,7 @@ async def review_chapter(
     bible: dict[str, Any],
     event: dict[str, Any],
     body: str,
+    is_final: bool = False,
 ) -> EditResult:
     objective = (event.get("objective") or "").strip()
     notes: list[str] = []
@@ -52,8 +53,15 @@ async def review_chapter(
         return EditResult(body=revised, review_status="ok", notes=notes)
 
     obj_line = f"이 장의 학습 목표: {objective}\n" if objective else ""
+    final_line = ""
+    if is_final:
+        arc = (bible.get("secretArc") or {}).get("outline", "")
+        final_line = (
+            "이 장은 마지막 장이다. 이야기의 큰 흐름이 자연스럽게 매듭지어졌는지 확인하고, "
+            f"부족하면 결말을 다듬어 완성한다(큰 흐름: {arc}).\n"
+        )
     prompt = (
-        f"{_EDITOR_SYSTEM}\n\n{obj_line}\n검토할 본문:\n{body}\n\n다듬은 본문:"
+        f"{_EDITOR_SYSTEM}\n\n{obj_line}{final_line}\n검토할 본문:\n{body}\n\n다듬은 본문:"
     )
     revised = (await gemini.generate_text(gemini.settings.gemini_model_flash, prompt)).strip()
     if not revised:
