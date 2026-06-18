@@ -16,16 +16,13 @@ export default async function ConsoleNotificationsPage() {
 
   return (
     <div>
-      <h1 className="text-3xl font-extrabold">알림</h1>
-      <p className="mt-1 text-muted">
-        사용자/역할/전체에 알림을 보내고 수신함을 봐요.
+      <p className="ijg-eyebrow mb-4 text-ink-3">
+        알림 · 사용자/역할/전체에 보내고 수신함 보기
       </p>
       {error ? (
-        <ErrorText className="mt-6">{error}</ErrorText>
+        <ErrorText className="mt-2">{error}</ErrorText>
       ) : (
-        <div className="mt-6">
-          <NotificationsPanel notifications={notifications} />
-        </div>
+        <NotificationsPanel notifications={notifications} />
       )}
     </div>
   );

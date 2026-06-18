@@ -49,11 +49,13 @@ export function ConfirmModal({
         role="dialog"
         aria-modal="true"
         aria-label={title}
-        className="w-full max-w-md rounded-card bg-surface p-6 shadow-lg ring-1 ring-border"
+        className="w-full max-w-md rounded-[var(--radius-card)] border border-line bg-surface p-6 shadow-[var(--elev-lg)]"
         onClick={(e) => e.stopPropagation()}
       >
-        <h2 className="text-xl font-extrabold">{title}</h2>
-        <div className="mt-2 text-muted">{body}</div>
+        <h2 className="text-[length:var(--text-lg)] font-extrabold text-ink">
+          {title}
+        </h2>
+        <div className="mt-2 text-ink-2">{body}</div>
         <div className="mt-5 flex gap-2">
           <button
             ref={cancelRef}

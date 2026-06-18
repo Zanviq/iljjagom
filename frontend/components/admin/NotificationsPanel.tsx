@@ -3,8 +3,15 @@
 import { useRouter } from "next/navigation";
 import { useState } from "react";
 
-import { buttonClass } from "@/components/ui/Button";
+import { Badge, type BadgeTone } from "@/components/ui/Badge";
+import { Button } from "@/components/ui/Button";
+import { Card } from "@/components/ui/Card";
+import { EmptyState } from "@/components/ui/EmptyState";
 import { ErrorText } from "@/components/ui/ErrorText";
+import { Input } from "@/components/ui/Input";
+import { Select } from "@/components/ui/Select";
+import { Textarea } from "@/components/ui/Textarea";
+import { cn } from "@/lib/cn";
 import {
   ApiError,
   createNotification,
@@ -20,6 +27,11 @@ const TARGET_LABEL: Record<Target, string> = {
   broadcast: "전체",
   role: "역할",
   user: "사용자",
+};
+const LEVEL_TONE: Record<NotificationLevel, BadgeTone> = {
+  info: "neutral",
+  warn: "warning",
+  error: "danger",
 };
 
 export function NotificationsPanel({
@@ -72,114 +84,110 @@ export function NotificationsPanel({
   }
 
   return (
-    <div className="space-y-8">
-      <section className="rounded-card bg-surface p-5 ring-1 ring-border">
-        <h2 className="text-lg font-bold">알림 보내기</h2>
-        <div className="mt-3 flex flex-wrap gap-2">
+    <div className="flex flex-col gap-8">
+      <Card padding="lg">
+        <h2 className="text-[length:var(--text-md)] font-extrabold text-ink">
+          알림 보내기
+        </h2>
+        <div className="mt-3 flex flex-wrap items-center gap-2">
           {TARGETS.map((t) => (
             <button
               key={t}
               onClick={() => setTarget(t)}
-              className={`rounded-full px-3 py-1 text-sm font-bold ${
-                target === t ? "bg-primary text-primary-foreground" : "bg-black/5"
-              }`}
+              className={cn(
+                "rounded-full px-3 py-1 text-[length:var(--text-sm)] font-bold transition",
+                target === t
+                  ? "bg-primary text-on-primary"
+                  : "bg-surface-inset text-ink-2",
+              )}
             >
               {TARGET_LABEL[t]}
             </button>
           ))}
           {target === "role" && (
-            <select
+            <Select
               value={role}
               onChange={(e) => setRole(e.target.value as Role)}
-              className="rounded-lg border-2 border-border bg-background px-2 py-1 text-sm"
-            >
-              <option value="student">학생</option>
-              <option value="teacher">교사</option>
-              <option value="admin">관리자</option>
-            </select>
+              options={[
+                { value: "student", label: "학생" },
+                { value: "teacher", label: "교사" },
+                { value: "admin", label: "관리자" },
+              ]}
+              style={{ height: "var(--control-h-sm)", width: "auto" }}
+            />
           )}
           {target === "user" && (
-            <input
+            <Input
               value={userId}
               onChange={(e) => setUserId(e.target.value)}
               placeholder="사용자 ID"
-              className="rounded-lg border-2 border-border bg-background px-2 py-1 text-sm"
+              style={{ height: "var(--control-h-sm)" }}
             />
           )}
-          <select
+          <Select
             value={level}
             onChange={(e) => setLevel(e.target.value as NotificationLevel)}
-            className="rounded-lg border-2 border-border bg-background px-2 py-1 text-sm"
-          >
-            {LEVELS.map((l) => (
-              <option key={l} value={l}>
-                {l}
-              </option>
-            ))}
-          </select>
+            options={LEVELS.map((l) => ({ value: l, label: l }))}
+            style={{ height: "var(--control-h-sm)", width: "auto" }}
+          />
         </div>
-        <input
+        <Input
           value={title}
           onChange={(e) => setTitle(e.target.value)}
           placeholder="제목"
-          className="mt-3 w-full rounded-xl border-2 border-border bg-background px-4 py-2"
+          className="mt-3"
         />
-        <textarea
+        <Textarea
           value={body}
           onChange={(e) => setBody(e.target.value)}
           rows={2}
           placeholder="내용(선택)"
-          className="mt-2 w-full resize-none rounded-xl border-2 border-border bg-background px-4 py-2"
+          className="mt-2"
         />
         {error && <ErrorText className="mt-2">{error}</ErrorText>}
-        <button
+        <Button
           onClick={() => void send()}
           disabled={pending || !title.trim()}
-          className={buttonClass("primary", "md", "mt-3")}
+          loading={pending}
+          icon="send"
+          className="mt-3"
         >
           {pending ? "보내는 중…" : "보내기"}
-        </button>
-      </section>
+        </Button>
+      </Card>
 
       <section>
-        <h2 className="mb-3 text-lg font-bold">수신함</h2>
+        <h2 className="mb-3 text-[length:var(--text-md)] font-extrabold text-ink">
+          수신함
+        </h2>
         {notifications.length === 0 ? (
-          <p className="rounded-card bg-surface p-5 text-muted ring-1 ring-border">
-            알림이 없어요.
-          </p>
+          <EmptyState icon="bell" title="알림이 없어요" />
         ) : (
-          <ul className="space-y-2">
+          <div className="flex flex-col gap-2">
             {notifications.map((n) => (
-              <li
-                key={n.id}
-                className="flex items-start gap-3 rounded-card bg-surface p-4 ring-1 ring-border"
-              >
-                <span
-                  className={`mt-0.5 rounded-full px-2 py-0.5 text-xs font-bold ${
-                    n.level === "error"
-                      ? "bg-danger/10 text-danger"
-                      : n.level === "warn"
-                        ? "bg-accent/50 text-foreground"
-                        : "bg-black/5 text-muted"
-                  }`}
-                >
-                  {n.level}
-                </span>
-                <div className="flex-1">
-                  <p className="font-bold">{n.title}</p>
-                  {n.body && <p className="text-sm text-muted">{n.body}</p>}
+              <Card key={n.id} padding="md">
+                <div className="flex items-start gap-3">
+                  <Badge tone={LEVEL_TONE[n.level] ?? "neutral"}>{n.level}</Badge>
+                  <div className="flex-1">
+                    <p className="font-bold text-ink">{n.title}</p>
+                    {n.body && (
+                      <p className="text-[length:var(--text-sm)] text-ink-2">
+                        {n.body}
+                      </p>
+                    )}
+                  </div>
+                  {!n.readAt && (
+                    <button
+                      onClick={() => void read(n.id)}
+                      className="rounded-[var(--radius-input)] px-2 py-1 text-[length:var(--text-sm)] font-bold text-primary-text hover:bg-surface-inset"
+                    >
+                      읽음
+                    </button>
+                  )}
                 </div>
-                {!n.readAt && (
-                  <button
-                    onClick={() => void read(n.id)}
-                    className="rounded-lg px-2 py-1 text-sm font-bold text-primary-strong hover:bg-black/5"
-                  >
-                    읽음
-                  </button>
-                )}
-              </li>
+              </Card>
             ))}
-          </ul>
+          </div>
         )}
       </section>
     </div>

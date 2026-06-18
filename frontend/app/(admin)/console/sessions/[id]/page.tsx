@@ -1,8 +1,11 @@
 import Link from "next/link";
 
 import { SessionStatus } from "@/components/admin/SessionStatus";
+import { Badge } from "@/components/ui/Badge";
+import { Card } from "@/components/ui/Card";
 import { EmptyState } from "@/components/ui/EmptyState";
 import { ErrorText } from "@/components/ui/ErrorText";
+import { Icon } from "@/components/ui/Icon";
 import { getAiSession } from "@/lib/api";
 import { getAccessToken } from "@/lib/auth/server";
 import type { AiRole, AiSessionDetail, AiStep } from "@/lib/types";
@@ -46,18 +49,22 @@ export default async function ConsoleSessionDetailPage({
 
   return (
     <div>
-      <Link href="/console/sessions" className="text-sm font-bold text-muted">
-        ← AI 세션 목록
+      <Link
+        href="/console/sessions"
+        className="inline-flex items-center gap-1.5 text-[length:var(--text-sm)] font-bold text-ink-3"
+      >
+        <Icon name="arrow-left" size={16} />
+        AI 세션 목록
       </Link>
 
       {error ? (
         <ErrorText className="mt-4">{error}</ErrorText>
       ) : !session ? (
-        <EmptyState className="mt-4">세션을 찾을 수 없어요.</EmptyState>
+        <EmptyState icon="activity" title="세션을 찾을 수 없어요" className="mt-4" />
       ) : (
         <>
-          <div className="mt-2 flex flex-wrap items-center gap-3">
-            <h1 className="text-2xl font-extrabold">
+          <div className="mt-3 flex flex-wrap items-center gap-3">
+            <h1 className="text-[length:var(--text-lg)] font-extrabold text-ink">
               {ROLE_LABEL[session.role] ?? session.role} 세션
             </h1>
             <SessionStatus status={session.status} />
@@ -71,17 +78,17 @@ export default async function ConsoleSessionDetailPage({
           </dl>
 
           {session.summary && (
-            <p className="mt-4 rounded-card bg-surface p-4 ring-1 ring-border">
-              {session.summary}
-            </p>
+            <Card padding="md" className="mt-4">
+              <p className="text-ink">{session.summary}</p>
+            </Card>
           )}
-          {session.error && (
-            <ErrorText className="mt-4">{session.error}</ErrorText>
-          )}
+          {session.error && <ErrorText className="mt-4">{session.error}</ErrorText>}
 
-          <h2 className="mb-3 mt-8 text-lg font-bold">스텝 타임라인</h2>
+          <h2 className="mb-3 mt-8 text-[length:var(--text-md)] font-extrabold text-ink">
+            스텝 타임라인
+          </h2>
           {session.steps.length === 0 ? (
-            <EmptyState>기록된 스텝이 없어요.</EmptyState>
+            <EmptyState icon="activity" title="기록된 스텝이 없어요" />
           ) : (
             <ol className="space-y-3">
               {session.steps.map((step) => (
@@ -97,31 +104,30 @@ export default async function ConsoleSessionDetailPage({
 
 function Meta({ label, value }: { label: string; value: string }) {
   return (
-    <div className="rounded-card bg-surface p-3 ring-1 ring-border">
-      <dt className="text-xs font-bold text-muted">{label}</dt>
-      <dd className="mt-1 font-bold">{value}</dd>
+    <div className="rounded-[var(--radius-card)] border border-line bg-surface p-3">
+      <dt className="ijg-eyebrow text-ink-3">{label}</dt>
+      <dd className="mt-1 font-bold text-ink">{value}</dd>
     </div>
   );
 }
 
 function StepCard({ step }: { step: AiStep }) {
   return (
-    <li className="rounded-card bg-surface p-4 ring-1 ring-border">
+    <li className="rounded-[var(--radius-card)] border border-line bg-surface p-4">
       <div className="flex flex-wrap items-center gap-2">
-        <span className="rounded-full bg-black/5 px-2 py-0.5 text-xs font-bold text-muted">
-          #{step.idx}
-        </span>
-        <span className="rounded-full bg-primary/10 px-2.5 py-0.5 text-sm font-bold text-primary-strong">
-          {step.skill}
-        </span>
-        <span className="ml-auto text-xs text-muted">
+        <Badge tone="neutral">#{step.idx}</Badge>
+        <Badge tone="primary">{step.skill}</Badge>
+        <span
+          className="ml-auto text-ink-3"
+          style={{ fontFamily: "var(--font-mono)", fontSize: 11 }}
+        >
           토큰 {step.tokensIn}/{step.tokensOut} · {step.ms}ms
         </span>
       </div>
 
       {step.thought && (
-        <p className="mt-2 text-sm">
-          <span className="font-bold text-muted">생각: </span>
+        <p className="mt-2 text-[length:var(--text-sm)] text-ink">
+          <span className="font-bold text-ink-3">생각: </span>
           {step.thought}
         </p>
       )}
@@ -137,11 +143,14 @@ function StepCard({ step }: { step: AiStep }) {
 function JsonDetails({ label, value }: { label: string; value: unknown }) {
   if (value === null || value === undefined) return null;
   return (
-    <details className="rounded-xl bg-background ring-1 ring-border">
-      <summary className="cursor-pointer px-3 py-2 text-sm font-bold">
+    <details className="rounded-[var(--radius-input)] border border-line bg-surface-2">
+      <summary className="cursor-pointer px-3 py-2 text-[length:var(--text-sm)] font-bold text-ink">
         {label}
       </summary>
-      <pre className="overflow-x-auto px-3 pb-3 text-xs text-muted">
+      <pre
+        className="overflow-x-auto px-3 pb-3 text-ink-2"
+        style={{ fontFamily: "var(--font-mono)", fontSize: 11 }}
+      >
         {JSON.stringify(value, null, 2)}
       </pre>
     </details>

@@ -33,53 +33,61 @@ export default async function ConsoleSessionsPage() {
 
   return (
     <div>
-      <h1 className="text-3xl font-extrabold">AI 세션 / ReAct 트레이스</h1>
-      <p className="mt-1 text-muted">
-        AI 흐름의 역할·모델·상태·스텝을 봐요. 행을 누르면 트레이스 타임라인이 열려요.
+      <p className="ijg-eyebrow mb-4 text-ink-3">
+        실시간 AI 세션 · 역할·모델·상태·스텝 (행을 누르면 트레이스)
       </p>
 
       {error ? (
-        <ErrorText className="mt-6">{error}</ErrorText>
+        <ErrorText className="mt-2">{error}</ErrorText>
       ) : !sessions || sessions.length === 0 ? (
-        <EmptyState className="mt-6">아직 기록된 AI 세션이 없어요.</EmptyState>
+        <EmptyState icon="activity" title="아직 기록된 AI 세션이 없어요" />
       ) : (
-        <div className="mt-6 overflow-x-auto rounded-card ring-1 ring-border">
+        <div className="overflow-x-auto rounded-[var(--radius-card)] border border-line">
           <table className="w-full min-w-[40rem] border-collapse bg-surface text-left">
             <thead>
-              <tr className="border-b border-border text-sm text-muted">
-                <th className="p-3 font-bold">역할</th>
-                <th className="p-3 font-bold">모델</th>
-                <th className="p-3 font-bold">사용자</th>
-                <th className="p-3 font-bold">상태</th>
-                <th className="p-3 font-bold">요약</th>
-                <th className="p-3 font-bold">시작</th>
+              <tr className="border-b border-line bg-surface-2">
+                {["역할", "모델", "사용자", "상태", "요약", "시작"].map((h) => (
+                  <th key={h} className="ijg-eyebrow p-3 text-ink-3" style={{ textAlign: "left" }}>
+                    {h}
+                  </th>
+                ))}
               </tr>
             </thead>
             <tbody>
               {sessions.map((s) => (
                 <tr
                   key={s.id}
-                  className="border-b border-border last:border-0 hover:bg-black/[0.02]"
+                  className="border-b border-line-soft last:border-0 hover:bg-surface-inset"
                 >
                   <td className="p-3 font-bold">
                     <Link
                       href={`/console/sessions/${s.id}`}
-                      className="text-primary-strong hover:underline"
+                      className="text-primary-text hover:underline"
                     >
                       {ROLE_LABEL[s.role] ?? s.role}
                     </Link>
                   </td>
-                  <td className="p-3 text-sm text-muted">{s.model}</td>
-                  <td className="p-3 text-sm text-muted">
+                  <td
+                    className="p-3 text-ink-2"
+                    style={{ fontFamily: "var(--font-mono)", fontSize: 12.5 }}
+                  >
+                    {s.model}
+                  </td>
+                  <td className="p-3 text-[length:var(--text-sm)] text-ink-2">
                     {s.userEmail || "—"}
                   </td>
                   <td className="p-3">
                     <SessionStatus status={s.status} />
                   </td>
-                  <td className="p-3 text-sm">
-                    {s.summary || <span className="text-muted">—</span>}
+                  <td className="p-3 text-[length:var(--text-sm)] text-ink">
+                    {s.summary || <span className="text-ink-3">—</span>}
                   </td>
-                  <td className="p-3 text-sm text-muted">{fmt(s.startedAt)}</td>
+                  <td
+                    className="p-3 text-ink-3"
+                    style={{ fontFamily: "var(--font-mono)", fontSize: 12 }}
+                  >
+                    {fmt(s.startedAt)}
+                  </td>
                 </tr>
               ))}
             </tbody>

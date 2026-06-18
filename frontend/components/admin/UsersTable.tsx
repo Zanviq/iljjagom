@@ -49,21 +49,26 @@ export function UsersTable({ users }: { users: AdminUser[] }) {
 
   return (
     <>
-      <div className="overflow-x-auto rounded-card ring-1 ring-border">
+      <div className="overflow-x-auto rounded-[var(--radius-card)] border border-line">
         <table className="w-full min-w-[44rem] border-collapse bg-surface text-left">
           <thead>
-            <tr className="border-b border-border text-sm text-muted">
-              <th className="p-3 font-bold">이메일</th>
-              <th className="p-3 font-bold">역할</th>
-              <th className="p-3 font-bold">학급</th>
-              <th className="p-3 font-bold">상태</th>
-              <th className="p-3 font-bold">작업</th>
+            <tr className="border-b border-line bg-surface-2">
+              {["이메일", "역할", "학급", "상태", "작업"].map((h) => (
+                <th key={h} className="ijg-eyebrow p-3 text-ink-3" style={{ textAlign: "left" }}>
+                  {h}
+                </th>
+              ))}
             </tr>
           </thead>
           <tbody>
             {users.map((u) => (
-              <tr key={u.id} className="border-b border-border last:border-0">
-                <td className="p-3 text-sm font-medium">{u.email}</td>
+              <tr key={u.id} className="border-b border-line-soft last:border-0">
+                <td
+                  className="p-3 text-ink"
+                  style={{ fontFamily: "var(--font-mono)", fontSize: 13.5 }}
+                >
+                  {u.email}
+                </td>
                 <td className="p-3">
                   <select
                     value={u.role}
@@ -75,7 +80,7 @@ export function UsersTable({ users }: { users: AdminUser[] }) {
                         role: e.target.value as Role,
                       })
                     }
-                    className="rounded-lg border-2 border-border bg-background px-2 py-1 text-sm font-bold"
+                    className="rounded-[var(--radius-input)] border-2 border-line-strong bg-surface-2 px-2 py-1 text-[length:var(--text-sm)] font-bold text-ink"
                   >
                     {ROLES.map((r) => (
                       <option key={r} value={r}>
@@ -84,21 +89,26 @@ export function UsersTable({ users }: { users: AdminUser[] }) {
                     ))}
                   </select>
                 </td>
-                <td className="p-3 text-sm text-muted">
+                <td className="p-3 text-[length:var(--text-sm)] text-ink-3">
                   {u.className || "—"}
                 </td>
-                <td className="p-3 text-sm">
+                <td className="p-3 text-[length:var(--text-sm)]">
                   {u.status === "active" ? (
-                    <span className="font-bold text-success-strong">활성</span>
+                    <span
+                      className="font-bold"
+                      style={{ color: "var(--success-text)" }}
+                    >
+                      활성
+                    </span>
                   ) : (
-                    <span className="font-bold text-muted">비활성</span>
+                    <span className="font-bold text-ink-3">비활성</span>
                   )}
                 </td>
                 <td className="p-3">
                   {u.status === "active" && (
                     <button
                       onClick={() => setAction({ kind: "deactivate", user: u })}
-                      className="rounded-lg px-3 py-1 text-sm font-bold text-danger hover:bg-danger/10"
+                      className="rounded-[var(--radius-input)] px-3 py-1 text-[length:var(--text-sm)] font-bold text-danger-text hover:bg-danger-tint"
                     >
                       비활성
                     </button>
