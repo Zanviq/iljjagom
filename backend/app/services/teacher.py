@@ -134,8 +134,9 @@ def class_dashboard(store: Store, user: CurrentUser, class_id: str) -> Dashboard
             students.append(DashboardStudent(student_id=sid, student_email=email))
             continue
         chapters = store.list_chapters(book.id)
-        done = sum(1 for c in chapters if c.char_count > 0)
-        vocab_count += sum(len(c.words) for c in chapters)
+        # 선생성(prefetch)만 된 미진입 챕터는 진척에서 제외(학생/06).
+        done = sum(1 for c in chapters if c.char_count > 0 and not getattr(c, "prefetched", False))
+        vocab_count += sum(len(c.words) for c in chapters if not getattr(c, "prefetched", False))
         if book.status == "done":
             books_done += 1
         students.append(

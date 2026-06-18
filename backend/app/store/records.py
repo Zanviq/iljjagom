@@ -76,6 +76,9 @@ class ChapterRecord:
     review_status: str = "pending"
     words: list[str] = field(default_factory=list)
     char_count: int = 0
+    # 백그라운드 선생성(prefetch)으로 본문만 채워졌고 학생이 아직 진입하지 않은 상태(학생/06).
+    # 학생 진입(스트림) 시 False 로 풀린다. chaptersDone 집계에서 제외(진척 과대 방지).
+    prefetched: bool = False
     created_at: str = ""
 
 
@@ -95,6 +98,30 @@ class ChunkRecord:
     chapter_id: str | None
     content: str
     embedding: list[float]
+    created_at: str = ""
+
+
+# 자유집필 협업(학생/15 §2): 좌 본문(문단)·우 대화(턴).
+@dataclass
+class ParagraphRecord:
+    id: str
+    chapter_id: str
+    book_id: str
+    seq: int
+    body: str
+    source: str = "collab"  # 'collab' | 'ai' | 'revise'
+    created_at: str = ""
+
+
+@dataclass
+class WritingTurnRecord:
+    id: str
+    chapter_id: str
+    book_id: str
+    role: str  # 'student' | 'writer'
+    kind: str = "message"  # 'message' | 'question' | 'coaching'
+    content: str = ""
+    paragraph_id: str | None = None
     created_at: str = ""
 
 

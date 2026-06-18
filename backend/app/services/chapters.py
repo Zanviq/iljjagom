@@ -17,6 +17,7 @@ from app.ai.skills.base import estimate_tokens
 from app.ai.trace import Trace
 from app.deps import CurrentUser
 from app.services.books import assert_can_access_book, get_book_or_404
+from app.services.prefetch import acquire_prefetch, release_prefetch
 from app.store.base import Store
 
 HEARTBEAT_SECS = 15.0
@@ -78,6 +79,21 @@ def _clean_segment(line: str, *, terminated: bool, has_content: bool) -> str:
 
 def _find_event(bible: dict, idx: int) -> dict | None:
     return next((e for e in bible.get("events", []) if e.get("chapterIdx") == idx), None)
+
+
+def _student_grade(store: Store, book_id: str) -> int | None:
+    """낱말 난이도 반영용 학생 학년(학생/05). 없으면 None."""
+    try:
+        book = store.get_book(book_id)
+        prof = store.get_profile(book.student_id) if book and book.student_id else None
+        return prof.grade if prof else None
+    except Exception:
+        return None
+
+
+def _character_names(bible: dict) -> list[str]:
+    """작품 고유명사(인물명) — 낱말 후보에서 제외(학생/05)."""
+    return [c.get("name", "") for c in bible.get("characters", []) if c.get("name")]
 
 
 def _record_complete(store: Store, book_id: str, total: int | None) -> None:
@@ -184,6 +200,10 @@ async def _produce(
         mode = chapter.mode
         # 이미 집필된 챕터는 저장본을 그대로 흘린다(재구독·수정/편집 반영). 첫 집필만 생성.
         served_stored = bool(chapter.body) and chapter.char_count > 0
+        # 학생이 실제 진입 → 선생성(prefetch) 표식 해제(이제 chaptersDone 에 포함).
+        if served_stored and chapter.prefetched:
+            store.update_chapter(chapter.id, prefetched=False)
+            chapter.prefetched = False
 
         # 1) meta (최초 1회)
         await queue.put(_sse("meta", {"chapterIdx": idx, "mode": mode, "totalChaptersPlanned": total}))
@@ -209,29 +229,34 @@ async def _produce(
 
         # 3) 본문 토큰
         running = 0
+        is_final = bool(total and idx == total)
         if served_stored:
             body = chapter.body
             running = await _emit_text(queue, body, running, from_offset)
             words = chapter.words
         else:
             # 첫 집필: RAG 컨텍스트 고정 + 생성(타임아웃/재시도) + 저장 + 적재.
-            is_final = bool(total and idx == total)
             context = await rag.retrieve_context(
                 store, gemini, book_id, event.get("summary", ""), k=5
             )
             body, running = await _stream_body(
                 queue, gemini, bible, event, context, is_final, from_offset
             )
-            words = writer.select_words(body)
+            words = writer.select_words(
+                body, _student_grade(store, book_id), _character_names(bible)
+            )
             store.update_chapter(
                 chapter.id, body=body, char_count=len(body), words=words, review_status="pending"
             )
             await rag.index_text(store, gemini, book_id, chapter.id, body)
-            if is_final:
-                store.update_book(book_id, status="done")
-                _record_complete(store, book_id, total)  # 완독 이벤트(서버 파생)
-            else:
-                store.update_book(book_id)  # 집필 완료 → 마지막 활동 시각 갱신(이어 읽기 정렬)
+
+        # 3b) 완료/활동 갱신 — 첫 집필·선생성 진입(served_stored) 공통(완독은 1회만).
+        book_now = store.get_book(book_id)
+        if is_final and body and book_now and book_now.status != "done":
+            store.update_book(book_id, status="done")
+            _record_complete(store, book_id, total)  # 완독 이벤트(서버 파생)
+        elif not is_final and body:
+            store.update_book(book_id)  # 마지막 활동 시각 갱신(이어 읽기 정렬)
 
         # 4) done — 다음 장 게이트: 본문이 실제로 있을 때만 다음 장 노출(생성 실패 차단, C1).
         next_available = bool(total and idx < total and body)
@@ -247,8 +272,14 @@ async def _produce(
             )
         )
     except Exception:
+        # retryAfter: 프론트 지수 백오프 정합용 권장 재시도 간격(초). 생성 지연은 선생성(06)으로 흡수.
         await queue.put(
-            _sse("error", {"code": "ai_unavailable", "message": "본문 생성 중 오류가 발생했어요.", "retryable": True})
+            _sse("error", {
+                "code": "ai_unavailable",
+                "message": "본문 생성 중 오류가 발생했어요.",
+                "retryable": True,
+                "retryAfter": 2,
+            })
         )
     finally:
         await queue.put(None)
@@ -347,11 +378,84 @@ async def run_first_draft_review(
             chapter.id,
             body=reviewed,
             char_count=len(reviewed),
-            words=writer.select_words(reviewed),
+            words=writer.select_words(
+                reviewed, _student_grade(store, book_id), _character_names(bible_rec.data)
+            ),
             review_status=result.review_status,
         )
     else:
         store.update_chapter(chapter.id, review_status=result.review_status)
+
+
+# --- 다음 장 백그라운드 선생성 (P1, 학생/06) ---
+async def prefetch_chapter(
+    store: Store, gemini: GeminiClient, book_id: str, idx: int
+) -> None:
+    """다음 장 본문(+guided 삽화)을 미리 생성·저장(스트림 없음). 멱등·단일성.
+
+    학생이 현재 장을 읽는 동안 호출 → 진입 시 served_stored 경로로 즉시 스트리밍.
+    실패해도 학생 흐름 불변(진입 시 첫 집필 경로로 폴백).
+    """
+    bible_rec = store.get_bible(book_id)
+    if not bible_rec:
+        return
+    bible = bible_rec.data
+    total = bible.get("totalChaptersPlanned")
+    if not total or idx < 1 or idx > total:
+        return
+    event = _find_event(bible, idx)
+    if event is None:
+        return
+    chapter = store.get_chapter(book_id, idx) or store.create_chapter(
+        book_id, idx, event.get("mode", "free")
+    )
+    if chapter.body and chapter.char_count > 0:
+        return  # 이미 준비됨
+    if chapter.mode == "free":
+        return  # free(기·승)는 협업 집필이라 선생성 안 함(학생/15)
+    if not acquire_prefetch(book_id, idx):
+        return  # 진행 중(중복 방지)
+
+    trace = Trace(store, gemini, gemini.settings, "writer", book_id, gemini.settings.gemini_model_flash)
+    try:
+        # 삽화 먼저(가장 느린 구간) — guided + 미생성일 때만. placeholder 는 저장 안 함(학생/07).
+        if not chapter.illustration_path:
+            url, _alt = await imagen.generate_illustration(
+                gemini, book_id, idx, event.get("summary", ""), bible.get("characters", [])
+            )
+            if not imagen.is_placeholder_url(url):
+                store.update_chapter(chapter.id, illustration_path=url)
+        is_final = bool(total and idx == total)
+        context = await rag.retrieve_context(store, gemini, book_id, event.get("summary", ""), k=5)
+        raw = "".join(
+            [c async for c in writer.stream_chapter(gemini, bible, event, context, is_final)]
+        )
+        body = sanitize_body(raw)  # 스트림 경로와 동일 정제(학생/08)
+        if not body:
+            trace.end(status="error", error="empty_prefetch")
+            return
+        words = writer.select_words(body, _student_grade(store, book_id), _character_names(bible))
+        store.update_chapter(
+            chapter.id, body=body, char_count=len(body), words=words,
+            review_status="pending", prefetched=True,  # 진입 전까지 chaptersDone 제외
+        )
+        await rag.index_text(store, gemini, book_id, chapter.id, body)
+        # prefetch 단계에선 책 상태를 done 으로 올리지 않는다(학생 미진입). 진입 시 _produce 가 처리.
+        trace.step("다음 장 선생성", "prefetch_chapter", {"chapterIdx": idx},
+                   {"chars": len(body), "illustration": bool(chapter.illustration_path)})
+        trace.end(status="done", summary=f"{idx}장 선생성(prefetch)")
+    except Exception:
+        trace.end(status="error", error="prefetch_failed")
+    finally:
+        release_prefetch(book_id, idx)
+
+
+async def post_stream_tasks(
+    store: Store, gemini: GeminiClient, book_id: str, idx: int
+) -> None:
+    """스트림 종료 후: 현재 장 검수 → 다음 장 선생성(순차). BackgroundTask 진입점."""
+    await run_first_draft_review(store, gemini, book_id, idx)
+    await prefetch_chapter(store, gemini, book_id, idx + 1)
 
 
 # --- 자유모드 수정요청 파이프라인 (P2-2, 비동기) ---
@@ -405,7 +509,9 @@ async def run_revise(
         chapter.id,
         body=revised_body,
         char_count=len(revised_body),
-        words=writer.select_words(revised_body),
+        words=writer.select_words(
+            revised_body, _student_grade(store, book_id), _character_names(bible)
+        ),
         review_status=result.review_status,
     )
     store.update_book(book_id)  # 마지막 활동 시각 갱신(이어 읽기 정렬)

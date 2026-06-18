@@ -15,9 +15,9 @@ from app.deps import (
     require_role,
 )
 from app.errors import conflict, validation_error
-from app.models.schemas import ReviseRequest, ReviseResponse, serialize
+from app.models.schemas import CollabRequest, ReviseRequest, ReviseResponse, serialize
 from app.ratelimit import rate_limit
-from app.services import books, chapters
+from app.services import books, chapters, collab
 from app.store.base import Store
 
 router = APIRouter(tags=["chapters"])
@@ -41,9 +41,9 @@ async def stream_chapter(
             "Connection": "keep-alive",
             "X-Accel-Buffering": "no",  # nginx 버퍼링 비활성(스트림 즉시 전송)
         },
-        # 스트림 종료 후 Tier3 편집 검수(P2-3)를 비동기로 실행 — 학생 대기 미노출.
+        # 스트림 종료 후(비동기, 학생 대기 미노출): 현재 장 검수 → 다음 장 백그라운드 선생성(P1-06).
         background=BackgroundTask(
-            chapters.run_first_draft_review, store, gemini, book_id, idx
+            chapters.post_stream_tasks, store, gemini, book_id, idx
         ),
     )
 
@@ -78,3 +78,29 @@ async def revise_chapter(
     # 해석→재생성→편집검수→반영은 백그라운드로. 완료는 stream 재구독 또는 book 폴링으로 확인(§4.2).
     background.add_task(chapters.run_revise, store, gemini, book_id, idx, req.instruction)
     return serialize(ReviseResponse(status="revising"))
+
+
+# --- 자유집필 협업 (P2, 학생/15 §2) ---
+@router.post("/books/{book_id}/chapters/{idx}/collab")
+async def collab_turn(
+    book_id: str,
+    idx: int,
+    req: CollabRequest,
+    user: CurrentUser = Depends(require_role("student", "admin")),
+    store: Store = Depends(get_store_dep),
+    gemini: GeminiClient = Depends(get_gemini),
+    _rl: None = Depends(rate_limit("collab", 60)),
+    _consent: CurrentUser = Depends(require_guardian_consent()),
+) -> dict:
+    reply = await collab.collab_turn(store, gemini, user, book_id, idx, req.message, req.accept)
+    return serialize(reply)
+
+
+@router.get("/books/{book_id}/chapters/{idx}/collab")
+async def collab_state(
+    book_id: str,
+    idx: int,
+    user: CurrentUser = Depends(get_current_user),
+    store: Store = Depends(get_store_dep),
+) -> dict:
+    return serialize(collab.collab_state(store, user, book_id, idx))

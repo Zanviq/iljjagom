@@ -20,6 +20,7 @@ from app.models.schemas import (
     LetterResponse,
     QuizItem,
     Word,
+    serialize,
 )
 from app.services import words
 from app.services.books import assert_can_access_book, assert_owner_student, get_book_or_404
@@ -54,13 +55,51 @@ def _build_quiz(objectives: list[str], book_id: str) -> list[QuizItem]:
     return quiz
 
 
+LEARNING_SET = "learning_set"  # 생성 교재 캐시(학생 자기보고 결과와 구분)
+
+
+def _source_sig(chapters: list) -> str:
+    """캐시 키 — 학생 진입 챕터의 idx:char_count. 추가 집필·revise 시 변동 → 자동 무효화."""
+    return "|".join(f"{c.idx}:{c.char_count}" for c in chapters)
+
+
 async def build_learning(
     store: Store, gemini: GeminiClient, user: CurrentUser, book_id: str
 ) -> LearningResponse:
+    """학습 교재: 집필 챕터 시그니처 기준 1회 생성·영속화(learning_set) → 재방문 즉시(학생/13)."""
     book = get_book_or_404(store, book_id)
     assert_can_access_book(store, user, book)
 
-    chapters = [c for c in store.list_chapters(book_id) if c.char_count > 0]
+    # 선생성(prefetch)만 된 미진입 챕터는 학습활동 대상에서 제외(읽지 않은 앞선 내용 차단, 학생/06).
+    chapters = [
+        c for c in store.list_chapters(book_id)
+        if c.char_count > 0 and not getattr(c, "prefetched", False)
+    ]
+    sig = _source_sig(chapters)
+
+    # 1) 캐시 조회: 같은 sig 의 learning_set 가 있으면 어휘 LLM 호출 없이 즉시 반환.
+    if chapters:
+        for a in store.list_learning_artifacts(book_id=book_id, type=LEARNING_SET):
+            if a.data.get("sourceSig") == sig:
+                payload = {k: v for k, v in a.data.items() if k != "sourceSig"}
+                return LearningResponse.model_validate(payload)
+
+    # 2) 미스 → 생성.
+    result = await _generate_learning(store, gemini, book, chapters)
+
+    # 3) 저장(스냅샷). 빈 책은 캐시하지 않음(다음 집필 후 재생성 유도).
+    if chapters:
+        try:
+            store.add_learning_artifact(book_id, LEARNING_SET, {"sourceSig": sig, **serialize(result)})
+        except Exception:
+            pass
+    return result
+
+
+async def _generate_learning(
+    store: Store, gemini: GeminiClient, book, chapters: list
+) -> LearningResponse:
+    book_id = book.id
     bible_rec = store.get_bible(book_id)
     bible = bible_rec.data if bible_rec else {}
 

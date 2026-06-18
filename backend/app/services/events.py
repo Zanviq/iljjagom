@@ -69,5 +69,6 @@ def list_learning_results(store: Store, user: CurrentUser, book_id: str) -> Lear
         results=[
             LearningResult(id=r.id, type=r.type, data=r.data, created_at=r.created_at)
             for r in rows
+            if r.type != "learning_set"  # 생성 교재 캐시는 학생 자기보고 결과가 아님(학생/13)
         ]
     )

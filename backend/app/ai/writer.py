@@ -71,16 +71,73 @@ def _mock_chapter_text(
     )
 
 
-def select_words(text: str) -> list[str]:
-    """본문에서 단어 도움 대상 후보를 뽑는다(P1 최소: 길이 기준)."""
-    seen: list[str] = []
+# 조사·어미 접미(긴 것 우선 절단 → 표제어 근사). 형태소 분석기 없이 휴리스틱(학생/05).
+_JOSA = (
+    "으로써", "으로서", "에서의", "에게서", "이라고", "에서", "에게", "께서", "라고",
+    "으로", "로서", "로써", "처럼", "보다", "마저", "조차", "까지", "부터", "이나",
+    "에는", "에도", "에만", "한테", "이라", "에", "의", "을", "를", "은", "는",
+    "이", "가", "와", "과", "도", "만", "랑", "께", "로", "야",
+)
+# 흔한 기능어·빈출어(학습 가치 낮음) 제외.
+_STOPWORDS = {
+    "이야기", "우리", "그것", "그리고", "그래서", "하지만", "그러나", "오늘", "정말",
+    "너무", "모두", "다시", "조금", "많이", "서로", "무엇", "어떻게", "그때", "이제",
+    "처음", "사람", "생각", "마음", "모습", "소리", "이렇게", "저렇게", "그렇게", "자신",
+}
+# 용언(동사/형용사) 활용 어미 — 명사 위주 선정을 위해 제외('도착했어요'·'따스한' 등).
+_PREDICATE_END = (
+    "습니다", "았어요", "었어요", "였어요", "했어요", "겠어요", "드려요", "았다", "었다",
+    "였다", "한다", "는다", "해요", "돼요", "아요", "어요", "여요", "았던", "었던", "한",
+)
+
+
+def _lemma(token: str) -> str:
+    """어절에서 조사/어미를 한 번 잘라 표제 근사('계곡에'→'계곡')."""
+    for j in sorted(_JOSA, key=len, reverse=True):
+        if token.endswith(j) and len(token) - len(j) >= 2:
+            return token[: -len(j)]
+    return token
+
+
+def _has_korean(s: str) -> bool:
+    return any("가" <= ch <= "힣" for ch in s)
+
+
+def select_words(
+    text: str, grade: int | None = None, exclude: list[str] | None = None
+) -> list[str]:
+    """단어 도움 후보 선정(학생/05): 표제어화·불용어/고유명사 제외·학년 난이도·전체 스캔 상위 N.
+
+    grade 낮으면 짧은 단어도 허용, 높으면 더 긴(어려운) 단어 우선. exclude 는 작품 고유명사.
+    """
+    # 고학년(5+)은 짧은(쉬운) 단어를 배제해 난도를 올린다. 그 외는 2글자 명사 허용.
+    min_len = 3 if (grade or 3) >= 5 else 2
+    exclude_set: set[str] = set()
+    for name in exclude or []:
+        if name:
+            exclude_set.add(name)
+            exclude_set.add(_lemma(name))
+
+    freq: dict[str, int] = {}
+    order: list[str] = []
     for raw in text.replace("\n", " ").split(" "):
-        token = "".join(ch for ch in raw if ch.isalnum())
-        if len(token) >= 3 and token not in seen:
-            seen.append(token)
-        if len(seen) >= 5:
-            break
-    return seen
+        tok = "".join(ch for ch in raw if ch.isalnum())
+        if not tok or not _has_korean(tok) or tok.endswith(_PREDICATE_END):
+            continue  # 빈 토큰·비한글·용언(활용형) 제외
+        lemma = _lemma(tok)
+        if (
+            len(lemma) < min_len
+            or lemma in _STOPWORDS
+            or lemma in exclude_set
+        ):
+            continue
+        if lemma not in freq:
+            order.append(lemma)
+        freq[lemma] = freq.get(lemma, 0) + 1
+
+    # 점수: 긴 단어(어려움) 우선, 희소(빈도 낮음) 우선, 동점은 본문 등장 순.
+    ranked = sorted(order, key=lambda w: (-len(w), freq[w], order.index(w)))
+    return ranked[:5]
 
 
 async def stream_chapter(
@@ -102,6 +159,39 @@ async def stream_chapter(
     prompt = build_prompt(bible, event, rag_context, is_final)
     async for chunk in gemini.stream_text(gemini.settings.gemini_model_flash, prompt):
         yield chunk
+
+
+async def write_paragraph(
+    gemini: GeminiClient,
+    bible: dict[str, Any],
+    event: dict[str, Any],
+    prev_paragraphs: list[str],
+    student_intent: str,
+    rag_context: str,
+) -> str:
+    """학생 의도 + 직전 문단들 + 설정으로 '한 문단'만 생성(학생/15 협업). 통짜 챕터 금지.
+
+    초등 2~4문장. 결말/secretArc 는 미리 드러내지 않는다(기·승 단계). 호출자가 sanitize.
+    """
+    chars = bible.get("characters", [])
+    hero = chars[0].get("name", "주인공") if chars else "주인공"
+    if gemini.mock:
+        intent = " ".join((student_intent or "").split()).rstrip(".!? ")
+        lead = f"{hero}은(는) {intent}." if intent else f"{hero}은(는) 한 걸음 더 나아갔어요."
+        return f"{lead} 그러자 이야기에 작은 변화가 살며시 찾아왔어요."
+
+    tone = bible.get("world", {}).get("tone", "따뜻한")
+    prev = "\n".join(prev_paragraphs[-3:]) or "(이번이 첫 문단)"
+    prompt = (
+        "너는 어린이 동화 작가다. 학생과 한 문단씩 함께 이야기를 짓는다. "
+        f"분위기는 {tone}. 학생의 의도를 살려 **딱 한 문단(2~4문장)** 만 쓴다. 통짜로 길게 쓰지 마라. "
+        "결말이나 앞으로의 줄거리는 미리 드러내지 않는다.\n"
+        f"{_OUTPUT_RULE}\n"
+        f"참고(설정/이전 내용):\n{rag_context}\n\n"
+        f"직전 문단들:\n{prev}\n\n학생의 의도: {student_intent}\n\n이어질 한 문단:"
+    )
+    text = await gemini.generate_text(gemini.settings.gemini_model_flash, prompt)
+    return text.strip()
 
 
 async def revise_text(

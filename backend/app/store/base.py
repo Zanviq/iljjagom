@@ -18,11 +18,13 @@ from app.store.records import (
     LetterRecord,
     MessageRecord,
     NotificationRecord,
+    ParagraphRecord,
     PlanMessageRecord,
     ProfileRecord,
     PromptRecord,
     SafetyFlagRecord,
     TokenUsageRecord,
+    WritingTurnRecord,
 )
 
 
@@ -136,6 +138,24 @@ class Store(ABC):
 
     @abstractmethod
     def list_plan_messages(self, book_id: str) -> list[PlanMessageRecord]: ...
+
+    # --- 자유집필 협업 (문단·턴, 학생/15 §2) ---
+    @abstractmethod
+    def add_paragraph(
+        self, chapter_id: str, book_id: str, seq: int, body: str, source: str = "collab"
+    ) -> ParagraphRecord: ...
+
+    @abstractmethod
+    def list_paragraphs(self, chapter_id: str) -> list[ParagraphRecord]: ...
+
+    @abstractmethod
+    def add_writing_turn(
+        self, chapter_id: str, book_id: str, role: str, kind: str, content: str,
+        paragraph_id: str | None = None,
+    ) -> WritingTurnRecord: ...
+
+    @abstractmethod
+    def list_writing_turns(self, chapter_id: str) -> list[WritingTurnRecord]: ...
 
     # --- RAG chunks ---
     @abstractmethod

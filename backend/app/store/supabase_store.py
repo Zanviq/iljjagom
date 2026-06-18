@@ -25,11 +25,13 @@ from app.store.records import (
     LetterRecord,
     MessageRecord,
     NotificationRecord,
+    ParagraphRecord,
     PlanMessageRecord,
     ProfileRecord,
     PromptRecord,
     SafetyFlagRecord,
     TokenUsageRecord,
+    WritingTurnRecord,
 )
 from app.util import cosine_similarity, now_iso
 
@@ -332,6 +334,50 @@ class SupabaseStore(Store):
             .execute()
         )
         return [PlanMessageRecord(**r) for r in rows]
+
+    # --- 자유집필 협업 (문단·턴) ---
+    def add_paragraph(
+        self, chapter_id: str, book_id: str, seq: int, body: str, source: str = "collab"
+    ) -> ParagraphRecord:
+        row = self._one(
+            self.client.table("chapter_paragraphs")
+            .insert({"chapter_id": chapter_id, "book_id": book_id, "seq": seq,
+                     "body": body, "source": source})
+            .execute()
+        )
+        return ParagraphRecord(**row)
+
+    def list_paragraphs(self, chapter_id: str) -> list[ParagraphRecord]:
+        rows = self._rows(
+            self.client.table("chapter_paragraphs")
+            .select("*")
+            .eq("chapter_id", chapter_id)
+            .order("seq")
+            .execute()
+        )
+        return [ParagraphRecord(**r) for r in rows]
+
+    def add_writing_turn(
+        self, chapter_id: str, book_id: str, role: str, kind: str, content: str,
+        paragraph_id: str | None = None,
+    ) -> WritingTurnRecord:
+        row = self._one(
+            self.client.table("writing_turns")
+            .insert({"chapter_id": chapter_id, "book_id": book_id, "role": role,
+                     "kind": kind, "content": content, "paragraph_id": paragraph_id})
+            .execute()
+        )
+        return WritingTurnRecord(**row)
+
+    def list_writing_turns(self, chapter_id: str) -> list[WritingTurnRecord]:
+        rows = self._rows(
+            self.client.table("writing_turns")
+            .select("*")
+            .eq("chapter_id", chapter_id)
+            .order("created_at")
+            .execute()
+        )
+        return [WritingTurnRecord(**r) for r in rows]
 
     # --- RAG chunks ---
     def add_chunk(

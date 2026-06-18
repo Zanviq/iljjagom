@@ -1,6 +1,8 @@
 """책 서비스 — 생성/조회/기획대화/설계(Bible). FR-S1~S3."""
 from __future__ import annotations
 
+import hashlib
+
 from app.ai import chat, designer, rag
 from app.ai.gemini import GeminiClient
 from app.ai.safety import check_input
@@ -17,6 +19,7 @@ from app.models.schemas import (
     DesignResponse,
     PlanReply,
 )
+from app.services.prefetch import acquire_prefetch, release_prefetch
 from app.store.base import Store
 from app.store.records import BookRecord
 
@@ -77,8 +80,12 @@ def list_books(store: Store, user: CurrentUser) -> BooksResponse:
     records = store.list_books_for_student(user.id)
     summaries: list[BookSummary] = []
     for rec in records:
-        # chaptersDone = 본문이 작성된(char_count>0) 챕터 수.
-        done = sum(1 for c in store.list_chapters(rec.id) if c.char_count > 0)
+        # chaptersDone = 학생이 진입해 본문이 있는(char_count>0) 챕터 수.
+        # 선생성(prefetch)만 된 미진입 챕터는 제외(진척 과대 방지, 학생/06).
+        done = sum(
+            1 for c in store.list_chapters(rec.id)
+            if c.char_count > 0 and not getattr(c, "prefetched", False)
+        )
         summaries.append(
             BookSummary(
                 id=rec.id,
@@ -102,6 +109,7 @@ def get_book_detail(store: Store, user: CurrentUser, book_id: str) -> BookDetail
             mode=c.mode,
             review_status=c.review_status,
             has_illustration=bool(c.illustration_path),
+            paragraph_count=len(store.list_paragraphs(c.id)),
         )
         for c in store.list_chapters(book_id)
     ]
@@ -137,30 +145,35 @@ async def plan_message(
 
 
 # --- FR-S3 설계(Bible 생성) ---
-async def design_book(
-    store: Store, gemini: GeminiClient, user: CurrentUser, book_id: str
-) -> DesignResponse:
-    book = get_book_or_404(store, book_id)
-    assert_owner_student(user, book)
+def _plan_hash(store: Store, book_id: str) -> str:
+    """기획 학생 발화 스냅샷 해시 — 선생성 초안의 최신성(stale) 판정용(학생/04)."""
+    msgs = [m.content for m in store.list_plan_messages(book_id) if m.role == "student"]
+    digest = hashlib.sha256(" ".join(msgs).encode("utf-8")).hexdigest()[:16]
+    return f"{len(msgs)}:{digest}"
 
-    existing = store.get_bible(book_id)
-    if existing:
-        total = existing.data.get("totalChaptersPlanned")
-        return DesignResponse(status="done", total_chapters_planned=total)
 
-    prompt = store.get_prompt(book.prompt_id) if book.prompt_id else None
+async def _run_design(
+    store: Store, gemini: GeminiClient, book_id: str, plan_hash: str,
+    *, set_writing: bool, label: str,
+) -> int:
+    """Bible 생성 + 챕터 골격 + RAG 적재(공통). set_writing 이면 book.status='writing'.
+
+    `bible.data['_planHash']` 에 스냅샷 해시를 박아 design 시점에 최신성 판정.
+    """
+    book = store.get_book(book_id)
+    prompt = store.get_prompt(book.prompt_id) if book and book.prompt_id else None
     student_messages = [m.content for m in store.list_plan_messages(book_id) if m.role == "student"]
     traits = chat._extract_draft(student_messages).traits
 
-    # 관측: 설계(designer) 세션 트레이스. 기록 실패는 흐름을 막지 않는다.
     trace = Trace(store, gemini, gemini.settings, "designer", book_id, gemini.settings.gemini_model_pro)
-
     bible = await designer.build_bible(gemini, prompt, student_messages, traits)
+    bible["_planHash"] = plan_hash
     store.upsert_bible(book_id, bible)
     trace.step(
         "기획·학습목표로 Bible 설계",
         "design_outline",
-        {"topic": prompt.topic if prompt else None, "objectives": prompt.learning_objectives if prompt else []},
+        {"topic": prompt.topic if prompt else None,
+         "objectives": prompt.learning_objectives if prompt else []},
         {"title": bible.get("title"), "characters": len(bible.get("characters", [])),
          "events": len(bible.get("events", []))},
         model=gemini.settings.gemini_model_pro,
@@ -168,7 +181,6 @@ async def design_book(
         tokens_out=estimate_tokens(str(bible)),
     )
 
-    # 챕터 골격 생성(이벤트 분배 기준).
     events = bible.get("events", [])
     total = bible.get("totalChaptersPlanned", len(events) or designer.DEFAULT_TOTAL_CHAPTERS)
     for ev in events:
@@ -177,20 +189,61 @@ async def design_book(
         if idx and not store.get_chapter(book_id, idx):
             store.create_chapter(book_id, idx, mode)
 
-    store.update_book(
-        book_id,
-        status="writing",
-        title=bible.get("title"),
-        total_chapters_planned=total,
-    )
+    # 선생성(prefetch)은 status='planning' 유지(버튼 클릭 시 확정), design 은 'writing' 으로 전이.
+    fields: dict = {"title": bible.get("title"), "total_chapters_planned": total}
+    if set_writing:
+        fields["status"] = "writing"
+    store.update_book(book_id, **fields)
 
-    # Bible 핵심 텍스트를 RAG 인덱스에 적재(설계 단계 분량).
     await _index_bible(store, gemini, book_id, bible)
     trace.step("Bible 핵심을 RAG 인덱스에 적재", "embed_store", {"book_id": book_id},
                {"totalChaptersPlanned": total})
-    trace.end(status="done", summary=f"'{bible.get('title')}' 설계 완료({total}장)")
+    trace.end(status="done", summary=f"'{bible.get('title')}' {label}({total}장)")
+    return total
 
+
+async def design_book(
+    store: Store, gemini: GeminiClient, user: CurrentUser, book_id: str
+) -> DesignResponse:
+    book = get_book_or_404(store, book_id)
+    assert_owner_student(user, book)
+
+    cur_hash = _plan_hash(store, book_id)
+    existing = store.get_bible(book_id)
+    # 이미 설계 확정된 책(writing/done)은 멱등 done(재클릭 안전 — 레거시 bible 포함).
+    if existing and book.status != "planning":
+        return DesignResponse(status="done",
+                              total_chapters_planned=existing.data.get("totalChaptersPlanned"))
+    # 선생성 초안이 최신이면 Pro 재호출 없이 즉시 확정·진입(학생/04).
+    if existing and existing.data.get("_planHash") == cur_hash:
+        total = existing.data.get("totalChaptersPlanned")
+        store.update_book(book_id, status="writing", title=existing.data.get("title"),
+                          total_chapters_planned=total)
+        return DesignResponse(status="done", total_chapters_planned=total)
+
+    # 초안 없음/stale → 동기 설계(폴백·정본 경로).
+    total = await _run_design(store, gemini, book_id, cur_hash, set_writing=True, label="설계 완료")
     return DesignResponse(status="done", total_chapters_planned=total)
+
+
+async def prefetch_design(store: Store, gemini: GeminiClient, book_id: str) -> None:
+    """기획 대화가 readyToWrite 에 도달하면 Bible 을 백그라운드 선생성(학생/04).
+
+    free 1장 초안은 협업(학생/15)이라 선생성하지 않는다 — Bible 까지만(00 §3 정합).
+    멱등·단일성: 같은 해시로 이미 준비됐거나 진행 중이면 skip.
+    """
+    cur_hash = _plan_hash(store, book_id)
+    existing = store.get_bible(book_id)
+    if existing and existing.data.get("_planHash") == cur_hash:
+        return  # 이미 최신 초안
+    if not acquire_prefetch(book_id, "design"):
+        return  # 진행 중(단일성)
+    try:
+        await _run_design(store, gemini, book_id, cur_hash, set_writing=False, label="선생성(prefetch)")
+    except Exception:
+        pass  # 실패해도 학생 흐름 불변(버튼 클릭 시 동기 폴백)
+    finally:
+        release_prefetch(book_id, "design")
 
 
 async def _index_bible(store: Store, gemini: GeminiClient, book_id: str, bible: dict) -> None:

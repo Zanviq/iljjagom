@@ -24,11 +24,13 @@ from app.store.records import (
     LetterRecord,
     MessageRecord,
     NotificationRecord,
+    ParagraphRecord,
     PlanMessageRecord,
     ProfileRecord,
     PromptRecord,
     SafetyFlagRecord,
     TokenUsageRecord,
+    WritingTurnRecord,
 )
 from app.util import cosine_similarity, new_id, now_iso
 
@@ -43,6 +45,8 @@ class InMemoryStore(Store):
         self.bibles: dict[str, BibleRecord] = {}
         self.chapters: dict[str, ChapterRecord] = {}
         self.plan_messages: list[PlanMessageRecord] = []
+        self.paragraphs: list[ParagraphRecord] = []
+        self.writing_turns: list[WritingTurnRecord] = []
         self.chunks: list[ChunkRecord] = []
         self.safety_flags: list[SafetyFlagRecord] = []
         self.letters: list[LetterRecord] = []
@@ -57,6 +61,9 @@ class InMemoryStore(Store):
         self.settings: dict[str, Any] = {}
         self.audit: list[AuditRecord] = []
         self._rate_hits: dict[tuple[str, str], deque[float]] = defaultdict(deque)
+        # 책 최근활동 정렬용 단조 카운터 — now_iso() 동일-마이크로초 동률에도 안정 정렬(테스트 결정성).
+        self._book_tick = 0
+        self._book_touch: dict[str, int] = {}
 
     # --- profiles ---
     def get_profile(self, user_id: str) -> ProfileRecord | None:
@@ -180,29 +187,35 @@ class InMemoryStore(Store):
             updated_at=ts,
         )
         self.books[rec.id] = rec
+        self._touch_book(rec.id)
         return rec
 
     def get_book(self, book_id: str) -> BookRecord | None:
         return self.books.get(book_id)
+
+    def _touch_book(self, book_id: str) -> None:
+        self._book_tick += 1
+        self._book_touch[book_id] = self._book_tick
 
     def update_book(self, book_id: str, **fields: Any) -> BookRecord:
         rec = self.books[book_id]
         for k, v in fields.items():
             setattr(rec, k, v)
         rec.updated_at = now_iso()  # 모든 변경은 마지막 활동 시각을 갱신한다.
+        self._touch_book(book_id)
         return rec
 
     def list_books_for_student(self, student_id: str) -> list[BookRecord]:
         return sorted(
             (b for b in self.books.values() if b.student_id == student_id),
-            key=lambda b: b.updated_at or b.created_at,
+            key=lambda b: (b.updated_at or b.created_at, self._book_touch.get(b.id, 0)),
             reverse=True,
         )
 
     def list_books_for_class(self, classroom_id: str) -> list[BookRecord]:
         return sorted(
             (b for b in self.books.values() if b.classroom_id == classroom_id),
-            key=lambda b: b.updated_at or b.created_at,
+            key=lambda b: (b.updated_at or b.created_at, self._book_touch.get(b.id, 0)),
             reverse=True,
         )
 
@@ -251,6 +264,39 @@ class InMemoryStore(Store):
 
     def list_plan_messages(self, book_id: str) -> list[PlanMessageRecord]:
         return [m for m in self.plan_messages if m.book_id == book_id]
+
+    # --- 자유집필 협업 (문단·턴) ---
+    def add_paragraph(
+        self, chapter_id: str, book_id: str, seq: int, body: str, source: str = "collab"
+    ) -> ParagraphRecord:
+        rec = ParagraphRecord(
+            id=new_id(), chapter_id=chapter_id, book_id=book_id, seq=seq, body=body,
+            source=source, created_at=now_iso(),
+        )
+        self.paragraphs.append(rec)
+        return rec
+
+    def list_paragraphs(self, chapter_id: str) -> list[ParagraphRecord]:
+        return sorted(
+            (p for p in self.paragraphs if p.chapter_id == chapter_id), key=lambda p: p.seq
+        )
+
+    def add_writing_turn(
+        self, chapter_id: str, book_id: str, role: str, kind: str, content: str,
+        paragraph_id: str | None = None,
+    ) -> WritingTurnRecord:
+        rec = WritingTurnRecord(
+            id=new_id(), chapter_id=chapter_id, book_id=book_id, role=role, kind=kind,
+            content=content, paragraph_id=paragraph_id, created_at=now_iso(),
+        )
+        self.writing_turns.append(rec)
+        return rec
+
+    def list_writing_turns(self, chapter_id: str) -> list[WritingTurnRecord]:
+        return sorted(
+            (t for t in self.writing_turns if t.chapter_id == chapter_id),
+            key=lambda t: t.created_at,
+        )
 
     # --- RAG chunks ---
     def add_chunk(
