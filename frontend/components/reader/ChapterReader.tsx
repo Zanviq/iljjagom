@@ -10,6 +10,7 @@ import { WordPopover } from "@/components/reader/WordPopover";
 import { ApiError, getBook, getWord, reviseChapter } from "@/lib/api";
 import { getClientAccessToken } from "@/lib/auth/client";
 import { streamChapter } from "@/lib/sse";
+import { track } from "@/lib/track";
 import type { ChapterMode, SSEDone, SSEIllustration, Word } from "@/lib/types";
 
 const sleep = (ms: number) => new Promise((r) => setTimeout(r, ms));
@@ -96,6 +97,29 @@ function ChapterStream({
   const [reviseError, setReviseError] = useState<string | null>(null);
 
   const doneRef = useRef(false);
+  // 체류 측정용: 도달 단계(opened→read→done).
+  const reachedRef = useRef<"opened" | "read" | "done">("opened");
+
+  // 본문이 공개되면 체류 도달 단계를 'read'로 올린다(자유=즉시, 유도=탭 후).
+  useEffect(() => {
+    if (revealed && reachedRef.current === "opened") reachedRef.current = "read";
+  }, [revealed]);
+
+  // 챕터 열람/체류 계측(추가기능 04): 마운트 시 chapter_open, 언마운트 시 chapter_dwell.
+  useEffect(() => {
+    const mountTs = performance.now();
+    track("chapter_open", { bookId, payload: { chapterIdx } });
+    return () => {
+      track("chapter_dwell", {
+        bookId,
+        payload: {
+          chapterIdx,
+          ms: Math.round(performance.now() - mountTs),
+          reached: reachedRef.current,
+        },
+      });
+    };
+  }, [bookId, chapterIdx]);
 
   useEffect(() => {
     const controller = new AbortController();
@@ -132,8 +156,26 @@ function ChapterStream({
                   break;
                 case "done":
                   doneRef.current = true;
+                  reachedRef.current = "done";
                   setDone(evt.data);
                   setStreaming(false);
+                  track("chapter_done", {
+                    bookId,
+                    payload: {
+                      chapterIdx,
+                      charCount: evt.data.charCount,
+                      nextAvailable: evt.data.nextChapterAvailable,
+                    },
+                  });
+                  if (
+                    totalChaptersPlanned > 0 &&
+                    chapterIdx >= totalChaptersPlanned
+                  ) {
+                    track("book_finished", {
+                      bookId,
+                      payload: { totalChapters: totalChaptersPlanned },
+                    });
+                  }
                   break;
                 case "error":
                   if (evt.data.retryable) sawRetryable = true;
@@ -171,7 +213,7 @@ function ChapterStream({
       cancelled = true;
       controller.abort();
     };
-  }, [token, bookId, chapterIdx]);
+  }, [token, bookId, chapterIdx, totalChaptersPlanned]);
 
   const lookUp = useCallback(
     async (term: string) => {
@@ -182,6 +224,7 @@ function ChapterStream({
       try {
         const w = await getWord(token, bookId, clean);
         setWord(w);
+        track("word_touch", { bookId, payload: { term: clean } });
       } catch (e) {
         setWord({
           term: clean,
@@ -206,6 +249,7 @@ function ChapterStream({
     if (!instruction || revising) return;
     setRevising(true);
     setReviseError(null);
+    track("revise_request", { bookId, payload: { chapterIdx } });
     try {
       await reviseChapter(token, bookId, chapterIdx, instruction);
     } catch (e) {
@@ -276,7 +320,10 @@ function ChapterStream({
                 그림을 보고 어떤 이야기일지 상상해 봐요.
               </p>
               <button
-                onClick={() => setRevealed(true)}
+                onClick={() => {
+                  setRevealed(true);
+                  track("prompt_reveal", { bookId, payload: { chapterIdx } });
+                }}
                 className={buttonClass("primary", "lg", "w-full")}
               >
                 ▶ 이야기 읽어볼까요?

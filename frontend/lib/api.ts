@@ -21,6 +21,8 @@ import type {
   DesignStatus,
   Health,
   Learning,
+  LearningResult,
+  LearningResultCreate,
   Letter,
   LetterReply,
   Me,
@@ -30,6 +32,7 @@ import type {
   SafetyFlag,
   SafetyFlagDetail,
   SafetyFlagStatus,
+  TrackEvent,
   Word,
 } from "./types";
 
@@ -370,4 +373,41 @@ export function getBookLetters(
   bookId: string,
 ): Promise<{ letters: Letter[] }> {
   return apiFetch<{ letters: Letter[] }>(`/books/${bookId}/letters`, { token });
+}
+
+/* ── 측정·학습결과 (추가기능 04, §4.2) ── */
+
+/** 행동 로그 배치 수집(student/admin). 1~50개. studentId는 토큰에서. */
+export function postEvents(
+  token: string | null,
+  events: TrackEvent[],
+): Promise<{ accepted: number }> {
+  return apiFetch<{ accepted: number }>("/events", {
+    token,
+    method: "POST",
+    body: { events },
+  });
+}
+
+/** 학습 결과 저장(책 소유 학생/admin). type∈quiz|essay|emotion. */
+export function postLearningResult(
+  token: string | null,
+  bookId: string,
+  body: LearningResultCreate,
+): Promise<{ id: string; type: string; createdAt: string }> {
+  return apiFetch<{ id: string; type: string; createdAt: string }>(
+    `/books/${bookId}/learning-results`,
+    { token, method: "POST", body },
+  );
+}
+
+/** 학습 결과 조회(책 접근 가능자). */
+export function getLearningResults(
+  token: string | null,
+  bookId: string,
+): Promise<{ results: LearningResult[] }> {
+  return apiFetch<{ results: LearningResult[] }>(
+    `/books/${bookId}/learning-results`,
+    { token },
+  );
 }

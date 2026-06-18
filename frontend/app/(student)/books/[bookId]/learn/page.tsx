@@ -1,12 +1,14 @@
 import Link from "next/link";
 import { notFound } from "next/navigation";
 
+import { EssayForm } from "@/components/learning/EssayForm";
+import { LearningOpenTracker } from "@/components/learning/LearningOpenTracker";
 import { LetterForm } from "@/components/learning/LetterForm";
 import { Quiz } from "@/components/learning/Quiz";
 import { EmptyState } from "@/components/ui/EmptyState";
 import { ApiError, getBook, getLearning } from "@/lib/api";
 import { getAccessToken } from "@/lib/auth/server";
-import type { EmotionPoint, EssayBlank, Word } from "@/lib/types";
+import type { EmotionPoint, Word } from "@/lib/types";
 
 export default async function LearnPage({
   params,
@@ -36,6 +38,7 @@ export default async function LearnPage({
 
   return (
     <section className="mx-auto max-w-2xl">
+      <LearningOpenTracker bookId={bookId} />
       <Link href={`/books/${bookId}/read`} className="text-sm font-bold text-muted">
         ← 이야기로 돌아가기
       </Link>
@@ -62,17 +65,13 @@ export default async function LearnPage({
 
           {quiz.length > 0 && (
             <Block title="❓ 퀴즈">
-              <Quiz items={quiz} />
+              <Quiz items={quiz} bookId={bookId} />
             </Block>
           )}
 
           {essayBlanks.length > 0 && (
             <Block title="✍️ 독후감 채우기">
-              <ul className="space-y-4">
-                {essayBlanks.map((b, i) => (
-                  <EssayBlankCard key={i} blank={b} />
-                ))}
-              </ul>
+              <EssayForm bookId={bookId} blanks={essayBlanks} />
             </Block>
           )}
 
@@ -118,31 +117,6 @@ function VocabCard({ word }: { word: Word }) {
         )}
       </p>
       <p className="mt-1 text-muted">{word.meaning}</p>
-    </li>
-  );
-}
-
-function EssayBlankCard({ blank }: { blank: EssayBlank }) {
-  return (
-    <li className="rounded-card bg-surface p-5 ring-1 ring-border">
-      <p className="font-bold">{blank.prompt}</p>
-      {blank.hints.length > 0 && (
-        <ul className="mt-2 flex flex-wrap gap-1.5">
-          {blank.hints.map((h, i) => (
-            <li
-              key={i}
-              className="rounded-full bg-secondary/15 px-2.5 py-0.5 text-sm text-secondary-strong"
-            >
-              {h}
-            </li>
-          ))}
-        </ul>
-      )}
-      <textarea
-        rows={3}
-        placeholder="여기에 생각을 적어 봐요."
-        className="mt-3 w-full rounded-xl border-2 border-border bg-background p-3"
-      />
     </li>
   );
 }

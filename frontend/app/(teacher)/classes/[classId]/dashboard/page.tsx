@@ -55,6 +55,56 @@ export default async function DashboardPage({
         <SummaryCard label="배운 낱말" value={`${summary.vocabCount}개`} />
       </dl>
 
+      {(summary.revisitRate !== undefined ||
+        summary.vocabQuizAccuracy !== undefined ||
+        summary.essaysSubmitted !== undefined) && (
+        <dl className="mt-3 grid grid-cols-2 gap-3 sm:grid-cols-3">
+          {summary.revisitRate !== undefined && (
+            <SummaryCard
+              label="재방문률"
+              value={`${Math.round(summary.revisitRate * 100)}%`}
+            />
+          )}
+          {summary.vocabQuizAccuracy !== undefined && (
+            <SummaryCard
+              label="어휘 정답률"
+              value={`${Math.round(summary.vocabQuizAccuracy * 100)}%`}
+            />
+          )}
+          {summary.essaysSubmitted !== undefined && (
+            <SummaryCard
+              label="독후감 제출"
+              value={`${summary.essaysSubmitted}개`}
+            />
+          )}
+        </dl>
+      )}
+
+      {summary.objectiveAchievement &&
+        summary.objectiveAchievement.length > 0 && (
+          <div className="mt-6">
+            <h2 className="mb-3 text-lg font-bold">학습목표 달성률</h2>
+            <ul className="space-y-2 rounded-card bg-surface p-4 ring-1 ring-border">
+              {summary.objectiveAchievement.map((o, i) => (
+                <li key={i} className="flex items-center gap-3">
+                  <span className="w-32 shrink-0 truncate text-sm sm:w-48">
+                    {o.objective}
+                  </span>
+                  <div className="h-2 flex-1 overflow-hidden rounded-full bg-black/10">
+                    <div
+                      className="h-full rounded-full bg-primary"
+                      style={{ width: `${Math.round(o.rate * 100)}%` }}
+                    />
+                  </div>
+                  <span className="w-10 shrink-0 text-right text-sm text-muted">
+                    {Math.round(o.rate * 100)}%
+                  </span>
+                </li>
+              ))}
+            </ul>
+          </div>
+        )}
+
       <h2 className="mb-3 mt-8 text-lg font-bold">학생별 진척</h2>
       {students.length === 0 ? (
         <EmptyState>아직 학급에 학생이 없어요.</EmptyState>

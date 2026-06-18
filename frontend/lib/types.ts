@@ -144,9 +144,14 @@ export interface DashboardSummary {
   studentCount: number;
   booksStarted: number;
   booksDone: number;
-  /** 완독률 0~1 */
+  /** 완독률 0~1 (추가기능 04: book_finished 기준, 과도기 status 폴백) */
   completionRate: number;
   vocabCount: number;
+  /* 추가기능 04 확장(없을 수도 있어 optional) */
+  revisitRate?: number;
+  vocabQuizAccuracy?: number;
+  objectiveAchievement?: { objective: string; rate: number }[];
+  essaysSubmitted?: number;
 }
 
 /** GET /classes/{id}/dashboard 응답 (FR-T2) */
@@ -231,7 +236,7 @@ export interface SafetyFlagDetail extends SafetyFlag {
   letter?: Letter | null;
 }
 
-/** GET /admin/usage 응답 (FR-M1 최소) */
+/** GET /admin/usage 응답 (FR-M1 최소 + 추가기능 04 확장) */
 export interface AdminUsage {
   users: { total: number; students: number; teachers: number; admins: number };
   classrooms: number;
@@ -239,6 +244,60 @@ export interface AdminUsage {
   books: { total: number; planning: number; writing: number; done: number };
   chaptersWritten: number;
   safetyFlags: { open: number; total: number };
+  /* 추가기능 04 확장(optional) */
+  completionRate?: number;
+  revisitRate?: number;
+  eventsTotal?: number;
+  learningResults?: {
+    quiz: number;
+    essay: number;
+    emotion: number;
+    letter: number;
+  };
+}
+
+/* ── 측정·학습결과 (추가기능 04, §4.2·§7) ── */
+export type EventType =
+  | "chapter_open"
+  | "chapter_dwell"
+  | "chapter_done"
+  | "book_finished"
+  | "word_touch"
+  | "prompt_reveal"
+  | "revise_request"
+  | "learning_open"
+  | "locale_toggle";
+
+/** 행동 로그 1건(POST /events). payload 에 자유텍스트/본문 금지(word_touch term 만 예외). */
+export interface TrackEvent {
+  bookId?: string | null;
+  type: EventType;
+  payload?: Record<string, unknown>;
+  clientTs: string;
+}
+
+export type LearningResultType = "quiz" | "essay" | "emotion";
+
+/** 학습 결과 저장 요청(POST /books/{id}/learning-results). */
+export interface LearningResultCreate {
+  type: LearningResultType;
+  data: unknown;
+}
+
+/** 저장된 학습 결과(GET). */
+export interface LearningResult {
+  id: string;
+  type: string;
+  data: unknown;
+  createdAt: string;
+}
+
+/** ask_user 질문(SSE `ask` 이벤트 / PlanReply.ask). lib/ai.ts AskUserPrompt 와 동일 구조. */
+export interface Ask {
+  sessionId: string;
+  question: string;
+  choices: string[];
+  allowText: boolean;
 }
 
 /* ── AI 세션/트레이스 (추가기능 02, §4.2·§7) ── */
@@ -331,5 +390,6 @@ export type SSEEvent =
   | { type: "illustration"; data: SSEIllustration }
   | { type: "prompt"; data: SSEPrompt }
   | { type: "token"; data: SSEToken }
+  | { type: "ask"; data: Ask }
   | { type: "done"; data: SSEDone }
   | { type: "error"; data: SSEError };

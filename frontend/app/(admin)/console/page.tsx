@@ -40,6 +40,40 @@ export default async function AdminConsolePage() {
         />
         <Stat label="전체" value={usage.safetyFlags.total} />
       </dl>
+
+      {(usage.completionRate !== undefined ||
+        usage.revisitRate !== undefined ||
+        usage.eventsTotal !== undefined) && (
+        <>
+          <h2 className="mb-3 mt-8 text-lg font-bold">측정</h2>
+          <dl className="grid grid-cols-2 gap-3 sm:grid-cols-4">
+            {usage.completionRate !== undefined && (
+              <Stat
+                label="완독률"
+                value={`${Math.round(usage.completionRate * 100)}%`}
+              />
+            )}
+            {usage.revisitRate !== undefined && (
+              <Stat
+                label="재방문률"
+                value={`${Math.round(usage.revisitRate * 100)}%`}
+              />
+            )}
+            {usage.eventsTotal !== undefined && (
+              <Stat label="이벤트" value={usage.eventsTotal} />
+            )}
+          </dl>
+        </>
+      )}
+
+      {usage.learningResults && (
+        <dl className="mt-3 grid grid-cols-2 gap-3 sm:grid-cols-4">
+          <Stat label="퀴즈" value={usage.learningResults.quiz} />
+          <Stat label="독후감" value={usage.learningResults.essay} />
+          <Stat label="감정" value={usage.learningResults.emotion} />
+          <Stat label="편지" value={usage.learningResults.letter} />
+        </dl>
+      )}
     </section>
   );
 }
@@ -50,7 +84,7 @@ function Stat({
   highlight,
 }: {
   label: string;
-  value: number;
+  value: number | string;
   highlight?: boolean;
 }) {
   return (
