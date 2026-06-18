@@ -113,6 +113,8 @@ export interface PlanReply {
     traits: string[];
   };
   readyToWrite: boolean;
+  /** AI가 되물을 때(ask_user) 동기 흐름에 실려 옴(추가기능 02/04). */
+  ask?: Ask | null;
 }
 
 /** POST /books/{id}/design 응답 */
@@ -144,9 +146,14 @@ export interface DashboardSummary {
   studentCount: number;
   booksStarted: number;
   booksDone: number;
-  /** 완독률 0~1 */
+  /** 완독률 0~1 (추가기능 04: book_finished 기준, 과도기 status 폴백) */
   completionRate: number;
   vocabCount: number;
+  /* 추가기능 04 확장(없을 수도 있어 optional) */
+  revisitRate?: number;
+  vocabQuizAccuracy?: number;
+  objectiveAchievement?: { objective: string; rate: number }[];
+  essaysSubmitted?: number;
 }
 
 /** GET /classes/{id}/dashboard 응답 (FR-T2) */
@@ -177,13 +184,61 @@ export interface Learning {
   emotion: EmotionPoint[];
 }
 
-/** POST /books/{id}/letters 응답 (FR-S11) */
+/** POST /books/{id}/letters 응답 (FR-S11). letterId 추가(추가기능 03). */
 export interface LetterReply {
   status: "answered" | "held";
   reply: string | null;
+  letterId: string;
 }
 
-/** GET /admin/usage 응답 (FR-M1 최소) */
+/* ── 안전·교사검토 (추가기능 03, §4.2·§7) ── */
+export type LetterStatus =
+  | "pending"
+  | "answered"
+  | "held"
+  | "approved"
+  | "rejected";
+export type SafetyFlagStatus = "open" | "resolved";
+
+/** 인물 편지 원문·답장·검토 상태 */
+export interface Letter {
+  id: string;
+  bookId: string;
+  studentId: string;
+  recipient: string;
+  body: string;
+  status: LetterStatus;
+  reply?: string | null;
+  replySource?: string | null;
+  reviewedBy?: string | null;
+  reviewedAt?: string | null;
+  createdAt: string;
+}
+
+/** 안전 신호(safety_flags) */
+export interface SafetyFlag {
+  id: string;
+  bookId: string | null;
+  studentId: string | null;
+  /** 발생 위치(입력/출력/편지 등) */
+  source: string;
+  reason: string;
+  category?: string | null;
+  severity: string;
+  status: SafetyFlagStatus;
+  letterId?: string | null;
+  reviewedBy?: string | null;
+  reviewedAt?: string | null;
+  note?: string | null;
+  createdAt: string;
+}
+
+/** GET /safety-flags/{id} 응답 = 신호 + 연결 편지 */
+export interface SafetyFlagDetail extends SafetyFlag {
+  letter?: Letter | null;
+}
+
+/** GET /admin/usage 응답 (FR-M1 최소 + 추가기능 04 확장) */
 export interface AdminUsage {
   users: { total: number; students: number; teachers: number; admins: number };
   classrooms: number;
@@ -191,6 +246,196 @@ export interface AdminUsage {
   books: { total: number; planning: number; writing: number; done: number };
   chaptersWritten: number;
   safetyFlags: { open: number; total: number };
+  /* 추가기능 04 확장(optional) */
+  completionRate?: number;
+  revisitRate?: number;
+  eventsTotal?: number;
+  learningResults?: {
+    quiz: number;
+    essay: number;
+    emotion: number;
+    letter: number;
+  };
+}
+
+/* ── 측정·학습결과 (추가기능 04, §4.2·§7) ── */
+export type EventType =
+  | "chapter_open"
+  | "chapter_dwell"
+  | "chapter_done"
+  | "book_finished"
+  | "word_touch"
+  | "prompt_reveal"
+  | "revise_request"
+  | "learning_open"
+  | "locale_toggle";
+
+/** 행동 로그 1건(POST /events). payload 에 자유텍스트/본문 금지(word_touch term 만 예외). */
+export interface TrackEvent {
+  bookId?: string | null;
+  type: EventType;
+  payload?: Record<string, unknown>;
+  clientTs: string;
+}
+
+export type LearningResultType = "quiz" | "essay" | "emotion";
+
+/** 학습 결과 저장 요청(POST /books/{id}/learning-results). */
+export interface LearningResultCreate {
+  type: LearningResultType;
+  data: unknown;
+}
+
+/** 저장된 학습 결과(GET). */
+export interface LearningResult {
+  id: string;
+  type: string;
+  data: unknown;
+  createdAt: string;
+}
+
+/** ask_user 질문(SSE `ask` 이벤트 / PlanReply.ask). lib/ai.ts AskUserPrompt 와 동일 구조. */
+export interface Ask {
+  sessionId: string;
+  question: string;
+  choices: string[];
+  allowText: boolean;
+}
+
+/* ── 관리자 콘솔 (추가기능 06, §4.2·§7) ── */
+export interface AdminUser {
+  id: string;
+  email: string;
+  role: Role;
+  classId?: string | null;
+  className?: string | null;
+  grade?: number | null;
+  guardianConsent: boolean;
+  status: "active" | "deactivated";
+  createdAt: string;
+}
+export interface AdminUserPatch {
+  role?: Role;
+  classId?: string | null;
+  guardianConsent?: boolean;
+}
+
+export interface AdminMessage {
+  id: string;
+  bookId?: string | null;
+  userId?: string | null;
+  role: string;
+  kind: string;
+  content: string;
+  sessionId?: string | null;
+  createdAt: string;
+}
+
+export interface TokenUsageBucket {
+  key: string;
+  calls: number;
+  tokensIn: number;
+  tokensOut: number;
+  estCost: number;
+}
+export interface TokenUsageReport {
+  groupBy: string;
+  buckets: TokenUsageBucket[];
+  total: { calls: number; tokensIn: number; tokensOut: number; estCost: number };
+}
+
+export interface AdminSettingsResponse {
+  settings: Record<string, unknown>;
+  /** env 키 존재 여부만(값 비노출) */
+  env: Record<string, boolean>;
+}
+export interface SettingPut {
+  key?: string;
+  value?: unknown;
+  settings?: Record<string, unknown>;
+}
+
+export type NotificationLevel = "info" | "warn" | "error";
+/** 알림 (DOM 전역 Notification 과 구분해 AppNotification). */
+export interface AppNotification {
+  id: string;
+  targetUserId?: string | null;
+  targetRole?: string | null;
+  isBroadcast: boolean;
+  title: string;
+  body?: string | null;
+  level: NotificationLevel;
+  readAt?: string | null;
+  createdAt: string;
+}
+export interface NotificationCreate {
+  targetUserId?: string;
+  targetRole?: string;
+  isBroadcast?: boolean;
+  title: string;
+  body?: string;
+  level: NotificationLevel;
+}
+
+export interface BackupExportRequest {
+  tables?: string[] | null;
+}
+export interface BackupImportRequest {
+  mode: "merge" | "overwrite";
+  tables: Record<string, unknown[]>;
+}
+
+/* ── AI 세션/트레이스 (추가기능 02, §4.2·§7) ── */
+export type AiRole = "designer" | "writer" | "editor" | "chat";
+export type AiSessionStatus = "running" | "awaiting_user" | "done" | "error";
+
+/** GET /ai/sessions 의 세션 항목 (06 확장 필드 optional) */
+export interface AiSession {
+  id: string;
+  bookId: string | null;
+  role: AiRole;
+  model: string;
+  status: AiSessionStatus;
+  summary: string | null;
+  error: string | null;
+  startedAt: string;
+  endedAt: string | null;
+  /* 06 확장 */
+  userEmail?: string | null;
+  stepCount?: number;
+  tokensIn?: number;
+  tokensOut?: number;
+}
+
+/** ReAct 스텝(트레이스 타임라인 1행) */
+export interface AiStep {
+  idx: number;
+  thought: string;
+  skill: string;
+  /** 스킬 입력(JSON) */
+  args: unknown;
+  /** 스킬 결과(JSON) */
+  observation: unknown;
+  tokensIn: number;
+  tokensOut: number;
+  ms: number;
+  createdAt: string;
+}
+
+/** GET /ai/sessions/{id} 응답 = 세션 + 스텝 */
+export interface AiSessionDetail extends AiSession {
+  steps: AiStep[];
+}
+
+/** GET /health 응답 (백엔드 모드 배지용) */
+export interface Health {
+  status: string;
+  version: string;
+  env: string;
+  /** "supabase" | "memory" 등 */
+  storage: string;
+  /** "google" | "mock" 등 */
+  ai: string;
 }
 
 /** 공통 에러 규약 (§4.1) */
@@ -235,5 +480,6 @@ export type SSEEvent =
   | { type: "illustration"; data: SSEIllustration }
   | { type: "prompt"; data: SSEPrompt }
   | { type: "token"; data: SSEToken }
+  | { type: "ask"; data: Ask }
   | { type: "done"; data: SSEDone }
   | { type: "error"; data: SSEError };

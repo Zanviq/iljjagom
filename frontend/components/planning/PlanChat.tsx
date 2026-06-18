@@ -3,11 +3,21 @@
 import { useRouter } from "next/navigation";
 import { useEffect, useRef, useState } from "react";
 
+import { AskUserPanel } from "@/components/ai/AskUserPanel";
 import { CharacterCard } from "@/components/planning/CharacterCard";
 import { buttonClass } from "@/components/ui/Button";
+import { ErrorText } from "@/components/ui/ErrorText";
 import { ApiError, getBook, postDesign, postPlanMessage } from "@/lib/api";
+import { answerAiSession } from "@/lib/ai";
+import type { AskUserAnswer, AskUserPrompt } from "@/lib/ai";
 import { getClientAccessToken } from "@/lib/auth/client";
 import type { PlanReply } from "@/lib/types";
+
+/** ask_user 가 plan 응답에 실려오면(PlanReply.ask) 질문 패널을 띄운다. */
+function extractAsk(reply: PlanReply): AskUserPrompt | null {
+  const ask = reply.ask;
+  return ask && ask.sessionId && ask.question ? ask : null;
+}
 
 interface Message {
   who: "child" | "ai";
@@ -33,6 +43,9 @@ export function PlanChat({ bookId }: { bookId: string }) {
   const [sending, setSending] = useState(false);
   const [designing, setDesigning] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  const [ask, setAsk] = useState<AskUserPrompt | null>(null);
+  const [answering, setAnswering] = useState(false);
+  const [askError, setAskError] = useState<string | null>(null);
 
   const endRef = useRef<HTMLDivElement>(null);
   useEffect(() => {
@@ -52,12 +65,33 @@ export function PlanChat({ bookId }: { bookId: string }) {
       setMessages((m) => [...m, { who: "ai", text: reply.reply }]);
       setDraft(reply.characterDraft);
       setReadyToWrite(reply.readyToWrite);
+      setAsk(extractAsk(reply));
     } catch (e) {
       setError(
         e instanceof ApiError ? e.message : "메시지를 보내지 못했어요.",
       );
     } finally {
       setSending(false);
+    }
+  }
+
+  async function submitAnswer(answer: AskUserAnswer) {
+    if (!ask || answering) return;
+    setAskError(null);
+    setAnswering(true);
+    const shown = answer.text ?? answer.choice ?? "";
+    try {
+      const token = await getClientAccessToken();
+      await answerAiSession(token, ask.sessionId, answer);
+      if (shown) setMessages((m) => [...m, { who: "child", text: shown }]);
+      setAsk(null);
+      // 흐름 재개 응답 형태는 백엔드 확정 대기(handoff). 확정되면 후속 reply를 이어붙인다.
+    } catch (e) {
+      setAskError(
+        e instanceof ApiError ? e.message : "대답을 전하지 못했어요.",
+      );
+    } finally {
+      setAnswering(false);
     }
   }
 
@@ -89,7 +123,7 @@ export function PlanChat({ bookId }: { bookId: string }) {
   }
 
   return (
-    <div className="grid gap-6 lg:grid-cols-[1fr_18rem]">
+    <div className="grid gap-6 md:grid-cols-[1fr_18rem]">
       <div className="flex min-h-[60vh] flex-col rounded-card bg-surface ring-1 ring-border">
         <div className="flex-1 space-y-4 overflow-y-auto p-5">
           {messages.map((m, i) => (
@@ -100,7 +134,18 @@ export function PlanChat({ bookId }: { bookId: string }) {
         </div>
 
         {error && (
-          <p className="px-5 pb-2 text-sm font-bold text-danger">{error}</p>
+          <ErrorText className="px-5 pb-2">{error}</ErrorText>
+        )}
+
+        {ask && (
+          <div className="border-t border-border p-4">
+            <AskUserPanel
+              prompt={ask}
+              pending={answering}
+              error={askError}
+              onAnswer={(a) => void submitAnswer(a)}
+            />
+          </div>
         )}
 
         <form
@@ -108,7 +153,9 @@ export function PlanChat({ bookId }: { bookId: string }) {
             e.preventDefault();
             void send();
           }}
-          className="flex items-end gap-2 border-t border-border p-4"
+          className={`flex items-end gap-2 border-t border-border p-4 ${
+            ask ? "hidden" : ""
+          }`}
         >
           <textarea
             value={input}

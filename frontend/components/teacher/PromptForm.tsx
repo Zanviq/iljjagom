@@ -3,6 +3,7 @@
 import { useRouter } from "next/navigation";
 import { useActionState, useEffect, useState } from "react";
 
+import { ErrorText } from "@/components/ui/ErrorText";
 import { SubmitButton } from "@/components/ui/SubmitButton";
 import {
   createPromptAction,
@@ -38,10 +39,10 @@ export function PromptForm({ classId }: { classId: string }) {
       <PromptFields key={state.createdId ?? "init"} />
 
       {state.error && (
-        <p className="mt-4 text-sm font-bold text-danger">{state.error}</p>
+        <ErrorText className="mt-4">{state.error}</ErrorText>
       )}
       {state.ok && (
-        <p className="mt-4 text-sm font-bold text-success">발제를 냈어요! 🎉</p>
+        <p className="mt-4 text-sm font-bold text-success-strong">발제를 냈어요! 🎉</p>
       )}
 
       <SubmitButton className="mt-6 w-full" pendingText="만드는 중…">
@@ -100,7 +101,7 @@ function PromptFields() {
         <button
           type="button"
           onClick={() => setObjectives((arr) => [...arr, ""])}
-          className="self-start rounded-xl px-3 py-1 text-sm font-bold text-secondary hover:bg-secondary/10"
+          className="self-start rounded-xl px-3 py-1 text-sm font-bold text-secondary-strong hover:bg-secondary/10"
         >
           + 목표 추가
         </button>

@@ -3,6 +3,7 @@
 import { useState } from "react";
 
 import { buttonClass } from "@/components/ui/Button";
+import { ErrorText } from "@/components/ui/ErrorText";
 import { ApiError, postLetter } from "@/lib/api";
 import { getClientAccessToken } from "@/lib/auth/client";
 import type { LetterReply } from "@/lib/types";
@@ -56,7 +57,7 @@ export function LetterForm({ bookId }: { bookId: string }) {
         />
       </label>
 
-      {error && <p className="mt-2 text-sm font-bold text-danger">{error}</p>}
+      {error && <ErrorText className="mt-2">{error}</ErrorText>}
 
       <button
         onClick={() => void send()}
@@ -69,7 +70,7 @@ export function LetterForm({ bookId }: { bookId: string }) {
       {reply && (
         <div className="mt-4 rounded-xl bg-accent/20 p-4">
           {reply.status === "held" ? (
-            <p className="font-bold text-secondary">
+            <p className="font-bold text-secondary-strong">
               💌 편지를 잘 받았어요. 선생님이 확인한 뒤 답장을 줄 거예요.
             </p>
           ) : (

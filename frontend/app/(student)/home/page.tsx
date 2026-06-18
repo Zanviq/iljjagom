@@ -94,7 +94,7 @@ function PromptCard({ prompt }: { prompt: Prompt }) {
           {prompt.learningObjectives.map((obj, i) => (
             <li
               key={i}
-              className="rounded-full bg-secondary/15 px-3 py-1 text-sm text-secondary"
+              className="rounded-full bg-secondary/15 px-3 py-1 text-sm text-secondary-strong"
             >
               {obj}
             </li>

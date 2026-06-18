@@ -1,6 +1,7 @@
 import Link from "next/link";
 import { notFound } from "next/navigation";
 
+import { EmptyState } from "@/components/ui/EmptyState";
 import { ApiError, getClasses, getDashboard } from "@/lib/api";
 import { getAccessToken } from "@/lib/auth/server";
 import type { BookStatus, DashboardStudent } from "@/lib/types";
@@ -54,14 +55,62 @@ export default async function DashboardPage({
         <SummaryCard label="배운 낱말" value={`${summary.vocabCount}개`} />
       </dl>
 
+      {(summary.revisitRate !== undefined ||
+        summary.vocabQuizAccuracy !== undefined ||
+        summary.essaysSubmitted !== undefined) && (
+        <dl className="mt-3 grid grid-cols-2 gap-3 sm:grid-cols-3">
+          {summary.revisitRate !== undefined && (
+            <SummaryCard
+              label="재방문률"
+              value={`${Math.round(summary.revisitRate * 100)}%`}
+            />
+          )}
+          {summary.vocabQuizAccuracy !== undefined && (
+            <SummaryCard
+              label="어휘 정답률"
+              value={`${Math.round(summary.vocabQuizAccuracy * 100)}%`}
+            />
+          )}
+          {summary.essaysSubmitted !== undefined && (
+            <SummaryCard
+              label="독후감 제출"
+              value={`${summary.essaysSubmitted}개`}
+            />
+          )}
+        </dl>
+      )}
+
+      {summary.objectiveAchievement &&
+        summary.objectiveAchievement.length > 0 && (
+          <div className="mt-6">
+            <h2 className="mb-3 text-lg font-bold">학습목표 달성률</h2>
+            <ul className="space-y-2 rounded-card bg-surface p-4 ring-1 ring-border">
+              {summary.objectiveAchievement.map((o, i) => (
+                <li key={i} className="flex items-center gap-3">
+                  <span className="w-32 shrink-0 truncate text-sm sm:w-48">
+                    {o.objective}
+                  </span>
+                  <div className="h-2 flex-1 overflow-hidden rounded-full bg-black/10">
+                    <div
+                      className="h-full rounded-full bg-primary"
+                      style={{ width: `${Math.round(o.rate * 100)}%` }}
+                    />
+                  </div>
+                  <span className="w-10 shrink-0 text-right text-sm text-muted">
+                    {Math.round(o.rate * 100)}%
+                  </span>
+                </li>
+              ))}
+            </ul>
+          </div>
+        )}
+
       <h2 className="mb-3 mt-8 text-lg font-bold">학생별 진척</h2>
       {students.length === 0 ? (
-        <div className="rounded-card bg-surface p-6 ring-1 ring-border">
-          <p className="text-muted">아직 학급에 학생이 없어요.</p>
-        </div>
+        <EmptyState>아직 학급에 학생이 없어요.</EmptyState>
       ) : (
-        <div className="overflow-hidden rounded-card ring-1 ring-border">
-          <table className="w-full border-collapse bg-surface text-left">
+        <div className="overflow-x-auto rounded-card ring-1 ring-border">
+          <table className="w-full min-w-[32rem] border-collapse bg-surface text-left">
             <thead>
               <tr className="border-b border-border text-sm text-muted">
                 <th className="p-3 font-bold">학생</th>
@@ -95,7 +144,7 @@ function SummaryCard({
     <div className="rounded-card bg-surface p-4 ring-1 ring-border">
       <dt className="text-xs font-bold text-muted">{label}</dt>
       <dd className="mt-1 text-2xl font-extrabold">{value}</dd>
-      {sub && <dd className="text-xs text-secondary">{sub}</dd>}
+      {sub && <dd className="text-xs text-secondary-strong">{sub}</dd>}
     </div>
   );
 }

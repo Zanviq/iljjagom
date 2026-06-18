@@ -1,13 +1,20 @@
 "use client";
 
+import Link from "next/link";
 import { useCallback, useEffect, useRef, useState } from "react";
 
+import { AskUserPanel } from "@/components/ai/AskUserPanel";
 import { buttonClass } from "@/components/ui/Button";
+import { ErrorText } from "@/components/ui/ErrorText";
+import { Loading } from "@/components/ui/Loading";
 import { WordPopover } from "@/components/reader/WordPopover";
+import { answerAiSession } from "@/lib/ai";
+import type { AskUserAnswer } from "@/lib/ai";
 import { ApiError, getBook, getWord, reviseChapter } from "@/lib/api";
 import { getClientAccessToken } from "@/lib/auth/client";
 import { streamChapter } from "@/lib/sse";
-import type { ChapterMode, SSEDone, SSEIllustration, Word } from "@/lib/types";
+import { track } from "@/lib/track";
+import type { Ask, ChapterMode, SSEDone, SSEIllustration, Word } from "@/lib/types";
 
 const sleep = (ms: number) => new Promise((r) => setTimeout(r, ms));
 const MAX_RECONNECT = 5;
@@ -39,9 +46,7 @@ export function ChapterReader({ bookId, title, totalChaptersPlanned }: Props) {
       </div>
 
       {token === undefined ? (
-        <p className="rounded-card bg-surface p-6 text-muted ring-1 ring-border">
-          이야기를 준비하는 중이에요…
-        </p>
+        <Loading card>이야기를 준비하는 중이에요…</Loading>
       ) : (
         // 챕터 변경 또는 수정요청 완료 시 key 변경으로 스트림을 새로 마운트(상태 초기화·재구독).
         <ChapterStream
@@ -49,8 +54,10 @@ export function ChapterReader({ bookId, title, totalChaptersPlanned }: Props) {
           token={token}
           bookId={bookId}
           chapterIdx={chapterIdx}
+          totalChaptersPlanned={totalChaptersPlanned}
           onNext={() => setChapterIdx((i) => i + 1)}
           onRevised={() => setReloadNonce((n) => n + 1)}
+          onRetry={() => setReloadNonce((n) => n + 1)}
         />
       )}
     </section>
@@ -61,19 +68,27 @@ function ChapterStream({
   token,
   bookId,
   chapterIdx,
+  totalChaptersPlanned,
   onNext,
   onRevised,
+  onRetry,
 }: {
   token: string | null;
   bookId: string;
   chapterIdx: number;
+  totalChaptersPlanned: number;
   onNext: () => void;
   onRevised: () => void;
+  onRetry: () => void;
 }) {
   const [text, setText] = useState("");
   const [mode, setMode] = useState<ChapterMode | null>(null);
   const [illustration, setIllustration] = useState<SSEIllustration | null>(null);
   const [activePrompt, setActivePrompt] = useState<string | null>(null);
+  // 유도 흐름 중 AI 되물음(ask_user). 비차단: 답하지 않아도 읽기는 계속된다.
+  const [ask, setAsk] = useState<Ask | null>(null);
+  const [answeringAsk, setAnsweringAsk] = useState(false);
+  const [askError, setAskError] = useState<string | null>(null);
   const [done, setDone] = useState<SSEDone | null>(null);
   const [streaming, setStreaming] = useState(true);
   const [streamError, setStreamError] = useState<string | null>(null);
@@ -89,6 +104,29 @@ function ChapterStream({
   const [reviseError, setReviseError] = useState<string | null>(null);
 
   const doneRef = useRef(false);
+  // 체류 측정용: 도달 단계(opened→read→done).
+  const reachedRef = useRef<"opened" | "read" | "done">("opened");
+
+  // 본문이 공개되면 체류 도달 단계를 'read'로 올린다(자유=즉시, 유도=탭 후).
+  useEffect(() => {
+    if (revealed && reachedRef.current === "opened") reachedRef.current = "read";
+  }, [revealed]);
+
+  // 챕터 열람/체류 계측(추가기능 04): 마운트 시 chapter_open, 언마운트 시 chapter_dwell.
+  useEffect(() => {
+    const mountTs = performance.now();
+    track("chapter_open", { bookId, payload: { chapterIdx } });
+    return () => {
+      track("chapter_dwell", {
+        bookId,
+        payload: {
+          chapterIdx,
+          ms: Math.round(performance.now() - mountTs),
+          reached: reachedRef.current,
+        },
+      });
+    };
+  }, [bookId, chapterIdx]);
 
   useEffect(() => {
     const controller = new AbortController();
@@ -119,14 +157,35 @@ function ChapterStream({
                 case "prompt":
                   setActivePrompt(evt.data.text);
                   break;
+                case "ask":
+                  setAsk(evt.data);
+                  break;
                 case "token":
                   offset += evt.data.text.length;
                   setText((t) => t + evt.data.text);
                   break;
                 case "done":
                   doneRef.current = true;
+                  reachedRef.current = "done";
                   setDone(evt.data);
                   setStreaming(false);
+                  track("chapter_done", {
+                    bookId,
+                    payload: {
+                      chapterIdx,
+                      charCount: evt.data.charCount,
+                      nextAvailable: evt.data.nextChapterAvailable,
+                    },
+                  });
+                  if (
+                    totalChaptersPlanned > 0 &&
+                    chapterIdx >= totalChaptersPlanned
+                  ) {
+                    track("book_finished", {
+                      bookId,
+                      payload: { totalChapters: totalChaptersPlanned },
+                    });
+                  }
                   break;
                 case "error":
                   if (evt.data.retryable) sawRetryable = true;
@@ -164,7 +223,7 @@ function ChapterStream({
       cancelled = true;
       controller.abort();
     };
-  }, [token, bookId, chapterIdx]);
+  }, [token, bookId, chapterIdx, totalChaptersPlanned]);
 
   const lookUp = useCallback(
     async (term: string) => {
@@ -175,6 +234,7 @@ function ChapterStream({
       try {
         const w = await getWord(token, bookId, clean);
         setWord(w);
+        track("word_touch", { bookId, payload: { term: clean } });
       } catch (e) {
         setWord({
           term: clean,
@@ -199,6 +259,7 @@ function ChapterStream({
     if (!instruction || revising) return;
     setRevising(true);
     setReviseError(null);
+    track("revise_request", { bookId, payload: { chapterIdx } });
     try {
       await reviseChapter(token, bookId, chapterIdx, instruction);
     } catch (e) {
@@ -237,7 +298,26 @@ function ChapterStream({
     );
   }
 
+  async function submitAsk(answer: AskUserAnswer) {
+    if (!ask || answeringAsk) return;
+    setAnsweringAsk(true);
+    setAskError(null);
+    try {
+      await answerAiSession(token, ask.sessionId, answer);
+      setAsk(null);
+    } catch (e) {
+      setAskError(
+        e instanceof ApiError ? e.message : "대답을 전하지 못했어요.",
+      );
+    } finally {
+      setAnsweringAsk(false);
+    }
+  }
+
   const canGoNext = done?.nextChapterAvailable ?? false;
+  // 마지막 장(=완독) 여부. 계획된 장 수를 알 때만 판단.
+  const isLastChapter =
+    totalChaptersPlanned > 0 && chapterIdx >= totalChaptersPlanned;
   // 유도 모드에서 아직 본문을 공개하지 않은 상태(삽화·질문 먼저 보는 단계).
   const guidedGate = mode === "guided" && !revealed;
 
@@ -247,14 +327,26 @@ function ChapterStream({
         // eslint-disable-next-line @next/next/no-img-element
         <img
           src={illustration.url}
-          alt={illustration.alt}
-          className="mb-4 w-full rounded-card ring-1 ring-border"
+          alt={illustration.alt || "이야기 삽화"}
+          className="mb-4 max-h-[28rem] w-full rounded-card object-cover ring-1 ring-border"
         />
       )}
       {activePrompt && (
-        <p className="mb-4 rounded-card bg-secondary/15 p-4 text-lg font-bold text-secondary">
+        <p className="mb-4 rounded-card bg-secondary/15 p-4 text-lg font-bold text-secondary-strong">
           💬 {activePrompt}
         </p>
+      )}
+
+      {/* AI 되물음(ask_user): 답해도/안 해도 읽기는 계속(비차단). */}
+      {ask && (
+        <div className="mb-4">
+          <AskUserPanel
+            prompt={ask}
+            pending={answeringAsk}
+            error={askError}
+            onAnswer={(a) => void submitAsk(a)}
+          />
+        </div>
       )}
 
       {/* 유도 모드: 삽화·질문을 먼저 보고, 탭하면 본문을 공개한다. */}
@@ -266,23 +358,30 @@ function ChapterStream({
                 그림을 보고 어떤 이야기일지 상상해 봐요.
               </p>
               <button
-                onClick={() => setRevealed(true)}
+                onClick={() => {
+                  setRevealed(true);
+                  track("prompt_reveal", { bookId, payload: { chapterIdx } });
+                }}
                 className={buttonClass("primary", "lg", "w-full")}
               >
                 ▶ 이야기 읽어볼까요?
               </button>
             </>
           ) : (
-            <p className="text-muted">그림을 준비하는 중이에요…</p>
+            <>
+              <div
+                className="mb-4 aspect-video w-full animate-pulse rounded-card bg-accent/30"
+                aria-hidden
+              />
+              <p className="text-muted">그림을 준비하는 중이에요…</p>
+            </>
           )}
         </div>
       )}
 
       {/* meta 수신 전(모드 미확정) 잠깐의 로딩 */}
       {mode === null && !revealed && (
-        <p className="rounded-card bg-surface p-6 text-muted ring-1 ring-border">
-          이야기를 준비하는 중이에요…
-        </p>
+        <Loading card>이야기를 준비하는 중이에요…</Loading>
       )}
 
       {revealed && (
@@ -305,7 +404,7 @@ function ChapterStream({
       )}
 
       {streamError && (
-        <p className="mt-4 text-center font-bold text-danger">{streamError}</p>
+        <ErrorText className="mt-4 text-center">{streamError}</ErrorText>
       )}
 
       {revealed && done && (
@@ -334,10 +433,37 @@ function ChapterStream({
             >
               다음 장으로 →
             </button>
+          ) : isLastChapter ? (
+            // 마지막 장 완독: 축하 + 학습활동 진입.
+            <div className="mt-2 text-center">
+              <p
+                role="status"
+                aria-live="polite"
+                className="text-lg font-bold text-success-strong"
+              >
+                🎉 이야기를 모두 읽었어요!
+              </p>
+              <Link
+                href={`/books/${bookId}/learn`}
+                className={buttonClass("primary", "lg", "mt-4 w-full")}
+              >
+                📚 학습 활동 하러 가기
+              </Link>
+            </div>
           ) : (
-            <p className="mt-2 text-center font-bold text-success">
-              🎉 이야기를 모두 읽었어요!
-            </p>
+            // 아직 마지막 장이 아닌데 다음 장이 준비되지 않음(생성 중/검수 대기).
+            // 거짓 완독으로 오인하지 않도록 안내 + 다시 확인.
+            <div className="mt-2 text-center">
+              <p className="font-bold text-muted">
+                다음 장을 준비하고 있어요. 잠시 후 다시 확인해 주세요.
+              </p>
+              <button
+                onClick={onRetry}
+                className={buttonClass("outline", "md", "mt-3 w-full")}
+              >
+                ↻ 다시 확인할래요
+              </button>
+            </div>
           )}
         </div>
       )}
@@ -346,7 +472,11 @@ function ChapterStream({
       {revealed && done && mode === "free" && (
         <div className="mt-4 rounded-card bg-surface p-5 ring-1 ring-border">
           {revising ? (
-            <p className="text-center font-bold text-secondary">
+            <p
+              role="status"
+              aria-live="polite"
+              className="text-center font-bold text-secondary-strong"
+            >
               <span className="streaming-cursor" aria-hidden /> 이야기를 고치고
               있어요… 잠시만 기다려 주세요.
             </p>
@@ -363,9 +493,7 @@ function ChapterStream({
                 />
               </label>
               {reviseError && (
-                <p className="mt-2 text-sm font-bold text-danger">
-                  {reviseError}
-                </p>
+                <ErrorText className="mt-2">{reviseError}</ErrorText>
               )}
               <div className="mt-3 flex gap-2">
                 <button

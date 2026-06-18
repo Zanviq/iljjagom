@@ -1,7 +1,7 @@
 /**
  * 집필 스트림(SSE) 구독 유틸. 03-기능명세서 §5.
  * EventSource 대신 fetch 사용 — Authorization 헤더로 토큰을 전달하기 위해.
- * 이벤트: meta | illustration | prompt | token | done | error. (`: ping` 하트비트는 무시)
+ * 이벤트: meta | illustration | prompt | token | ask | done | error. (`: ping` 하트비트는 무시)
  */
 import { API_BASE_URL } from "./api";
 import type { SSEEvent } from "./types";
@@ -11,6 +11,7 @@ const KNOWN_EVENTS = new Set([
   "illustration",
   "prompt",
   "token",
+  "ask",
   "done",
   "error",
 ]);
