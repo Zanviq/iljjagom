@@ -5,15 +5,24 @@
 """
 from __future__ import annotations
 
-import hashlib
-
 from app.ai.gemini import GeminiClient
 from app.storage import get_storage
 
+# 식별자 코드를 노출하지 않는 중립 폴백(학생/07). 실 삽화 실패/미설정 시 임시 표시.
+# 프론트는 이 URL 패턴이면 스켈레톤/중립 표시로 대체할 수 있다(is_placeholder_url).
+_PLACEHOLDER_PREFIX = "https://placehold.co/"
+_PLACEHOLDER_URL = (
+    "https://placehold.co/768x512/f5efe6/d9c7ad?text=%EA%B7%B8%EB%A6%BC+%EC%A4%80%EB%B9%84+%EC%A4%91"
+)
 
-def _placeholder(book_id: str, chapter_idx: int) -> str:
-    seed = hashlib.sha256(f"{book_id}:{chapter_idx}".encode()).hexdigest()[:12]
-    return f"https://placehold.co/768x512?text=ch{chapter_idx}-{seed}"
+
+def _placeholder() -> str:
+    return _PLACEHOLDER_URL
+
+
+def is_placeholder_url(url: str | None) -> bool:
+    """placeholder(임시) URL 인지 — illustration_path 박제 방지·프론트 폴백 판단용."""
+    return bool(url) and url.startswith(_PLACEHOLDER_PREFIX)
 
 
 def _character_identity(c: dict) -> str:
@@ -50,7 +59,7 @@ async def generate_illustration(
     alt = f"{chapter_idx}장 삽화: {summary[:40]}"
 
     if gemini.mock or not gemini.settings.use_real_ai:
-        return _placeholder(book_id, chapter_idx), alt
+        return _placeholder(), alt
 
     # 실 모델: Imagen 생성 → Storage 업로드. 어느 단계든 실패하면 placeholder.
     data = await gemini.generate_image(_build_image_prompt(summary, characters))
@@ -58,4 +67,4 @@ async def generate_illustration(
         url = get_storage().upload_illustration(f"{book_id}/{chapter_idx}.png", data)
         if url:
             return url, alt
-    return _placeholder(book_id, chapter_idx), alt
+    return _placeholder(), alt

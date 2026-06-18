@@ -2,6 +2,7 @@
 from __future__ import annotations
 
 from app.ai.routes import is_allowed_route, route_for_book
+from app.ai.sanitize import sanitize_reply
 from tests.conftest import auth
 
 ADMIN = "admin@iljjagom.test"
@@ -106,6 +107,52 @@ async def test_progress_info_no_action(client):
     data = r.json()
     assert data["actions"] == []
     assert "권" in data["reply"]
+
+
+# --- 학생/16: 스킬 데이터 합성·예고/이모지 제거·반복 차단 ---
+
+def test_sanitize_reply_strips_emoji_and_markdown():
+    assert sanitize_reply("알려줄게! 😊") == "알려줄게!"
+    assert sanitize_reply("**굵게** `코드` # 제목") == "굵게 코드 제목"
+    assert sanitize_reply("- 첫째\n- 둘째") == "첫째 둘째"
+    assert sanitize_reply("줄1\n줄2  \t 공백") == "줄1 줄2 공백"
+
+
+async def test_activity_query_returns_real_data_not_teaser(client):
+    # "지금까지 내가 한거 알려줘" → 예고가 아니라 실제 책 수·진행 장수가 담긴 답.
+    sh, class_id, code, prompt_id = await _setup_student(client, email="kid_act@test")
+    await client.post("/books", headers=sh, json={"promptId": prompt_id})
+    r = await client.post(
+        "/ai/overseer/messages", headers=sh, json={"message": "지금까지 내가 한거 알려줘"}
+    )
+    data = r.json()
+    reply = data["reply"]
+    assert data["actions"] == []
+    assert "권" in reply
+    assert any(c.isdigit() for c in reply)        # 실제 수치 포함
+    assert "알려줄게" not in reply and "알려드릴게" not in reply  # 예고 아님
+
+
+async def test_no_emoji_in_reply(client):
+    sh, *_ = await _setup_student(client, email="kid_noemoji@test")
+    r = await client.post("/ai/overseer/messages", headers=sh, json={"message": "안녕"})
+    reply = r.json()["reply"]
+    assert sanitize_reply(reply) == reply  # 정제해도 변화 없음(이모지·마크다운 부재)
+
+
+async def test_repeated_question_no_teaser_loop(client):
+    # 같은 질문을 두 번 — 둘 다 데이터 답이고, "알려줄게" 예고 루프가 없다.
+    sh, class_id, code, prompt_id = await _setup_student(client, email="kid_loop@test")
+    await client.post("/books", headers=sh, json={"promptId": prompt_id})
+    sid = None
+    for _ in range(2):
+        body = {"message": "지금까지 한 거 알려줘"}
+        if sid:
+            body["sessionId"] = sid
+        d = (await client.post("/ai/overseer/messages", headers=sh, json=body)).json()
+        sid = d["sessionId"]
+        assert "알려줄게" not in d["reply"]
+        assert any(c.isdigit() for c in d["reply"])
 
 
 # --- 안전 / 동의 게이트 ---

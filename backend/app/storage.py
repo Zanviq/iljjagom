@@ -50,8 +50,14 @@ class SupabaseStorage(Storage):
                 data,
                 {"content-type": content_type, "upsert": "true"},
             )
+        except Exception as e:
+            # 가장 유력한 원인: illustrations 버킷 부재/비공개. 단계 식별 위해 로깅.
+            logger.warning("삽화 업로드 실패 path=%s: %s", path, e)
+            return None
+        try:
             return self.client.storage.from_(self.bucket).get_public_url(path)
-        except Exception:
+        except Exception as e:
+            logger.warning("삽화 공개 URL 조회 실패 path=%s: %s", path, e)
             return None
 
 

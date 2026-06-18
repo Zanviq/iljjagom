@@ -224,6 +224,9 @@ async def test_full_p1_vertical_slice(client):
     # 본문이 토큰을 이어 붙인 것과 일치하는지 (글자 단위 흐름 확인)
     body = "".join(e[1]["text"] for e in events if e[0] == "token")
     assert len(body) == done["charCount"]
+    # 학생/08: 스트림 본문에 마크다운/장번호 머리말이 없다(정제됨).
+    assert "**" not in body and "# " not in body
+    assert not any(line.strip() in ("1장.", "1 장") for line in body.splitlines())
 
     # 단어 도움 최소판
     r = await client.get(
@@ -341,7 +344,9 @@ async def test_learning_artifacts(client):
     assert len(body["emotion"]) >= 1
     assert body["emotion"][0]["chapterIdx"] == 1
     assert len(body["quiz"]) >= 1
-    assert body["quiz"][0]["answerIndex"] == 0
+    # 학생/10: 정답 인덱스는 choices 범위 안의 유효 위치(고정 0 아님).
+    for q in body["quiz"]:
+        assert 0 <= q["answerIndex"] < len(q["choices"])
     assert len(body["essayBlanks"]) >= 1
 
 
@@ -561,6 +566,22 @@ async def test_illustration_placeholder_in_keyless_mode(client):
     events = await _read_sse(client, f"/books/{book_id}/chapters/4/stream", sh)
     illus = next(e[1] for e in events if e[0] == "illustration")
     assert illus["url"].startswith("https://placehold.co/")
+
+    # 학생/07: placeholder 는 illustration_path 에 박제되지 않는다(다음에 실 삽화로 교체 가능).
+    from app.store import get_store
+
+    ch = get_store().get_chapter(book_id, 4)
+    assert ch is not None and ch.illustration_path is None
+
+
+def test_placeholder_has_no_identifier_code():
+    # 학생/07: 폴백 placeholder 에 chN-해시 같은 식별자 코드가 박히지 않는다(중립·고정).
+    from app.ai.imagen import _placeholder, is_placeholder_url
+
+    url = _placeholder()
+    assert is_placeholder_url(url)
+    assert _placeholder() == url           # 호출마다 동일(식별자 없음)
+    assert not is_placeholder_url("https://cdn.supabase.co/illustrations/x/1.png")
 
 
 def test_dev_auth_secure_defaults():
