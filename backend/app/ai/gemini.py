@@ -7,11 +7,14 @@ from __future__ import annotations
 
 import asyncio
 import hashlib
+import logging
 import time
 from collections.abc import AsyncIterator, Callable
 from typing import TypeVar
 
 from app.config import Settings, get_settings
+
+logger = logging.getLogger("app.ai.gemini")
 
 EMBED_DIM = 768
 
@@ -138,15 +141,20 @@ class GeminiClient:
             )
             images = getattr(resp, "generated_images", None) or []
             if not images:
+                logger.warning("imagen: 생성 결과 비어 있음(generated_images empty)")
                 return None
             image = getattr(images[0], "image", None)
-            return getattr(image, "image_bytes", None)
+            data = getattr(image, "image_bytes", None)
+            if not data:
+                logger.warning("imagen: image_bytes 없음")
+            return data
 
         def _safe() -> bytes | None:
-            # 일시 오류는 재시도하고, 그 외 실패는 None 으로 폴백(placeholder 사용).
+            # 일시 오류는 재시도하고, 그 외 최종 실패는 로그 후 None 폴백(placeholder).
             try:
                 return _retry_call(_call)
-            except Exception:
+            except Exception as e:
+                logger.warning("imagen 생성 실패: %s", e)
                 return None
 
         return await asyncio.to_thread(_safe)

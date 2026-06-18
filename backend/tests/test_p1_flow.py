@@ -562,6 +562,22 @@ async def test_illustration_placeholder_in_keyless_mode(client):
     illus = next(e[1] for e in events if e[0] == "illustration")
     assert illus["url"].startswith("https://placehold.co/")
 
+    # 학생/07: placeholder 는 illustration_path 에 박제되지 않는다(다음에 실 삽화로 교체 가능).
+    from app.store import get_store
+
+    ch = get_store().get_chapter(book_id, 4)
+    assert ch is not None and ch.illustration_path is None
+
+
+def test_placeholder_has_no_identifier_code():
+    # 학생/07: 폴백 placeholder 에 chN-해시 같은 식별자 코드가 박히지 않는다(중립·고정).
+    from app.ai.imagen import _placeholder, is_placeholder_url
+
+    url = _placeholder()
+    assert is_placeholder_url(url)
+    assert _placeholder() == url           # 호출마다 동일(식별자 없음)
+    assert not is_placeholder_url("https://cdn.supabase.co/illustrations/x/1.png")
+
 
 def test_dev_auth_secure_defaults():
     # 코드 기본값은 False(보안). (테스트 프로세스 env 는 DEV_AUTH=true 라 인스턴스가 아닌 필드 기본값을 본다.)

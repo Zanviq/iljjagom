@@ -163,7 +163,9 @@ async def _produce(
                 url, alt = await imagen.generate_illustration(
                     gemini, book_id, idx, event.get("summary", ""), bible.get("characters", [])
                 )
-                store.update_chapter(chapter.id, illustration_path=url)
+                # placeholder(임시)는 저장하지 않는다 — 다음 구독/선생성 때 실 삽화 재시도(박제 방지).
+                if not imagen.is_placeholder_url(url):
+                    store.update_chapter(chapter.id, illustration_path=url)
             await queue.put(_sse("illustration", {"url": url, "alt": alt}))
             # 능동질문 동적 생성(C6) — 본문보다 먼저. 실패해도 흐름 유지(폴백 문장).
             try:
