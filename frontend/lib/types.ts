@@ -247,6 +247,19 @@ export interface Dashboard {
   summary: DashboardSummary;
 }
 
+/** 대시보드 시계열(04 기능개선 교사/02 A). */
+export interface DashboardHistoryBucket {
+  periodStart: string;
+  activeStudents: number;
+  chaptersDone: number;
+  booksFinished: number;
+  essaysSubmitted: number;
+}
+export interface DashboardHistory {
+  buckets: DashboardHistoryBucket[];
+  totals: Record<string, number>;
+}
+
 /** GET /books/{id}/learning 응답 (FR-S8~S12) */
 export interface QuizItem {
   question: string;

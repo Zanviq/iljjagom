@@ -33,6 +33,7 @@ import type {
   CollabState,
   CreatePromptRequest,
   Dashboard,
+  DashboardHistory,
   DesignStatus,
   Health,
   Learning,
@@ -349,6 +350,23 @@ export function getWord(
 }
 
 /** 교사 대시보드 (FR-T2). 담당 교사/admin만. */
+/** 대시보드 시계열(04 기능개선 교사/02 A). */
+export function getDashboardHistory(
+  token: string | null,
+  classId: string,
+  groupBy: "week" | "day",
+  from?: string,
+  to?: string,
+): Promise<DashboardHistory> {
+  const params = new URLSearchParams({ groupBy });
+  if (from) params.set("from", from);
+  if (to) params.set("to", to);
+  return apiFetch<DashboardHistory>(
+    `/classes/${classId}/dashboard/history?${params.toString()}`,
+    { token },
+  );
+}
+
 export function getDashboard(
   token: string | null,
   classId: string,

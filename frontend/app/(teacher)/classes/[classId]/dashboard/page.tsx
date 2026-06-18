@@ -1,5 +1,6 @@
 import { notFound } from "next/navigation";
 
+import { DashboardTrend } from "@/components/teacher/DashboardTrend";
 import { TeacherHeader } from "@/components/teacher/TeacherHeader";
 import { Avatar } from "@/components/ui/Avatar";
 import { Badge } from "@/components/ui/Badge";
@@ -106,6 +107,8 @@ export default async function DashboardPage({
           )}
         </div>
       )}
+
+      <DashboardTrend classId={classId} />
 
       {summary.objectiveAchievement &&
         summary.objectiveAchievement.length > 0 && (
