@@ -49,6 +49,7 @@ import type {
   PlanMessagesResponse,
   PlanReply,
   Prompt,
+  PromptSubmissionsResponse,
   StudentBooksResponse,
   SafetyFlag,
   SafetyFlagDetail,
@@ -242,6 +243,18 @@ export function closePrompt(
     token,
     method: "POST",
   });
+}
+
+/** 발제별 참여·작성 집계(04 기능개선 교사/05). */
+export function getPromptSubmissions(
+  token: string | null,
+  classId: string,
+  promptId: string,
+): Promise<PromptSubmissionsResponse> {
+  return apiFetch<PromptSubmissionsResponse>(
+    `/classes/${classId}/prompts/${promptId}/submissions`,
+    { token },
+  );
 }
 
 export function createPrompt(

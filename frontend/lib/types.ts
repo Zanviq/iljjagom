@@ -82,6 +82,30 @@ export interface Prompt {
   safetyLevel?: SafetyLevel;
 }
 
+/** 발제별 학생 작성 집계 (04 기능개선 교사/05, §4 D·§7) */
+export interface PromptSubmission {
+  studentId: string;
+  studentEmail: string;
+  bookId: string;
+  title: string | null;
+  status: BookStatus;
+  chaptersDone: number;
+  totalChaptersPlanned: number | null;
+  charTotal: number;
+  quizCount: number;
+  essayCount: number;
+  emotionLogged: boolean;
+  letterCount: number;
+  lastActivityAt: string | null;
+}
+
+export interface PromptSubmissionsResponse {
+  prompt: Prompt;
+  counts: { enrolled: number; started: number; finished: number };
+  submissions: PromptSubmission[];
+  notStarted: { studentId: string; studentEmail: string }[];
+}
+
 /** PATCH /classes/{classId}/prompts/{promptId} 요청(부분 수정) */
 export interface UpdatePromptRequest {
   topic?: string;
