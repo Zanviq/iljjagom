@@ -353,11 +353,10 @@ function ChapterStream({
   return (
     <>
       {illustration && (
-        // eslint-disable-next-line @next/next/no-img-element
-        <img
-          src={illustration.url}
+        <Illustration
+          key={illustration.url}
+          url={illustration.url}
           alt={illustration.alt || "이야기 삽화"}
-          className="mb-4 max-h-[28rem] w-full rounded-[var(--radius-card)] object-cover shadow-[var(--elev-md)]"
         />
       )}
 
@@ -601,6 +600,52 @@ function ChapterStream({
         />
       )}
     </>
+  );
+}
+
+/**
+ * 삽화 — 로드 실패하거나 식별자 글자가 박힌 placeholder(placehold.co)면
+ * 코드 문자열 대신 중립 표시(아이콘 + alt 캡션)로 폴백한다. (07)
+ */
+function Illustration({ url, alt }: { url: string; alt: string }) {
+  const [failed, setFailed] = useState(false);
+  const isPlaceholder = /placehold\.co/i.test(url);
+
+  if (failed || isPlaceholder) {
+    return (
+      <div
+        role="img"
+        aria-label={alt}
+        className="mb-4 flex h-[16rem] w-full flex-col items-center justify-center gap-2 rounded-[var(--radius-card)]"
+        style={{
+          background: "var(--surface-2)",
+          border: "var(--border) solid var(--line)",
+        }}
+      >
+        <Icon
+          name="image"
+          size={40}
+          strokeWidth={1.5}
+          style={{ color: "var(--text-faint)" }}
+        />
+        <span
+          className="px-4 text-center text-[length:var(--text-sm)]"
+          style={{ color: "var(--text-3)" }}
+        >
+          {alt}
+        </span>
+      </div>
+    );
+  }
+
+  return (
+    // eslint-disable-next-line @next/next/no-img-element
+    <img
+      src={url}
+      alt={alt}
+      onError={() => setFailed(true)}
+      className="mb-4 max-h-[28rem] w-full rounded-[var(--radius-card)] object-cover shadow-[var(--elev-md)]"
+    />
   );
 }
 
