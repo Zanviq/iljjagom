@@ -71,6 +71,8 @@ export interface ChapterSummary {
   mode: ChapterMode;
   reviewStatus: ReviewStatus;
   hasIllustration: boolean;
+  /** 협업 누적 문단 수(04 기능개선 15). free+0이면 협업 화면, 차면 독서로 분기 */
+  paragraphCount?: number;
 }
 
 /** GET /books 의 책 항목 (내 책 목록/이어 읽기, §4.2) */
@@ -105,6 +107,50 @@ export interface Book {
   classId: string;
   chapters: ChapterSummary[];
   totalChaptersPlanned: number;
+}
+
+/**
+ * 자유집필 협업(04 기능개선 학생/15, P2). 한 마디 → 한 문단 생성 또는 지도.
+ * 03-기능명세서 §4(04 기능개선)·§7. 엔드포인트 미구현 시 프론트 graceful fallback.
+ */
+export interface CollabParagraph {
+  seq: number;
+  body: string;
+}
+
+export interface CollabCoaching {
+  text: string;
+  reasons: string[];
+}
+
+/** POST /books/{id}/chapters/{idx}/collab 응답 */
+export interface CollabReply {
+  kind: "paragraph" | "coaching" | "error";
+  paragraph?: CollabParagraph;
+  coaching?: CollabCoaching;
+  /** kind=paragraph 일 때 다음 진행 질문 */
+  question?: string;
+  chapterComplete: boolean;
+}
+
+export interface CollabStateParagraph {
+  seq: number;
+  body: string;
+  source: string;
+}
+
+export interface CollabTurn {
+  role: "student" | "writer";
+  kind: "message" | "question" | "coaching";
+  content: string;
+  createdAt: string;
+}
+
+/** GET /books/{id}/chapters/{idx}/collab 응답(재진입 복원) */
+export interface CollabState {
+  paragraphs: CollabStateParagraph[];
+  turns: CollabTurn[];
+  chapterComplete: boolean;
 }
 
 /** POST /books/{id}/plan/messages 응답 */

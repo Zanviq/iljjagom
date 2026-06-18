@@ -23,6 +23,8 @@ import type {
   BookCreated,
   BookSummary,
   ClassSummary,
+  CollabReply,
+  CollabState,
   CreatePromptRequest,
   Dashboard,
   DesignStatus,
@@ -210,6 +212,36 @@ export function reviseChapter(
   return apiFetch<{ status: string }>(
     `/books/${bookId}/chapters/${chapterIdx}/revise`,
     { token, method: "POST", body: { instruction } },
+  );
+}
+
+/** 자유집필 협업 상태 복원(좌 문단·우 대화). 04 기능개선 학생/15. */
+export function getCollab(
+  token: string | null,
+  bookId: string,
+  chapterIdx: number,
+): Promise<CollabState> {
+  return apiFetch<CollabState>(
+    `/books/${bookId}/chapters/${chapterIdx}/collab`,
+    { token },
+  );
+}
+
+/** 협업 한 턴: 학생 한 마디 → 한 문단 생성 또는 지도(accept=직전 지도 수용). */
+export function postCollab(
+  token: string | null,
+  bookId: string,
+  chapterIdx: number,
+  message: string,
+  accept?: boolean,
+): Promise<CollabReply> {
+  return apiFetch<CollabReply>(
+    `/books/${bookId}/chapters/${chapterIdx}/collab`,
+    {
+      token,
+      method: "POST",
+      body: accept === undefined ? { message } : { message, accept },
+    },
   );
 }
 
