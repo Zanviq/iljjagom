@@ -65,10 +65,12 @@ class InMemoryStore(Store):
     def upsert_profile(self, profile: ProfileRecord) -> ProfileRecord:
         if not profile.created_at:
             profile.created_at = now_iso()
-        # 기존 status 보존(없던 프로필이면 active 기본).
+        # 기존 status/display_name 보존(없던 프로필이면 기본). "이미 있으면 유지".
         existing = self.profiles.get(profile.id)
         if existing and not profile.status:
             profile.status = existing.status
+        if existing and not profile.display_name:
+            profile.display_name = existing.display_name
         self.profiles[profile.id] = profile
         return profile
 

@@ -13,6 +13,7 @@ class ProfileRecord:
     guardian_consent: bool = False
     grade: int | None = None
     status: str = "active"  # active|deactivated (추가기능 06)
+    display_name: str | None = None  # 표시 이름(0015) — user_metadata 또는 이메일 local-part
     created_at: str = ""
 
 

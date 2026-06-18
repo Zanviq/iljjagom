@@ -48,6 +48,18 @@ class CurrentUser:
     role: str  # 유효 역할(admin 화이트리스트 또는 profile.role, 미온보딩이면 'student')
     profile: ProfileRecord | None
     needs_onboarding: bool
+    token_name: str | None = None  # 토큰 클레임의 표시 이름(user_metadata.full_name|name)
+
+
+def display_name_from(token_name: str | None, email: str) -> str | None:
+    """표시 이름 결정 — 토큰 이름 우선, 없으면 이메일 local-part 폴백(둘 다 없으면 None)."""
+    if token_name and token_name.strip():
+        return token_name.strip()
+    if email and "@" in email:
+        local = email.split("@", 1)[0].strip()
+        if local:
+            return local
+    return None
 
 
 def _bearer_token(request: Request) -> str:
@@ -57,22 +69,34 @@ def _bearer_token(request: Request) -> str:
     return header.split(" ", 1)[1].strip()
 
 
-def _resolve_identity(token: str, settings: Settings) -> tuple[str, str]:
-    """토큰에서 (user_id, email) 추출."""
+def _resolve_identity(token: str, settings: Settings) -> tuple[str, str, str | None]:
+    """토큰에서 (user_id, email, display_name claim) 추출. 이름 클레임 없으면 None."""
     if settings.dev_auth_enabled and token.startswith("dev:"):
         parts = token.split(":")
         if len(parts) < 2 or not parts[1]:
             raise unauthorized("개발 토큰 형식이 올바르지 않습니다. (dev:email:role)")
         email = parts[1].strip().lower()
         user_id = str(uuid.uuid5(_DEV_NAMESPACE, email))
-        return user_id, email
+        return user_id, email, None
 
     payload = _verify_supabase_jwt(token, settings)
     user_id = payload.get("sub")
     email = (payload.get("email") or "").lower()
     if not user_id:
         raise unauthorized("토큰에 사용자 정보가 없습니다.")
-    return user_id, email
+    return user_id, email, _name_claim(payload)
+
+
+def _name_claim(payload: dict) -> str | None:
+    """Supabase user JWT 의 표시 이름 클레임 — user_metadata.full_name|name, 그다음 top-level name."""
+    meta = payload.get("user_metadata")
+    if isinstance(meta, dict):
+        for key in ("full_name", "name"):
+            val = meta.get(key)
+            if isinstance(val, str) and val.strip():
+                return val.strip()
+    top = payload.get("name")
+    return top.strip() if isinstance(top, str) and top.strip() else None
 
 
 def _verify_supabase_jwt(token: str, settings: Settings) -> dict:
@@ -129,7 +153,7 @@ async def get_current_user(
 ) -> CurrentUser:
     token = _bearer_token(request)
     # JWKS 조회가 네트워크를 탈 수 있어 이벤트 루프를 막지 않도록 스레드로 오프로드.
-    user_id, email = await asyncio.to_thread(_resolve_identity, token, settings)
+    user_id, email, token_name = await asyncio.to_thread(_resolve_identity, token, settings)
 
     # 개발 토큰의 명시 역할(dev:email:role)
     dev_role = None
@@ -144,16 +168,38 @@ async def get_current_user(
     if email in settings.admin_email_set:
         if not profile or profile.role != "admin":
             profile = store.upsert_profile(
-                ProfileRecord(id=user_id, email=email, role="admin")
+                ProfileRecord(
+                    id=user_id, email=email, role="admin",
+                    display_name=display_name_from(token_name, email),
+                )
             )
-        return CurrentUser(user_id, email, "admin", profile, needs_onboarding=False)
+        else:
+            profile = _backfill_display_name(store, profile, token_name, email)
+        return CurrentUser(user_id, email, "admin", profile, needs_onboarding=False, token_name=token_name)
 
     if profile:
-        return CurrentUser(user_id, email, profile.role, profile, needs_onboarding=False)
+        profile = _backfill_display_name(store, profile, token_name, email)
+        return CurrentUser(user_id, email, profile.role, profile, needs_onboarding=False, token_name=token_name)
 
     # 프로필 미존재 = 온보딩 필요. dev_role 이 있으면 유효 역할로 노출(가드용)하되 온보딩은 필요.
     effective_role = dev_role or "student"
-    return CurrentUser(user_id, email, effective_role, None, needs_onboarding=True)
+    return CurrentUser(user_id, email, effective_role, None, needs_onboarding=True, token_name=token_name)
+
+
+def _backfill_display_name(
+    store: Store, profile: ProfileRecord, token_name: str | None, email: str
+) -> ProfileRecord:
+    """표시 이름이 비어 있으면 최초 로그인 시 채운다("이미 있으면 유지"). 실패해도 흐름 불변."""
+    if profile.display_name:
+        return profile
+    value = display_name_from(token_name, email)
+    if not value:
+        return profile
+    try:
+        return store.update_profile_fields(profile.id, display_name=value)
+    except Exception:
+        profile.display_name = value
+        return profile
 
 
 def require_role(*roles: str):

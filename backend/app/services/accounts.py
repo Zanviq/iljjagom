@@ -4,7 +4,7 @@ from __future__ import annotations
 import secrets
 import string
 
-from app.deps import CurrentUser
+from app.deps import CurrentUser, display_name_from
 from app.errors import forbidden, validation_error
 from app.models.schemas import Me, OnboardingRequest
 from app.store.base import Store
@@ -27,6 +27,7 @@ def build_me(user: CurrentUser, store: Store | None = None) -> Me:
         id=user.id,
         email=user.email,
         role=user.role,
+        name=p.display_name if p else None,
         grade=p.grade if p else None,
         guardian_consent=p.guardian_consent if p else False,
         needs_onboarding=user.needs_onboarding,
@@ -61,6 +62,9 @@ def onboard(store: Store, user: CurrentUser, req: OnboardingRequest) -> Me:
         if not classroom:
             raise validation_error("유효하지 않은 학급 코드입니다.", {"field": "classCode"})
 
+    # 표시 이름: 이미 있으면 유지, 없으면 토큰 이름 → 이메일 local-part.
+    keep_name = existing.display_name if existing else None
+    display_name = keep_name or display_name_from(user.token_name, user.email)
     profile = store.upsert_profile(
         ProfileRecord(
             id=user.id,
@@ -68,6 +72,7 @@ def onboard(store: Store, user: CurrentUser, req: OnboardingRequest) -> Me:
             role=role,
             guardian_consent=req.guardian_consent,
             grade=req.grade,
+            display_name=display_name,
         )
     )
 
