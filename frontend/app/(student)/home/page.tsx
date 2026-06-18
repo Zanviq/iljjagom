@@ -22,7 +22,7 @@ export default async function StudentHomePage() {
   if (!me?.classId) {
     return (
       <div className="mx-auto w-full max-w-[var(--width-content)] px-6 pb-24 pt-9">
-        <Greeting className={null} />
+        <Greeting name={me?.name ?? null} className={null} />
         <EmptyState
           icon="school"
           title="아직 학급에 들어가지 않았어요."
@@ -43,7 +43,7 @@ export default async function StudentHomePage() {
 
   return (
     <div className="mx-auto w-full max-w-[var(--width-content)] px-6 pb-24 pt-9">
-      <Greeting className={me.className} />
+      <Greeting name={me.name} className={me.className} />
 
       {books.length > 0 && (
         <>
@@ -81,7 +81,25 @@ export default async function StudentHomePage() {
   );
 }
 
-function Greeting({ className }: { className: string | null }) {
+/** 한국어 호격 조사: 이름 끝 음절에 받침이 있으면 "아", 없으면 "야"(한글이 아니면 기본 "아"). */
+function vocativeJosa(name: string): string {
+  const last = name.trim().slice(-1);
+  const code = last.charCodeAt(0);
+  if (code < 0xac00 || code > 0xd7a3) return "아";
+  return (code - 0xac00) % 28 !== 0 ? "아" : "야";
+}
+
+function Greeting({
+  name,
+  className,
+}: {
+  name: string | null;
+  className: string | null;
+}) {
+  const trimmed = name?.trim();
+  const greeting = trimmed
+    ? `안녕, ${trimmed}${vocativeJosa(trimmed)}!`
+    : "안녕! 오늘도 반가워";
   return (
     <div className="mb-2">
       {className && (
@@ -99,7 +117,7 @@ function Greeting({ className }: { className: string | null }) {
           color: "var(--text-1)",
         }}
       >
-        안녕! 오늘도 반가워
+        {greeting}
       </h1>
       <p className="mt-1.5 text-[length:var(--text-md)] text-ink-2">
         오늘은 어떤 이야기를 만들어 볼까?
