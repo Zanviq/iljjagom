@@ -71,6 +71,30 @@ async def interview_reply(
     return PlanReply(reply=reply.strip(), character_draft=draft, ready_to_write=ready)
 
 
+async def guided_prompt(
+    gemini: GeminiClient, bible: dict, event: dict
+) -> str:
+    """유도 모드 능동질문 — 삽화/장면 기반으로 결말 비공개 질문 1개. (FR-S5, 05 §5.2)
+
+    본문 토큰보다 먼저 던져 대기 시간을 채운다. 결말/줄거리는 절대 묻거나 드러내지 않는다.
+    """
+    summary = event.get("summary", "")
+    if gemini.mock:
+        # 결정적: 장면 요약 기반 1문장(결말 비공개).
+        chars = bible.get("characters", [])
+        who = chars[0].get("name", "주인공") if chars else "주인공"
+        return f"{who}은(는) 지금 어떤 마음일까요? 그림 속 장면을 보고 상상해 볼까요?"
+
+    prompt = (
+        f"{_INTERVIEWER_SYSTEM}\n"
+        "다음 장면의 삽화를 보고, 어린 독자가 상상하며 답할 수 있는 질문 한 문장을 만든다. "
+        "이야기의 결말이나 앞으로의 줄거리는 절대 묻지도 드러내지도 않는다.\n"
+        f"이번 장면: {summary}\n\n능동 질문 한 문장:"
+    )
+    text = await gemini.generate_text(gemini.settings.gemini_model_flash_lite, prompt)
+    return text.strip() or "이 그림 속에서는 무슨 일이 벌어지고 있을까요?"
+
+
 async def persona_reply(
     gemini: GeminiClient, character_name: str, traits: list[str], letter_body: str
 ) -> str:

@@ -14,6 +14,31 @@ def test_u16_len_matches_js_length():
     assert _u16_len("별이🎉") == 4
 
 
+def test_illustration_prompt_identity_and_order():
+    from app.ai.imagen import _build_image_prompt
+
+    chars = [
+        {"id": "z", "name": "토끼", "appearance": {"hair": "흰 털", "eyes": "분홍 눈", "outfit": "파란 멜빵"}},
+        {"id": "a", "name": "별이", "appearance": "노란 머리의 소녀"},
+    ]
+    p = _build_image_prompt("숲속 장면", chars)
+    assert "같은 외형" in p  # 일관성 지시
+    # id 정렬(a 먼저) + 구조화 appearance 풀어쓰기
+    assert p.index("별이") < p.index("토끼")
+    assert "흰 털" in p and "분홍 눈" in p
+
+
+async def test_guided_prompt_mock_no_ending_leak():
+    from app.ai.chat import guided_prompt
+    from app.ai.gemini import GeminiClient
+    from app.config import get_settings
+
+    bible = {"characters": [{"name": "별이"}]}
+    q = await guided_prompt(GeminiClient(get_settings()), bible, {"summary": "숲에서 길을 잃었다"})
+    assert "별이" in q
+    assert "결말" not in q and "끝" not in q
+
+
 async def _read_sse(client, url, headers):
     events = []
     async with client.stream("GET", url, headers=headers) as resp:

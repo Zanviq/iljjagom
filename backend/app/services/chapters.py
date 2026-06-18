@@ -165,7 +165,12 @@ async def _produce(
                 )
                 store.update_chapter(chapter.id, illustration_path=url)
             await queue.put(_sse("illustration", {"url": url, "alt": alt}))
-            await queue.put(_sse("prompt", {"text": "이 그림 속에서는 무슨 일이 벌어지고 있을까요?"}))
+            # 능동질문 동적 생성(C6) — 본문보다 먼저. 실패해도 흐름 유지(폴백 문장).
+            try:
+                question = await chat.guided_prompt(gemini, bible, event)
+            except Exception:
+                question = "이 그림 속에서는 무슨 일이 벌어지고 있을까요?"
+            await queue.put(_sse("prompt", {"text": question}))
 
         # 3) 본문 토큰
         running = 0
