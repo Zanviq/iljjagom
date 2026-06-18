@@ -1,7 +1,7 @@
 """기획/설계 라우터 — 기획 인터뷰 대화, Bible 설계."""
 from __future__ import annotations
 
-from fastapi import APIRouter, Depends, Response
+from fastapi import APIRouter, BackgroundTasks, Depends, Response
 
 from app.ai.gemini import GeminiClient, get_gemini
 from app.deps import CurrentUser, get_store_dep, require_guardian_consent, require_role
@@ -17,6 +17,7 @@ router = APIRouter(tags=["planning"])
 async def plan_message(
     book_id: str,
     req: PlanMessageRequest,
+    background: BackgroundTasks,
     user: CurrentUser = Depends(require_role("student", "admin")),
     store: Store = Depends(get_store_dep),
     gemini: GeminiClient = Depends(get_gemini),
@@ -24,6 +25,9 @@ async def plan_message(
     _consent: CurrentUser = Depends(require_guardian_consent()),
 ) -> dict:
     reply = await books.plan_message(store, gemini, user, book_id, req.message)
+    # readyToWrite 도달 → Bible 백그라운드 선생성(버튼 클릭 시 즉시 진입, 학생/04).
+    if reply.ready_to_write:
+        background.add_task(books.prefetch_design, store, gemini, book_id)
     return serialize(reply)
 
 
