@@ -13,9 +13,9 @@ import type { AskUserAnswer, AskUserPrompt } from "@/lib/ai";
 import { getClientAccessToken } from "@/lib/auth/client";
 import type { PlanReply } from "@/lib/types";
 
-/** ask_user 가 plan 응답에 실려오는 경우(백엔드 계약 확정 시 PlanReply로 승격). */
+/** ask_user 가 plan 응답에 실려오면(PlanReply.ask) 질문 패널을 띄운다. */
 function extractAsk(reply: PlanReply): AskUserPrompt | null {
-  const ask = (reply as PlanReply & { ask?: AskUserPrompt }).ask;
+  const ask = reply.ask;
   return ask && ask.sessionId && ask.question ? ask : null;
 }
 

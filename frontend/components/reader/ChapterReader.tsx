@@ -3,15 +3,18 @@
 import Link from "next/link";
 import { useCallback, useEffect, useRef, useState } from "react";
 
+import { AskUserPanel } from "@/components/ai/AskUserPanel";
 import { buttonClass } from "@/components/ui/Button";
 import { ErrorText } from "@/components/ui/ErrorText";
 import { Loading } from "@/components/ui/Loading";
 import { WordPopover } from "@/components/reader/WordPopover";
+import { answerAiSession } from "@/lib/ai";
+import type { AskUserAnswer } from "@/lib/ai";
 import { ApiError, getBook, getWord, reviseChapter } from "@/lib/api";
 import { getClientAccessToken } from "@/lib/auth/client";
 import { streamChapter } from "@/lib/sse";
 import { track } from "@/lib/track";
-import type { ChapterMode, SSEDone, SSEIllustration, Word } from "@/lib/types";
+import type { Ask, ChapterMode, SSEDone, SSEIllustration, Word } from "@/lib/types";
 
 const sleep = (ms: number) => new Promise((r) => setTimeout(r, ms));
 const MAX_RECONNECT = 5;
@@ -82,6 +85,10 @@ function ChapterStream({
   const [mode, setMode] = useState<ChapterMode | null>(null);
   const [illustration, setIllustration] = useState<SSEIllustration | null>(null);
   const [activePrompt, setActivePrompt] = useState<string | null>(null);
+  // 유도 흐름 중 AI 되물음(ask_user). 비차단: 답하지 않아도 읽기는 계속된다.
+  const [ask, setAsk] = useState<Ask | null>(null);
+  const [answeringAsk, setAnsweringAsk] = useState(false);
+  const [askError, setAskError] = useState<string | null>(null);
   const [done, setDone] = useState<SSEDone | null>(null);
   const [streaming, setStreaming] = useState(true);
   const [streamError, setStreamError] = useState<string | null>(null);
@@ -149,6 +156,9 @@ function ChapterStream({
                   break;
                 case "prompt":
                   setActivePrompt(evt.data.text);
+                  break;
+                case "ask":
+                  setAsk(evt.data);
                   break;
                 case "token":
                   offset += evt.data.text.length;
@@ -288,6 +298,22 @@ function ChapterStream({
     );
   }
 
+  async function submitAsk(answer: AskUserAnswer) {
+    if (!ask || answeringAsk) return;
+    setAnsweringAsk(true);
+    setAskError(null);
+    try {
+      await answerAiSession(token, ask.sessionId, answer);
+      setAsk(null);
+    } catch (e) {
+      setAskError(
+        e instanceof ApiError ? e.message : "대답을 전하지 못했어요.",
+      );
+    } finally {
+      setAnsweringAsk(false);
+    }
+  }
+
   const canGoNext = done?.nextChapterAvailable ?? false;
   // 마지막 장(=완독) 여부. 계획된 장 수를 알 때만 판단.
   const isLastChapter =
@@ -309,6 +335,18 @@ function ChapterStream({
         <p className="mb-4 rounded-card bg-secondary/15 p-4 text-lg font-bold text-secondary-strong">
           💬 {activePrompt}
         </p>
+      )}
+
+      {/* AI 되물음(ask_user): 답해도/안 해도 읽기는 계속(비차단). */}
+      {ask && (
+        <div className="mb-4">
+          <AskUserPanel
+            prompt={ask}
+            pending={answeringAsk}
+            error={askError}
+            onAnswer={(a) => void submitAsk(a)}
+          />
+        </div>
       )}
 
       {/* 유도 모드: 삽화·질문을 먼저 보고, 탭하면 본문을 공개한다. */}

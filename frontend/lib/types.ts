@@ -113,6 +113,8 @@ export interface PlanReply {
     traits: string[];
   };
   readyToWrite: boolean;
+  /** AI가 되물을 때(ask_user) 동기 흐름에 실려 옴(추가기능 02/04). */
+  ask?: Ask | null;
 }
 
 /** POST /books/{id}/design 응답 */
