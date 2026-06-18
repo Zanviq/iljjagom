@@ -102,18 +102,24 @@ export function PlanChat({ bookId }: { bookId: string }) {
     try {
       const token = await getClientAccessToken();
       const ds = await postDesign(token, bookId);
-      const readPath = `/books/${bookId}/read`;
-      if (ds.status === "done") {
-        router.push(readPath);
-        return;
-      }
       // 설계가 진행 중이면 책 상태가 바뀔 때까지 잠깐 기다린다.
-      for (let i = 0; i < 15; i++) {
-        await sleep(1000);
-        const book = await getBook(token, bookId);
-        if (book.status !== "planning") break;
+      if (ds.status !== "done") {
+        for (let i = 0; i < 15; i++) {
+          await sleep(1000);
+          const book = await getBook(token, bookId);
+          if (book.status !== "planning") break;
+        }
       }
-      router.push(readPath);
+      // 자유집필(free) 첫 챕터면 협업 화면(/write), 아니면 독서(/read)로.
+      let dest = `/books/${bookId}/read`;
+      try {
+        const book = await getBook(token, bookId);
+        const first = [...book.chapters].sort((a, b) => a.idx - b.idx)[0];
+        if (first?.mode === "free") dest = `/books/${bookId}/write`;
+      } catch {
+        // 책 조회 실패 시 기본 독서 경로 유지.
+      }
+      router.push(dest);
     } catch (e) {
       setError(e instanceof ApiError ? e.message : "이야기를 시작하지 못했어요.");
       setDesigning(false);

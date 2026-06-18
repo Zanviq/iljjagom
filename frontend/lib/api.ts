@@ -20,11 +20,20 @@ import type {
   AppNotification,
   BackupImportRequest,
   Book,
+  BoardPost,
+  BoardPostCreated,
+  BoardPostsResponse,
+  BoardPostStatus,
   BookCreated,
   BookSummary,
+  ClassSettingsPut,
+  ClassSettingsResponse,
   ClassSummary,
+  CollabReply,
+  CollabState,
   CreatePromptRequest,
   Dashboard,
+  DashboardHistory,
   DesignStatus,
   Health,
   Learning,
@@ -43,6 +52,7 @@ import type {
   SettingPut,
   TokenUsageReport,
   TrackEvent,
+  UpdatePromptRequest,
   Word,
 } from "./types";
 
@@ -136,12 +146,97 @@ export function getClasses(
   return apiFetch<{ classes: ClassSummary[] }>("/classes", { token });
 }
 
+/** 학급 생성(04 기능개선 교사/01). 코드는 서버 생성. */
+export function createClass(
+  token: string | null,
+  name: string,
+): Promise<ClassSummary> {
+  return apiFetch<ClassSummary>("/classes", {
+    token,
+    method: "POST",
+    body: { name },
+  });
+}
+
+/** 학급 이름 변경. */
+export function updateClass(
+  token: string | null,
+  classId: string,
+  name: string,
+): Promise<ClassSummary> {
+  return apiFetch<ClassSummary>(`/classes/${classId}`, {
+    token,
+    method: "PATCH",
+    body: { name },
+  });
+}
+
+/** 가입 코드 재발급(기존 가입 유지). */
+export function rotateClassCode(
+  token: string | null,
+  classId: string,
+): Promise<{ id: string; code: string }> {
+  return apiFetch<{ id: string; code: string }>(
+    `/classes/${classId}/rotate-code`,
+    { token, method: "POST" },
+  );
+}
+
+/** 학급 설정 조회(04 기능개선 교사/02). 행 없어도 200(defaults 동봉). */
+export function getClassSettings(
+  token: string | null,
+  classId: string,
+): Promise<ClassSettingsResponse> {
+  return apiFetch<ClassSettingsResponse>(`/classes/${classId}/settings`, {
+    token,
+  });
+}
+
+/** 학급 설정 부분 병합 저장. */
+export function putClassSettings(
+  token: string | null,
+  classId: string,
+  value: ClassSettingsPut["value"],
+): Promise<ClassSettingsResponse> {
+  return apiFetch<ClassSettingsResponse>(`/classes/${classId}/settings`, {
+    token,
+    method: "PUT",
+    body: { value },
+  });
+}
+
 export function getPrompts(
   token: string | null,
   classId: string,
 ): Promise<{ prompts: Prompt[] }> {
   return apiFetch<{ prompts: Prompt[] }>(`/classes/${classId}/prompts`, {
     token,
+  });
+}
+
+/** 발제 수정(04 기능개선 교사/02). */
+export function updatePrompt(
+  token: string | null,
+  classId: string,
+  promptId: string,
+  body: UpdatePromptRequest,
+): Promise<Prompt> {
+  return apiFetch<Prompt>(`/classes/${classId}/prompts/${promptId}`, {
+    token,
+    method: "PATCH",
+    body,
+  });
+}
+
+/** 발제 마감(신규 책 생성 차단). */
+export function closePrompt(
+  token: string | null,
+  classId: string,
+  promptId: string,
+): Promise<Prompt> {
+  return apiFetch<Prompt>(`/classes/${classId}/prompts/${promptId}/close`, {
+    token,
+    method: "POST",
   });
 }
 
@@ -213,6 +308,36 @@ export function reviseChapter(
   );
 }
 
+/** 자유집필 협업 상태 복원(좌 문단·우 대화). 04 기능개선 학생/15. */
+export function getCollab(
+  token: string | null,
+  bookId: string,
+  chapterIdx: number,
+): Promise<CollabState> {
+  return apiFetch<CollabState>(
+    `/books/${bookId}/chapters/${chapterIdx}/collab`,
+    { token },
+  );
+}
+
+/** 협업 한 턴: 학생 한 마디 → 한 문단 생성 또는 지도(accept=직전 지도 수용). */
+export function postCollab(
+  token: string | null,
+  bookId: string,
+  chapterIdx: number,
+  message: string,
+  accept?: boolean,
+): Promise<CollabReply> {
+  return apiFetch<CollabReply>(
+    `/books/${bookId}/chapters/${chapterIdx}/collab`,
+    {
+      token,
+      method: "POST",
+      body: accept === undefined ? { message } : { message, accept },
+    },
+  );
+}
+
 export function getWord(
   token: string | null,
   bookId: string,
@@ -225,6 +350,23 @@ export function getWord(
 }
 
 /** 교사 대시보드 (FR-T2). 담당 교사/admin만. */
+/** 대시보드 시계열(04 기능개선 교사/02 A). */
+export function getDashboardHistory(
+  token: string | null,
+  classId: string,
+  groupBy: "week" | "day",
+  from?: string,
+  to?: string,
+): Promise<DashboardHistory> {
+  const params = new URLSearchParams({ groupBy });
+  if (from) params.set("from", from);
+  if (to) params.set("to", to);
+  return apiFetch<DashboardHistory>(
+    `/classes/${classId}/dashboard/history?${params.toString()}`,
+    { token },
+  );
+}
+
 export function getDashboard(
   token: string | null,
   classId: string,
@@ -432,6 +574,65 @@ export function getLearningResults(
     `/books/${bookId}/learning-results`,
     { token },
   );
+}
+
+/* ── 학급 게시판/발표 (04 기능개선 학생/15·14) ── */
+
+/** 완성 책을 학급 게시판에 발표 등록(책 status=="done"). */
+export function postBoardPost(
+  token: string | null,
+  bookId: string,
+  intro?: string,
+): Promise<BoardPostCreated> {
+  return apiFetch<BoardPostCreated>(`/books/${bookId}/board-posts`, {
+    token,
+    method: "POST",
+    body: intro ? { intro } : {},
+  });
+}
+
+/** 학급 게시판 목록(학생=published, 교사=전체). */
+export function getBoardPosts(
+  token: string | null,
+  classId: string,
+  status?: BoardPostStatus,
+): Promise<BoardPostsResponse> {
+  const q = status ? `?status=${encodeURIComponent(status)}` : "";
+  return apiFetch<BoardPostsResponse>(`/classes/${classId}/board-posts${q}`, {
+    token,
+  });
+}
+
+/** 발표 상세(스냅샷 전체). */
+export function getBoardPost(
+  token: string | null,
+  postId: string,
+): Promise<BoardPost> {
+  return apiFetch<BoardPost>(`/board-posts/${postId}`, { token });
+}
+
+/** 발표 승인(교사). */
+export function approveBoardPost(
+  token: string | null,
+  postId: string,
+): Promise<{ status: string }> {
+  return apiFetch<{ status: string }>(`/board-posts/${postId}/approve`, {
+    token,
+    method: "POST",
+  });
+}
+
+/** 발표 반려(교사). */
+export function rejectBoardPost(
+  token: string | null,
+  postId: string,
+  note?: string,
+): Promise<{ status: string }> {
+  return apiFetch<{ status: string }>(`/board-posts/${postId}/reject`, {
+    token,
+    method: "POST",
+    body: note ? { note } : {},
+  });
 }
 
 /* ── 관리자 콘솔 (추가기능 06, §4.2) — 전부 admin ── */

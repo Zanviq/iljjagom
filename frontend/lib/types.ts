@@ -41,6 +41,25 @@ export interface ClassSummary {
   code: string;
 }
 
+/* ── 학급 설정 컨트롤러 (04 기능개선 교사/02, §4 D·§7) ── */
+export type SafetyLevel = "relaxed" | "standard" | "strict";
+
+export interface ClassSettings {
+  safetyLevel: SafetyLevel;
+  /** 학생 기능 on/off (boardAutoPublish·intermediateActivities·… 백엔드가 키 등록) */
+  featureToggles: Record<string, boolean>;
+}
+
+/** GET /classes/{id}/settings — 행 없어도 200(lazy), defaults 동봉 */
+export interface ClassSettingsResponse {
+  value: ClassSettings;
+  defaults: ClassSettings;
+}
+
+export interface ClassSettingsPut {
+  value: Partial<ClassSettings>;
+}
+
 export interface Assessment {
   type: AssessmentType;
   detail: string;
@@ -55,6 +74,24 @@ export interface Prompt {
   assessment: Assessment;
   language: string;
   createdAt: string;
+  /* 04 기능개선 교사/02 확장(선택) */
+  gradeBand?: number | null;
+  chaptersPlanned?: number | null;
+  dueAt?: string | null;
+  status?: "open" | "closed";
+  safetyLevel?: SafetyLevel;
+}
+
+/** PATCH /classes/{classId}/prompts/{promptId} 요청(부분 수정) */
+export interface UpdatePromptRequest {
+  topic?: string;
+  learningObjectives?: string[];
+  assessment?: Assessment;
+  language?: string;
+  gradeBand?: number | null;
+  chaptersPlanned?: number | null;
+  dueAt?: string | null;
+  safetyLevel?: SafetyLevel;
 }
 
 /** POST /classes/{classId}/prompts 요청 */
@@ -71,6 +108,8 @@ export interface ChapterSummary {
   mode: ChapterMode;
   reviewStatus: ReviewStatus;
   hasIllustration: boolean;
+  /** 협업 누적 문단 수(04 기능개선 15). free+0이면 협업 화면, 차면 독서로 분기 */
+  paragraphCount?: number;
 }
 
 /** GET /books 의 책 항목 (내 책 목록/이어 읽기, §4.2) */
@@ -105,6 +144,50 @@ export interface Book {
   classId: string;
   chapters: ChapterSummary[];
   totalChaptersPlanned: number;
+}
+
+/**
+ * 자유집필 협업(04 기능개선 학생/15, P2). 한 마디 → 한 문단 생성 또는 지도.
+ * 03-기능명세서 §4(04 기능개선)·§7. 엔드포인트 미구현 시 프론트 graceful fallback.
+ */
+export interface CollabParagraph {
+  seq: number;
+  body: string;
+}
+
+export interface CollabCoaching {
+  text: string;
+  reasons: string[];
+}
+
+/** POST /books/{id}/chapters/{idx}/collab 응답 */
+export interface CollabReply {
+  kind: "paragraph" | "coaching" | "error";
+  paragraph?: CollabParagraph;
+  coaching?: CollabCoaching;
+  /** kind=paragraph 일 때 다음 진행 질문 */
+  question?: string;
+  chapterComplete: boolean;
+}
+
+export interface CollabStateParagraph {
+  seq: number;
+  body: string;
+  source: string;
+}
+
+export interface CollabTurn {
+  role: "student" | "writer";
+  kind: "message" | "question" | "coaching";
+  content: string;
+  createdAt: string;
+}
+
+/** GET /books/{id}/chapters/{idx}/collab 응답(재진입 복원) */
+export interface CollabState {
+  paragraphs: CollabStateParagraph[];
+  turns: CollabTurn[];
+  chapterComplete: boolean;
 }
 
 /** POST /books/{id}/plan/messages 응답 */
@@ -164,6 +247,19 @@ export interface Dashboard {
   summary: DashboardSummary;
 }
 
+/** 대시보드 시계열(04 기능개선 교사/02 A). */
+export interface DashboardHistoryBucket {
+  periodStart: string;
+  activeStudents: number;
+  chaptersDone: number;
+  booksFinished: number;
+  essaysSubmitted: number;
+}
+export interface DashboardHistory {
+  buckets: DashboardHistoryBucket[];
+  totals: Record<string, number>;
+}
+
 /** GET /books/{id}/learning 응답 (FR-S8~S12) */
 export interface QuizItem {
   question: string;
@@ -176,14 +272,29 @@ export interface EssayBlank {
 }
 export interface EmotionPoint {
   chapterIdx: number;
-  label: string;
-  value: number;
+  /** 04 기능개선 11: 입력 틀에선 미입력 시 null(학생이 채움) */
+  label: string | null;
+  value: number | null;
+}
+/** 04 기능개선 11: 감정곡선이 시스템 자동생성 → 학생 입력 틀로 변경 */
+export interface EmotionFrame {
+  labels: string[];
+  points: EmotionPoint[];
+}
+/** 04 기능개선 12: 편지 받는 인물 선택지(Bible characters 파생) */
+export interface LetterCharacter {
+  id: string;
+  name: string;
+  traits: string[];
 }
 export interface Learning {
   vocab: Word[];
   quiz: QuizItem[];
   essayBlanks: EssayBlank[];
-  emotion: EmotionPoint[];
+  /** 신규(객체 입력 틀) 또는 레거시(시스템 생성 배열) — 프론트가 런타임 분기 */
+  emotion: EmotionFrame | EmotionPoint[];
+  /** 04 기능개선 12. 미제공(레거시)이면 자유 입력 폴백 */
+  letterCharacters?: LetterCharacter[];
 }
 
 /** POST /books/{id}/letters 응답 (FR-S11). letterId 추가(추가기능 03). */
@@ -294,6 +405,60 @@ export interface LearningResult {
   type: string;
   data: unknown;
   createdAt: string;
+}
+
+/* ── 학급 게시판/발표 (04 기능개선 학생/15·14, §4 B·§7) ── */
+export type BoardPostStatus = "pending" | "published" | "rejected";
+
+/** 발표 스냅샷(책 요약). 목록은 일부, 상세는 전체. */
+export interface BoardSnapshot {
+  coverIllustration?: string | null;
+  chapterCount?: number;
+  emotionLogged?: boolean;
+  letterCount?: number;
+  quizScore?: number | null;
+}
+
+export interface BoardPostSummary {
+  id: string;
+  title: string;
+  studentName: string;
+  status: BoardPostStatus;
+  createdAt: string;
+  snapshot: BoardSnapshot;
+}
+
+export interface BoardPost {
+  id: string;
+  classroomId: string;
+  bookId: string;
+  studentId: string;
+  title: string;
+  intro?: string | null;
+  snapshot: BoardSnapshot;
+  status: BoardPostStatus;
+  reviewedBy?: string | null;
+  reviewedAt?: string | null;
+  reviewNote?: string | null;
+  createdAt: string;
+}
+
+export interface BoardPostCreate {
+  intro?: string;
+}
+
+/** POST /books/{id}/board-posts 응답 */
+export interface BoardPostCreated {
+  postId: string;
+  status: BoardPostStatus;
+}
+
+export interface BoardPostsResponse {
+  posts: BoardPostSummary[];
+}
+
+export interface BoardRejectRequest {
+  note?: string;
 }
 
 /** ask_user 질문(SSE `ask` 이벤트 / PlanReply.ask). lib/ai.ts AskUserPrompt 와 동일 구조. */

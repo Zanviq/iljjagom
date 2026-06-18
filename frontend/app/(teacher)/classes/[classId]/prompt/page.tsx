@@ -1,24 +1,10 @@
 import { notFound } from "next/navigation";
 
 import { PromptForm } from "@/components/teacher/PromptForm";
+import { PromptList } from "@/components/teacher/PromptList";
 import { TeacherHeader } from "@/components/teacher/TeacherHeader";
-import { Badge } from "@/components/ui/Badge";
-import { Card } from "@/components/ui/Card";
-import { Chip } from "@/components/ui/Chip";
 import { ApiError, getClasses, getPrompts } from "@/lib/api";
 import { getAccessToken } from "@/lib/auth/server";
-import type { AssessmentType } from "@/lib/types";
-
-const ASSESSMENT_LABEL: Record<AssessmentType, string> = {
-  quiz: "퀴즈",
-  essay: "독후감",
-  none: "평가 없음",
-};
-
-const LANGUAGE_LABEL: Record<string, string> = {
-  ko: "한국어",
-  en: "English",
-};
 
 export default async function PromptPage({
   params,
@@ -51,36 +37,7 @@ export default async function PromptPage({
 
         <div>
           <p className="ijg-eyebrow mb-3 text-ink-3">낸 발제 ({prompts.length})</p>
-          {prompts.length === 0 ? (
-            <p className="text-[length:var(--text-sm)] text-ink-3">
-              아직 낸 발제가 없어요.
-            </p>
-          ) : (
-            <div className="flex flex-col gap-3">
-              {prompts.map((p) => (
-                <Card key={p.id} padding="md">
-                  <h4 className="text-[length:var(--text-base)] font-extrabold text-ink">
-                    {p.topic}
-                  </h4>
-                  {p.learningObjectives.length > 0 && (
-                    <div className="mt-2.5 flex flex-wrap gap-1.5">
-                      {p.learningObjectives.map((o, i) => (
-                        <Chip key={i}>{o}</Chip>
-                      ))}
-                    </div>
-                  )}
-                  <div className="mt-3 flex flex-wrap gap-2">
-                    <Badge tone="primary" icon="clipboard-check">
-                      {ASSESSMENT_LABEL[p.assessment.type]}
-                    </Badge>
-                    <Badge tone="info" icon="languages">
-                      {LANGUAGE_LABEL[p.language] ?? p.language}
-                    </Badge>
-                  </div>
-                </Card>
-              ))}
-            </div>
-          )}
+          <PromptList classId={classId} initial={prompts} />
         </div>
       </div>
     </div>

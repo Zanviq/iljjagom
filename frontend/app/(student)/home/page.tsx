@@ -45,6 +45,16 @@ export default async function StudentHomePage() {
     <div className="mx-auto w-full max-w-[var(--width-content)] px-6 pb-24 pt-9">
       <Greeting name={me.name} className={me.className} />
 
+      <div className="mb-8">
+        <Link
+          href={`/classes/${me.classId}/board`}
+          className={buttonClass("outline", "md")}
+        >
+          <Icon name="megaphone" size={18} />
+          우리 학급 게시판
+        </Link>
+      </div>
+
       {books.length > 0 && (
         <>
           <SectionTitle
