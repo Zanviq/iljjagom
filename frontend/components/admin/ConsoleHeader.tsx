@@ -1,14 +1,15 @@
 "use client";
 
-import { useState } from "react";
+import { useRouter } from "next/navigation";
+import { useEffect, useState } from "react";
 
 import { cn } from "@/lib/cn";
 import type { Health } from "@/lib/types";
 
 /**
  * 콘솔 상단 바: 백엔드 모드 배지(/health storage·ai) + 실시간 갱신 토글(06 §2).
- * 실시간 주기는 app_settings.notify_interval_sec(기본 180s) — 계약 확정 후 각 탭이
- * 이 토글 상태를 구독해 폴링한다. 지금은 토글 UI·주기 표시까지(데이터 바인딩 후속).
+ * 토글 ON 시 주기(app_settings.notify_interval_sec, 기본 180s)마다 router.refresh()로
+ * 현재 탭의 서버 데이터(running 세션·알림·지표 등)를 재조회한다.
  */
 export function ConsoleHeader({
   health,
@@ -17,7 +18,15 @@ export function ConsoleHeader({
   health: Health | null;
   intervalSec: number;
 }) {
+  const router = useRouter();
   const [live, setLive] = useState(false);
+
+  useEffect(() => {
+    if (!live) return;
+    const ms = Math.max(10, intervalSec) * 1000;
+    const id = setInterval(() => router.refresh(), ms);
+    return () => clearInterval(id);
+  }, [live, intervalSec, router]);
 
   return (
     <div className="mb-4 flex flex-wrap items-center justify-between gap-3">
