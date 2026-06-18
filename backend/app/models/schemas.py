@@ -295,6 +295,48 @@ class MidActivityComplete(CamelModel):
     pass
 
 
+# --- 학급 게시판(P4, 학생/15 §4 · 14) ---
+class BoardPostCreate(CamelModel):
+    intro: str | None = Field(default=None, max_length=2000)
+
+
+class BoardPostCreated(CamelModel):
+    post_id: str
+    status: Literal["pending", "published", "rejected"]
+
+
+class BoardPostSummary(CamelModel):
+    id: str
+    title: str
+    student_name: str | None = None
+    status: Literal["pending", "published", "rejected"]
+    created_at: str
+    snapshot: dict[str, Any] = {}
+
+
+class BoardPost(CamelModel):
+    id: str
+    classroom_id: str
+    book_id: str
+    student_id: str
+    title: str
+    intro: str | None = None
+    snapshot: dict[str, Any] = {}
+    status: Literal["pending", "published", "rejected"]
+    reviewed_by: str | None = None
+    reviewed_at: str | None = None
+    review_note: str | None = None
+    created_at: str
+
+
+class BoardPostsResponse(CamelModel):
+    posts: list[BoardPostSummary] = []
+
+
+class BoardRejectRequest(CamelModel):
+    note: str | None = Field(default=None, max_length=500)
+
+
 class LetterRequest(CamelModel):
     to: str = Field(min_length=1)
     body: str = Field(min_length=1)

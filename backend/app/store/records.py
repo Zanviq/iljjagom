@@ -31,6 +31,8 @@ class ClassroomRecord:
     name: str
     code: str
     school_id: str | None = None
+    # 학급 게시판 자동공개 토글(학생/15 §4, 기본 false=승인 후 공개).
+    board_auto_publish: bool = False
     created_at: str = ""
 
 
@@ -122,6 +124,23 @@ class WritingTurnRecord:
     kind: str = "message"  # 'message' | 'question' | 'coaching'
     content: str = ""
     paragraph_id: str | None = None
+    created_at: str = ""
+
+
+# 학급 게시판(학생/15 §4).
+@dataclass
+class ClassPostRecord:
+    id: str
+    classroom_id: str
+    book_id: str
+    student_id: str
+    title: str
+    intro: str | None = None
+    snapshot: dict[str, Any] = field(default_factory=dict)
+    status: str = "pending"  # 'pending' | 'published' | 'rejected'
+    reviewed_by: str | None = None
+    reviewed_at: str | None = None
+    review_note: str | None = None
     created_at: str = ""
 
 
