@@ -15,6 +15,8 @@ const ROLE_LABEL: Record<AiRole, string> = {
   writer: "집필",
   editor: "편집",
   chat: "대화",
+  overseer: "총괄",
+  letter: "편지",
 };
 
 function fmt(ts: string | null): string {

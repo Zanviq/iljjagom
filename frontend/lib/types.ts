@@ -544,6 +544,7 @@ export interface AdminMessage {
   id: string;
   bookId?: string | null;
   userId?: string | null;
+  userEmail?: string | null;
   role: string;
   kind: string;
   content: string;
@@ -606,7 +607,13 @@ export interface BackupImportRequest {
 }
 
 /* ── AI 세션/트레이스 (추가기능 02, §4.2·§7) ── */
-export type AiRole = "designer" | "writer" | "editor" | "chat";
+export type AiRole =
+  | "designer"
+  | "writer"
+  | "editor"
+  | "chat"
+  | "overseer"
+  | "letter";
 export type AiSessionStatus = "running" | "awaiting_user" | "done" | "error";
 
 /** GET /ai/sessions 의 세션 항목 (06 확장 필드 optional) */
@@ -625,6 +632,10 @@ export interface AiSession {
   stepCount?: number;
   tokensIn?: number;
   tokensOut?: number;
+  /* 04 기능개선 관리자/01 확장 */
+  bookTitle?: string | null;
+  bookStatus?: BookStatus | null;
+  stage?: string | null;
 }
 
 /** ReAct 스텝(트레이스 타임라인 1행) */
@@ -642,9 +653,43 @@ export interface AiStep {
   createdAt: string;
 }
 
-/** GET /ai/sessions/{id} 응답 = 세션 + 스텝 */
+/** GET /ai/sessions/{id} 응답 = 세션 + 스텝 (+ 04 기능개선: 대화 전문·맥락) */
 export interface AiSessionDetail extends AiSession {
   steps: AiStep[];
+  transcript?: AdminMessage[];
+  context?: {
+    userEmail?: string | null;
+    bookId?: string | null;
+    bookTitle?: string | null;
+    stage?: string | null;
+  };
+}
+
+/** 한 사용자의 책·세션·대화 요약(GET /admin/users/{id}/overview, 04 관리자/01) */
+export interface UserOverview {
+  user: { id: string; email: string; role: string; classId?: string | null };
+  books: {
+    id: string;
+    title: string | null;
+    status: BookStatus;
+    createdAt: string;
+    sessionCount: number;
+    messageCount: number;
+  }[];
+  sessions: AiSession[];
+  recentMessages: AdminMessage[];
+}
+
+/** 대화 페이지 사용자 묶음(GET /admin/messages?groupBy=user) */
+export interface MessagesByUser {
+  users: {
+    userId: string;
+    email: string;
+    role: string;
+    messageCount: number;
+    bookCount: number;
+    lastAt: string | null;
+  }[];
 }
 
 /** GET /health 응답 (백엔드 모드 배지용) */

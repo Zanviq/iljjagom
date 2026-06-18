@@ -1,8 +1,10 @@
 import Link from "next/link";
 
+import { SessionInspector } from "@/components/admin/SessionInspector";
 import { SessionStatus } from "@/components/admin/SessionStatus";
 import { EmptyState } from "@/components/ui/EmptyState";
 import { ErrorText } from "@/components/ui/ErrorText";
+import { Icon } from "@/components/ui/Icon";
 import { getAiSessions } from "@/lib/api";
 import { getAccessToken } from "@/lib/auth/server";
 import type { AiRole, AiSession } from "@/lib/types";
@@ -12,6 +14,8 @@ const ROLE_LABEL: Record<AiRole, string> = {
   writer: "집필",
   editor: "편집",
   chat: "대화",
+  overseer: "총괄",
+  letter: "편지",
 };
 
 function fmt(ts: string | null): string {
@@ -20,7 +24,12 @@ function fmt(ts: string | null): string {
   return Number.isNaN(d.getTime()) ? ts : d.toLocaleString("ko-KR");
 }
 
-export default async function ConsoleSessionsPage() {
+export default async function ConsoleSessionsPage({
+  searchParams,
+}: {
+  searchParams: Promise<{ sid?: string }>;
+}) {
+  const { sid } = await searchParams;
   const token = await getAccessToken();
 
   let sessions: AiSession[] | null = null;
@@ -34,7 +43,7 @@ export default async function ConsoleSessionsPage() {
   return (
     <div>
       <p className="ijg-eyebrow mb-4 text-ink-3">
-        실시간 AI 세션 · 역할·모델·상태·스텝 (행을 누르면 트레이스)
+        실시간 AI 세션 · 역할·모델·상태·스텝 (행을 누르면 우측 상세)
       </p>
 
       {error ? (
@@ -61,7 +70,8 @@ export default async function ConsoleSessionsPage() {
                 >
                   <td className="p-3 font-bold">
                     <Link
-                      href={`/console/sessions/${s.id}`}
+                      href={`/console/sessions?sid=${s.id}`}
+                      scroll={false}
                       className="text-primary-text hover:underline"
                     >
                       {ROLE_LABEL[s.role] ?? s.role}
@@ -93,6 +103,32 @@ export default async function ConsoleSessionsPage() {
             </tbody>
           </table>
         </div>
+      )}
+
+      {sid && (
+        <>
+          <Link
+            href="/console/sessions"
+            scroll={false}
+            aria-label="닫기"
+            className="fixed inset-0 z-40"
+            style={{ background: "rgba(0,0,0,.4)" }}
+          />
+          <aside className="fixed bottom-0 right-0 top-0 z-50 w-[min(540px,94vw)] overflow-y-auto border-l border-line bg-surface shadow-[var(--elev-lg)]">
+            <div className="sticky top-0 z-10 flex items-center justify-between border-b border-line bg-surface px-5 py-3">
+              <span className="font-extrabold text-ink">세션 상세</span>
+              <Link
+                href="/console/sessions"
+                scroll={false}
+                aria-label="닫기"
+                className="text-ink-3 hover:text-ink"
+              >
+                <Icon name="x" size={18} />
+              </Link>
+            </div>
+            <SessionInspector sessionId={sid} />
+          </aside>
+        </>
       )}
     </div>
   );
