@@ -11,9 +11,15 @@ import { Input } from "@/components/ui/Input";
 import { Textarea } from "@/components/ui/Textarea";
 import { ApiError, postLetter } from "@/lib/api";
 import { getClientAccessToken } from "@/lib/auth/client";
-import type { LetterReply } from "@/lib/types";
+import type { LetterCharacter, LetterReply } from "@/lib/types";
 
-export function LetterForm({ bookId }: { bookId: string }) {
+export function LetterForm({
+  bookId,
+  characters,
+}: {
+  bookId: string;
+  characters?: LetterCharacter[];
+}) {
   const [to, setTo] = useState("");
   const [body, setBody] = useState("");
   const [sending, setSending] = useState(false);
@@ -55,12 +61,44 @@ export function LetterForm({ bookId }: { bookId: string }) {
   return (
     <Card padding="lg" style={{ display: "flex", flexDirection: "column", gap: 14 }}>
       <Field label="받는 인물">
-        <Input
-          icon="user"
-          value={to}
-          onChange={(e) => setTo(e.target.value)}
-          placeholder="이야기 속 인물 이름"
-        />
+        {characters && characters.length > 0 ? (
+          <div className="flex flex-wrap gap-2">
+            {characters.map((c) => {
+              const selected = to === c.name;
+              return (
+                <button
+                  key={c.id}
+                  type="button"
+                  onClick={() => setTo(selected ? "" : c.name)}
+                  aria-pressed={selected}
+                  title={c.traits.join(", ")}
+                  style={{
+                    height: 38,
+                    padding: "0 15px",
+                    borderRadius: 999,
+                    fontWeight: 700,
+                    fontSize: "var(--text-sm)",
+                    cursor: "pointer",
+                    background: selected ? "var(--primary)" : "var(--surface-2)",
+                    color: selected ? "var(--on-primary)" : "var(--text-2)",
+                    border: selected
+                      ? "var(--border) solid transparent"
+                      : "var(--border) solid var(--line)",
+                  }}
+                >
+                  {c.name}
+                </button>
+              );
+            })}
+          </div>
+        ) : (
+          <Input
+            icon="user"
+            value={to}
+            onChange={(e) => setTo(e.target.value)}
+            placeholder="이야기 속 인물 이름"
+          />
+        )}
       </Field>
       <Field label="편지 내용">
         <Textarea

@@ -1,6 +1,8 @@
 import Link from "next/link";
 import { notFound } from "next/navigation";
 
+import { EmotionCurve } from "@/components/learning/EmotionCurve";
+import { EmotionInput } from "@/components/learning/EmotionInput";
 import { EssayForm } from "@/components/learning/EssayForm";
 import { LearningOpenTracker } from "@/components/learning/LearningOpenTracker";
 import { LetterForm } from "@/components/learning/LetterForm";
@@ -10,7 +12,7 @@ import { EmptyState } from "@/components/ui/EmptyState";
 import { Icon } from "@/components/ui/Icon";
 import { ApiError, getBook, getLearning } from "@/lib/api";
 import { getAccessToken } from "@/lib/auth/server";
-import type { EmotionPoint, Word } from "@/lib/types";
+import type { Word } from "@/lib/types";
 
 export default async function LearnPage({
   params,
@@ -31,12 +33,18 @@ export default async function LearnPage({
     }),
   ]);
 
-  const { vocab, quiz, essayBlanks, emotion } = learning;
+  const { vocab, quiz, essayBlanks, emotion, letterCharacters } = learning;
+  // emotion: 신규 입력 틀(객체) vs 레거시 시스템 곡선(배열) 런타임 분기.
+  const legacyEmotion = Array.isArray(emotion) ? emotion : null;
+  const emotionFrame = Array.isArray(emotion) ? null : emotion;
+  const hasEmotion = legacyEmotion
+    ? legacyEmotion.length > 0
+    : (emotionFrame?.points.length ?? 0) > 0;
   const isEmpty =
     vocab.length === 0 &&
     quiz.length === 0 &&
     essayBlanks.length === 0 &&
-    emotion.length === 0;
+    !hasEmotion;
 
   return (
     <div className="mx-auto w-full max-w-[740px] px-6 pb-20 pt-6">
@@ -92,14 +100,18 @@ export default async function LearnPage({
             </Block>
           )}
 
-          {emotion.length > 0 && (
+          {hasEmotion && (
             <Block icon="pen-line" title="감정 곡선">
-              <EmotionCurve points={emotion} />
+              {emotionFrame ? (
+                <EmotionInput bookId={bookId} frame={emotionFrame} />
+              ) : (
+                <EmotionCurve points={legacyEmotion!} />
+              )}
             </Block>
           )}
 
           <Block icon="mail" title="인물에게 편지 쓰기">
-            <LetterForm bookId={bookId} />
+            <LetterForm bookId={bookId} characters={letterCharacters} />
           </Block>
         </div>
       )}
@@ -149,63 +161,6 @@ function VocabCard({ word }: { word: Word }) {
       <p className="mt-1.5 text-[length:var(--text-sm)] text-ink-2">
         {word.meaning}
       </p>
-    </Card>
-  );
-}
-
-/** 감정 곡선: value(0~1)를 챕터 순서대로 잇는 간단한 선 그래프(accent stroke). */
-function EmotionCurve({ points }: { points: EmotionPoint[] }) {
-  const W = 600;
-  const H = 180;
-  const padX = 40;
-  const padY = 34;
-  const innerW = W - padX * 2;
-  const innerH = H - padY * 2;
-  const n = points.length;
-  const x = (i: number) => (n === 1 ? W / 2 : padX + (innerW * i) / (n - 1));
-  const y = (v: number) => padY + innerH * (1 - Math.max(0, Math.min(1, v)));
-  const line = points.map((p, i) => `${x(i)},${y(p.value)}`).join(" ");
-
-  return (
-    <Card padding="lg" className="overflow-x-auto">
-      <svg
-        viewBox={`0 0 ${W} ${H}`}
-        className="h-[200px] w-full min-w-[480px]"
-        role="img"
-        aria-label="감정 곡선"
-      >
-        {n > 1 && (
-          <polyline
-            points={line}
-            fill="none"
-            stroke="var(--accent)"
-            strokeWidth={3}
-            strokeLinecap="round"
-            strokeLinejoin="round"
-          />
-        )}
-        {points.map((p, i) => (
-          <g key={i}>
-            <circle cx={x(i)} cy={y(p.value)} r={6} fill="var(--accent)" />
-            <text
-              x={x(i)}
-              y={y(p.value) - 14}
-              textAnchor="middle"
-              style={{ fill: "var(--text-1)", font: "700 13px var(--font-sans)" }}
-            >
-              {p.label}
-            </text>
-            <text
-              x={x(i)}
-              y={H - 8}
-              textAnchor="middle"
-              style={{ fill: "var(--text-3)", font: "500 12px var(--font-mono)" }}
-            >
-              {p.chapterIdx}장
-            </text>
-          </g>
-        ))}
-      </svg>
     </Card>
   );
 }

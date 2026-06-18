@@ -222,14 +222,29 @@ export interface EssayBlank {
 }
 export interface EmotionPoint {
   chapterIdx: number;
-  label: string;
-  value: number;
+  /** 04 기능개선 11: 입력 틀에선 미입력 시 null(학생이 채움) */
+  label: string | null;
+  value: number | null;
+}
+/** 04 기능개선 11: 감정곡선이 시스템 자동생성 → 학생 입력 틀로 변경 */
+export interface EmotionFrame {
+  labels: string[];
+  points: EmotionPoint[];
+}
+/** 04 기능개선 12: 편지 받는 인물 선택지(Bible characters 파생) */
+export interface LetterCharacter {
+  id: string;
+  name: string;
+  traits: string[];
 }
 export interface Learning {
   vocab: Word[];
   quiz: QuizItem[];
   essayBlanks: EssayBlank[];
-  emotion: EmotionPoint[];
+  /** 신규(객체 입력 틀) 또는 레거시(시스템 생성 배열) — 프론트가 런타임 분기 */
+  emotion: EmotionFrame | EmotionPoint[];
+  /** 04 기능개선 12. 미제공(레거시)이면 자유 입력 폴백 */
+  letterCharacters?: LetterCharacter[];
 }
 
 /** POST /books/{id}/letters 응답 (FR-S11). letterId 추가(추가기능 03). */
