@@ -13,6 +13,7 @@ from typing import Any
 
 from app.ai.gemini import GeminiClient
 from app.ai.safety import check_input
+from app.ai.sanitize import sanitize_reply
 from app.ai.skills.base import Budget, SkillContext, estimate_tokens, run_skill
 from app.config import Settings
 from app.deps import CurrentUser
@@ -81,7 +82,8 @@ async def overseer_message(
     # 5) 액션 실행(navigate/start_new_book/open_book 스킬 → navigate 액션 수집).
     actions = await _execute(ctx, decision, books, prompts)
 
-    reply = (decision.get("reply") or "무엇을 도와줄까?").strip()
+    # 6) reply 정제(이모지·마크다운 제거) + 예고/빈/반복 차단 → 데이터 요약 폴백.
+    reply = _finalize_reply(decision, message, history, books, prompts, activity)
     _finish(store, ctx, session, reply, actions)
     return OverseerReply(
         session_id=session.id,
@@ -171,7 +173,11 @@ def _decision_prompt(
         '"route": "navigate 일 때 이동 경로(/home·/learn 만)", "label": "버튼 글자", "auto": false}\n'
         "규칙: 새 이야기를 만들고 싶어하면 start_book(우리 반 발제 중 알맞은 promptId). "
         "기존 책을 이어보려 하면 open_book(bookId). 단순 안내/질문이면 info(액션 없음). "
-        "promptId/bookId 는 아래 맥락에 있는 실제 값만 쓴다. 없으면 info.\n\n"
+        "promptId/bookId 는 아래 맥락에 있는 실제 값만 쓴다. 없으면 info.\n"
+        "info 질문(진행·활동·내 책 등)이면 아래 [내 책]/[최근 활동] 데이터를 직접 요약해 답한다. "
+        "'알려줄게/알려드릴게/보여줄게'처럼 예고만 하지 말고 실제 수치(책 권수·제목·진행 장수)를 바로 말한다. "
+        "데이터가 비면 솔직히('아직 만든 책이 없어') 안내한다. "
+        "이모지·마크다운·작업 흔적을 절대 쓰지 말고, 따뜻하고 쉬운 평문 한두 문장으로만 답한다.\n\n"
         f"[현재 화면] {route or '/home'}\n"
         f"[내 책] {ctx_books}\n"
         f"[우리 반 발제] {ctx_prompts}\n"
@@ -205,7 +211,58 @@ def _parse_json(raw: str) -> dict[str, Any] | None:
 
 _NEW_KW = ("만들", "새 책", "새책", "쓰고", "쓸래", "쓰기", "시작", "지어", "지을", "짓고")
 _OPEN_KW = ("열어", "이어", "계속", "보던", "읽던", "마저", "이어서")
-_PROGRESS_KW = ("진행", "얼마나", "어디까지", "몇 장", "몇장", "완독", "다 썼", "진척")
+# 진행/활동/내 책 질문(학생/16: "지금까지·한 거·알려줘·보여줘" 등 누락분 보강).
+_PROGRESS_KW = (
+    "진행", "얼마나", "어디까지", "몇 장", "몇장", "완독", "다 썼", "진척", "현황",
+    "지금까지", "한 거", "한거", "뭐 했", "뭐했", "뭐 만들", "내 책", "책 목록",
+    "뭐 있", "알려줘", "알려 줘", "보여줘", "보여 줘",
+)
+# 예고 패턴(내용 없는 "알려줄게"류). 실제 데이터(숫자)가 없으면 폴백 대상.
+_TEASER_KW = ("알려줄게", "알려 줄게", "알려드릴게", "알려 드릴게", "보여줄게", "보여 줄게",
+              "알려줄께", "보여줄께")
+
+
+def _is_info_query(message: str) -> bool:
+    return any(k in (message or "") for k in _PROGRESS_KW)
+
+
+def _looks_like_teaser(reply: str) -> bool:
+    """'알려줄게'처럼 예고만 하고 실제 수치(숫자)가 없는 빈 응답인지."""
+    r = reply or ""
+    return any(k in r for k in _TEASER_KW) and not any(c.isdigit() for c in r)
+
+
+def _data_summary(books: list[dict], prompts: list[dict]) -> str:
+    """info 질문에 대한 결정적 데이터 답(실제 책 수·제목·진행 장수). reply 토대/폴백."""
+    if not books:
+        if prompts:
+            topic = prompts[0].get("topic") or "새 주제"
+            return (f"아직 만든 책이 없어. 우리 반에 '{topic}' 발제가 있으니 "
+                    "'책 쓰고 싶어'라고 말하면 같이 시작할 수 있어!")
+        return "아직 만든 책이 없어. 선생님이 발제를 올리면 같이 새 이야기를 시작해보자!"
+    parts = ", ".join(
+        f"'{b.get('title') or '제목 미정'}' {b.get('chaptersDone', 0)}/{b.get('totalChaptersPlanned') or '?'}장"
+        for b in books[:3]
+    )
+    return f"지금까지 책 {len(books)}권을 만들었어. {parts}."
+
+
+def _finalize_reply(
+    decision: dict[str, Any], message: str, history: list[dict],
+    books: list[dict], prompts: list[dict], activity: dict,
+) -> str:
+    """reply 정제 + 예고/빈/직전반복 차단 → 데이터 요약 폴백."""
+    reply = sanitize_reply(decision.get("reply") or "")
+    last_ai = next((h["content"] for h in reversed(history) if h.get("role") == "ai"), "")
+    last_ai = sanitize_reply(last_ai)
+    if decision.get("intent") == "info" and _is_info_query(message):
+        if (not reply) or _looks_like_teaser(reply) or reply == last_ai:
+            reply = sanitize_reply(_data_summary(books, prompts))
+    if not reply:
+        reply = "무엇을 도와줄까?"
+    if reply == last_ai:  # 그래도 직전과 동일하면 데이터 요약으로 갈아끼움(반복 차단).
+        reply = sanitize_reply(_data_summary(books, prompts)) or reply
+    return reply
 
 
 def _decide_mock(message: str, books: list[dict], prompts: list[dict]) -> dict[str, Any]:
@@ -225,14 +282,7 @@ def _decide_mock(message: str, books: list[dict], prompts: list[dict]) -> dict[s
         return {"intent": "open_book", "bookId": b["bookId"],
                 "reply": f"'{title}'를 이어서 볼 수 있어. 아래 버튼을 눌러봐!"}
     if any(k in text for k in _PROGRESS_KW):
-        if not books:
-            return {"intent": "info",
-                    "reply": "아직 만든 책이 없어. '책 쓰고 싶어'라고 말하면 같이 시작할 수 있어!"}
-        parts = ", ".join(
-            f"'{b.get('title') or '제목 미정'}' {b['chaptersDone']}/{b.get('totalChaptersPlanned') or '?'}장"
-            for b in books[:3]
-        )
-        return {"intent": "info", "reply": f"지금까지 책 {len(books)}권을 만들었어. {parts}."}
+        return {"intent": "info", "reply": _data_summary(books, prompts)}
     if books:
         return {"intent": "info",
                 "reply": f"지금 책 {len(books)}권이 있어. 새 이야기를 만들거나 이어 읽을 수 있어. 무엇을 도와줄까?"}
