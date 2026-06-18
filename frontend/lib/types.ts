@@ -102,6 +102,35 @@ export interface CreatePromptRequest {
   language: string;
 }
 
+/* ── 교사 학생 데이터 열람 (04 기능개선 교사/03, §4 D·§7) — 읽기 전용 ── */
+export interface ChapterContent {
+  idx: number;
+  mode: ChapterMode;
+  reviewStatus: ReviewStatus;
+  body: string;
+  charCount: number;
+  words: unknown[];
+  illustrationUrl?: string | null;
+  updatedAt: string;
+}
+export interface ChaptersContentResponse {
+  chapters: ChapterContent[];
+}
+export interface PlanMessage {
+  role: "student" | "interviewer";
+  content: string;
+  createdAt: string;
+}
+export interface PlanMessagesResponse {
+  messages: PlanMessage[];
+}
+export interface BibleResponse {
+  bible: Record<string, unknown>;
+}
+export interface StudentBooksResponse {
+  books: BookSummary[];
+}
+
 /** 책 목차의 챕터 요약 (GET /books/{id} 의 chapters[]) */
 export interface ChapterSummary {
   idx: number;

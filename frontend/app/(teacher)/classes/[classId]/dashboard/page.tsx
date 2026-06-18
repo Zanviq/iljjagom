@@ -1,3 +1,4 @@
+import Link from "next/link";
 import { notFound } from "next/navigation";
 
 import { DashboardTrend } from "@/components/teacher/DashboardTrend";
@@ -171,7 +172,7 @@ export default async function DashboardPage({
             </thead>
             <tbody>
               {students.map((s) => (
-                <StudentRow key={s.studentId} student={s} />
+                <StudentRow key={s.studentId} classId={classId} student={s} />
               ))}
             </tbody>
           </table>
@@ -181,19 +182,28 @@ export default async function DashboardPage({
   );
 }
 
-function StudentRow({ student }: { student: DashboardStudent }) {
+function StudentRow({
+  classId,
+  student,
+}: {
+  classId: string;
+  student: DashboardStudent;
+}) {
   const total = student.totalChapters;
   const hasBook = student.bookId !== null && student.status !== null;
 
   return (
     <tr className="border-b border-line-soft last:border-0">
       <td className="p-3">
-        <div className="flex items-center gap-2.5">
+        <Link
+          href={`/classes/${classId}/students/${student.studentId}`}
+          className="flex items-center gap-2.5 hover:underline"
+        >
           <Avatar name={student.studentEmail} size={30} />
           <span className="text-[length:var(--text-sm)] font-semibold text-ink">
             {student.studentEmail}
           </span>
-        </div>
+        </Link>
       </td>
       <td className="p-3 text-[length:var(--text-sm)]">
         {hasBook ? (

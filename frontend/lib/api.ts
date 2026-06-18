@@ -24,8 +24,10 @@ import type {
   BoardPostCreated,
   BoardPostsResponse,
   BoardPostStatus,
+  BibleResponse,
   BookCreated,
   BookSummary,
+  ChaptersContentResponse,
   ClassSettingsPut,
   ClassSettingsResponse,
   ClassSummary,
@@ -44,8 +46,10 @@ import type {
   Me,
   NotificationCreate,
   OnboardingRequest,
+  PlanMessagesResponse,
   PlanReply,
   Prompt,
+  StudentBooksResponse,
   SafetyFlag,
   SafetyFlagDetail,
   SafetyFlagStatus,
@@ -572,6 +576,48 @@ export function getLearningResults(
 ): Promise<{ results: LearningResult[] }> {
   return apiFetch<{ results: LearningResult[] }>(
     `/books/${bookId}/learning-results`,
+    { token },
+  );
+}
+
+/* ── 교사 학생 데이터 열람 (04 기능개선 교사/03) — 읽기 전용 ── */
+
+/** 저장된 챕터 본문 전체(책 접근자). 스트림 미트리거. */
+export function getChaptersContent(
+  token: string | null,
+  bookId: string,
+): Promise<ChaptersContentResponse> {
+  return apiFetch<ChaptersContentResponse>(`/books/${bookId}/chapters`, {
+    token,
+  });
+}
+
+/** 기획 인터뷰 로그(책 접근자). */
+export function getPlanMessages(
+  token: string | null,
+  bookId: string,
+): Promise<PlanMessagesResponse> {
+  return apiFetch<PlanMessagesResponse>(`/books/${bookId}/plan-messages`, {
+    token,
+  });
+}
+
+/** 설계 결과 Bible(책 접근자, 교사는 secretArc 포함). */
+export function getBible(
+  token: string | null,
+  bookId: string,
+): Promise<BibleResponse> {
+  return apiFetch<BibleResponse>(`/books/${bookId}/bible`, { token });
+}
+
+/** 한 학생의 책 목록(담당 교사/admin). */
+export function getStudentBooks(
+  token: string | null,
+  classId: string,
+  studentId: string,
+): Promise<StudentBooksResponse> {
+  return apiFetch<StudentBooksResponse>(
+    `/classes/${classId}/students/${studentId}/books`,
     { token },
   );
 }
