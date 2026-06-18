@@ -1,4 +1,4 @@
-import { AppShell } from "@/components/layout/AppShell";
+import { StudentShell } from "@/components/layout/StudentShell";
 import { requireRole } from "@/lib/auth/guard";
 
 export default async function StudentLayout({
@@ -7,5 +7,5 @@ export default async function StudentLayout({
   children: React.ReactNode;
 }) {
   const me = await requireRole("student");
-  return <AppShell me={me}>{children}</AppShell>;
+  return <StudentShell me={me}>{children}</StudentShell>;
 }
