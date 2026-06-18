@@ -281,6 +281,20 @@ class LearningResponse(CamelModel):
     letter_characters: list[LetterCharacter] = []
 
 
+# --- 중간활동(P3, 학생/15 §3) ---
+class MidActivityResponse(CamelModel):
+    """기·승 완료 후 필수 중간활동(전·결 prefetch 동안 푸는 퀴즈/독후감)."""
+    required: bool = False   # 기·승 완료 + 전·결 존재 + 미완료
+    done: bool = False
+    quiz: list[QuizItem] = []
+    essay_blanks: list[EssayBlank] = []
+
+
+class MidActivityComplete(CamelModel):
+    # 완료 처리(선택적으로 학생 답안 동봉 가능 — 본문 검증은 learning-results 경로 사용).
+    pass
+
+
 class LetterRequest(CamelModel):
     to: str = Field(min_length=1)
     body: str = Field(min_length=1)

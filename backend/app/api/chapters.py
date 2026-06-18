@@ -17,7 +17,7 @@ from app.deps import (
 from app.errors import conflict, validation_error
 from app.models.schemas import CollabRequest, ReviseRequest, ReviseResponse, serialize
 from app.ratelimit import rate_limit
-from app.services import books, chapters, collab
+from app.services import books, chapters, collab, midactivity
 from app.store.base import Store
 
 router = APIRouter(tags=["chapters"])
@@ -86,6 +86,7 @@ async def collab_turn(
     book_id: str,
     idx: int,
     req: CollabRequest,
+    background: BackgroundTasks,
     user: CurrentUser = Depends(require_role("student", "admin")),
     store: Store = Depends(get_store_dep),
     gemini: GeminiClient = Depends(get_gemini),
@@ -93,7 +94,29 @@ async def collab_turn(
     _consent: CurrentUser = Depends(require_guardian_consent()),
 ) -> dict:
     reply = await collab.collab_turn(store, gemini, user, book_id, idx, req.message, req.accept)
+    # 기·승 완료 순간 → 전·결 백그라운드 선생성(중간활동 푸는 동안, 학생/15 §3).
+    if reply.chapter_complete and midactivity.giseung_done(store, book_id):
+        background.add_task(chapters.prefetch_arc, store, gemini, book_id)
     return serialize(reply)
+
+
+# --- 중간활동(P3, 학생/15 §3) ---
+@router.get("/books/{book_id}/mid-activity")
+async def get_mid_activity(
+    book_id: str,
+    user: CurrentUser = Depends(get_current_user),
+    store: Store = Depends(get_store_dep),
+) -> dict:
+    return serialize(midactivity.get_mid_activity(store, user, book_id))
+
+
+@router.post("/books/{book_id}/mid-activity/complete")
+async def complete_mid_activity(
+    book_id: str,
+    user: CurrentUser = Depends(require_role("student", "admin")),
+    store: Store = Depends(get_store_dep),
+) -> dict:
+    return serialize(midactivity.complete_mid_activity(store, user, book_id))
 
 
 @router.get("/books/{book_id}/chapters/{idx}/collab")

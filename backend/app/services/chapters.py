@@ -198,6 +198,17 @@ async def _produce(
             book_id, idx, event.get("mode", "free")
         )
         mode = chapter.mode
+        # 전·결(guided) 진입 게이트: 기·승 완료 후 중간활동 필수(학생/15 §3).
+        if mode == "guided":
+            from app.services import midactivity
+
+            if midactivity.gate_blocked(store, book_id):
+                await queue.put(_sse("error", {
+                    "code": "conflict",
+                    "message": "중간활동을 먼저 완료해 주세요.",
+                    "retryable": False,
+                }))
+                return
         # 이미 집필된 챕터는 저장본을 그대로 흘린다(재구독·수정/편집 반영). 첫 집필만 생성.
         served_stored = bool(chapter.body) and chapter.char_count > 0
         # 학생이 실제 진입 → 선생성(prefetch) 표식 해제(이제 chaptersDone 에 포함).
@@ -456,6 +467,19 @@ async def post_stream_tasks(
     """스트림 종료 후: 현재 장 검수 → 다음 장 선생성(순차). BackgroundTask 진입점."""
     await run_first_draft_review(store, gemini, book_id, idx)
     await prefetch_chapter(store, gemini, book_id, idx + 1)
+
+
+async def prefetch_arc(store: Store, gemini: GeminiClient, book_id: str) -> None:
+    """기·승 완료 후 전·결(guided) 챕터를 백그라운드 선생성(학생/15 §3).
+
+    학생이 중간활동을 푸는 동안 가장 느린 구간(전·결 본문·삽화)을 미리 만든다. 순차·멱등.
+    """
+    bible_rec = store.get_bible(book_id)
+    if not bible_rec:
+        return
+    for ev in bible_rec.data.get("events", []):
+        if ev.get("mode") == "guided" and ev.get("chapterIdx"):
+            await prefetch_chapter(store, gemini, book_id, ev["chapterIdx"])
 
 
 # --- 자유모드 수정요청 파이프라인 (P2-2, 비동기) ---
