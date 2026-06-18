@@ -77,8 +77,12 @@ def list_books(store: Store, user: CurrentUser) -> BooksResponse:
     records = store.list_books_for_student(user.id)
     summaries: list[BookSummary] = []
     for rec in records:
-        # chaptersDone = 본문이 작성된(char_count>0) 챕터 수.
-        done = sum(1 for c in store.list_chapters(rec.id) if c.char_count > 0)
+        # chaptersDone = 학생이 진입해 본문이 있는(char_count>0) 챕터 수.
+        # 선생성(prefetch)만 된 미진입 챕터는 제외(진척 과대 방지, 학생/06).
+        done = sum(
+            1 for c in store.list_chapters(rec.id)
+            if c.char_count > 0 and not getattr(c, "prefetched", False)
+        )
         summaries.append(
             BookSummary(
                 id=rec.id,

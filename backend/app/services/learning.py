@@ -60,7 +60,11 @@ async def build_learning(
     book = get_book_or_404(store, book_id)
     assert_can_access_book(store, user, book)
 
-    chapters = [c for c in store.list_chapters(book_id) if c.char_count > 0]
+    # 선생성(prefetch)만 된 미진입 챕터는 학습활동 대상에서 제외(읽지 않은 앞선 내용 차단, 학생/06).
+    chapters = [
+        c for c in store.list_chapters(book_id)
+        if c.char_count > 0 and not getattr(c, "prefetched", False)
+    ]
     bible_rec = store.get_bible(book_id)
     bible = bible_rec.data if bible_rec else {}
 

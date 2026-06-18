@@ -76,6 +76,9 @@ class ChapterRecord:
     review_status: str = "pending"
     words: list[str] = field(default_factory=list)
     char_count: int = 0
+    # 백그라운드 선생성(prefetch)으로 본문만 채워졌고 학생이 아직 진입하지 않은 상태(학생/06).
+    # 학생 진입(스트림) 시 False 로 풀린다. chaptersDone 집계에서 제외(진척 과대 방지).
+    prefetched: bool = False
     created_at: str = ""
 
 

@@ -41,9 +41,9 @@ async def stream_chapter(
             "Connection": "keep-alive",
             "X-Accel-Buffering": "no",  # nginx 버퍼링 비활성(스트림 즉시 전송)
         },
-        # 스트림 종료 후 Tier3 편집 검수(P2-3)를 비동기로 실행 — 학생 대기 미노출.
+        # 스트림 종료 후(비동기, 학생 대기 미노출): 현재 장 검수 → 다음 장 백그라운드 선생성(P1-06).
         background=BackgroundTask(
-            chapters.run_first_draft_review, store, gemini, book_id, idx
+            chapters.post_stream_tasks, store, gemini, book_id, idx
         ),
     )
 
