@@ -666,11 +666,12 @@ class SupabaseStore(Store):
 
     # --- AI 세션 / ReAct 트레이스 ---
     def create_ai_session(
-        self, book_id: str | None, role: str, model: str | None = None
+        self, book_id: str | None, role: str, model: str | None = None,
+        user_id: str | None = None,
     ) -> AiSessionRecord:
         row = self._one(
             self.client.table("ai_sessions")
-            .insert({"book_id": book_id, "role": role, "model": model})
+            .insert({"book_id": book_id, "role": role, "model": model, "user_id": user_id})
             .execute()
         )
         return AiSessionRecord(**row)
@@ -753,6 +754,13 @@ class SupabaseStore(Store):
         if kind is not None:
             q = q.eq("kind", kind)
         rows = self._rows(q.order("created_at").execute())
+        return [MessageRecord(**r) for r in rows]
+
+    def list_messages_for_session(self, session_id: str) -> list[MessageRecord]:
+        rows = self._rows(
+            self.client.table("messages").select("*")
+            .eq("session_id", session_id).order("created_at").execute()
+        )
         return [MessageRecord(**r) for r in rows]
 
     def list_messages_admin(

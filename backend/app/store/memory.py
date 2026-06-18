@@ -504,11 +504,12 @@ class InMemoryStore(Store):
 
     # --- AI 세션 / ReAct 트레이스 ---
     def create_ai_session(
-        self, book_id: str | None, role: str, model: str | None = None
+        self, book_id: str | None, role: str, model: str | None = None,
+        user_id: str | None = None,
     ) -> AiSessionRecord:
         rec = AiSessionRecord(
             id=new_id(), book_id=book_id, role=role, model=model,
-            status="running", started_at=now_iso(),
+            status="running", started_at=now_iso(), user_id=user_id,
         )
         self.ai_sessions[rec.id] = rec
         return rec
@@ -577,6 +578,12 @@ class InMemoryStore(Store):
         return sorted(
             (m for m in self.messages
              if m.book_id == book_id and (kind is None or m.kind == kind)),
+            key=lambda m: m.created_at,
+        )
+
+    def list_messages_for_session(self, session_id: str) -> list[MessageRecord]:
+        return sorted(
+            (m for m in self.messages if m.session_id == session_id),
             key=lambda m: m.created_at,
         )
 

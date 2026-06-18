@@ -3,8 +3,6 @@ from __future__ import annotations
 
 import json
 
-import pytest
-
 from tests.conftest import auth
 
 
@@ -125,7 +123,7 @@ async def test_list_books(client):
     assert r.json()["books"] == []
 
     # 책 2권 생성
-    b1 = (await client.post("/books", headers=sh, json={"promptId": prompt_id})).json()["id"]
+    await client.post("/books", headers=sh, json={"promptId": prompt_id})
     b2 = (await client.post("/books", headers=sh, json={"promptId": prompt_id})).json()["id"]
 
     r = await client.get("/books", headers=sh)

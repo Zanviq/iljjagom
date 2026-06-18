@@ -156,13 +156,15 @@ class LetterRecord:
 class AiSessionRecord:
     id: str
     book_id: str | None
-    role: str  # designer|writer|editor|chat|letter ...
+    role: str  # designer|writer|editor|chat|overseer|letter ...
     model: str | None = None
     status: str = "running"  # running|awaiting_user|done|error
     summary: str | None = None
     error: str | None = None
     started_at: str = ""
     ended_at: str | None = None
+    # 총괄(overseer) 세션처럼 book 이 없는 세션의 사용자 귀속(0014). book 세션은 None.
+    user_id: str | None = None
 
 
 @dataclass
