@@ -243,7 +243,8 @@ class Store(ABC):
     # --- AI 세션 / ReAct 트레이스 (02·06 관측 가능성) ---
     @abstractmethod
     def create_ai_session(
-        self, book_id: str | None, role: str, model: str | None = None
+        self, book_id: str | None, role: str, model: str | None = None,
+        user_id: str | None = None,
     ) -> AiSessionRecord: ...
 
     @abstractmethod
@@ -296,6 +297,11 @@ class Store(ABC):
     def list_messages(
         self, book_id: str, kind: str | None = None
     ) -> list[MessageRecord]: ...
+
+    @abstractmethod
+    def list_messages_for_session(self, session_id: str) -> list[MessageRecord]:
+        """한 AI 세션(session_id)에 속한 대화 메시지(시간순). overseer 대화 연속용."""
+        ...
 
     @abstractmethod
     def list_messages_admin(

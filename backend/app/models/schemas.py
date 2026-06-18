@@ -517,6 +517,26 @@ class AnswerRequest(CamelModel):
     text: str | None = None
 
 
+# --- 총괄(Overseer) AI (디자인 03 / 03-기능명세서 §4.2) ---
+class OverseerMessageRequest(CamelModel):
+    message: str = Field(min_length=1, max_length=2000)
+    session_id: str | None = None
+    route: str | None = None
+
+
+class OverseerAction(CamelModel):
+    type: Literal["navigate"] = "navigate"
+    to: str
+    label: str
+    auto: bool = False
+
+
+class OverseerReply(CamelModel):
+    session_id: str
+    reply: str
+    actions: list[OverseerAction] = []
+
+
 def serialize(model: CamelModel) -> dict[str, Any]:
     """응답 직렬화: camelCase alias 사용."""
     return model.model_dump(by_alias=True)
