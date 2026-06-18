@@ -5,7 +5,9 @@ import { EssayForm } from "@/components/learning/EssayForm";
 import { LearningOpenTracker } from "@/components/learning/LearningOpenTracker";
 import { LetterForm } from "@/components/learning/LetterForm";
 import { Quiz } from "@/components/learning/Quiz";
+import { Card } from "@/components/ui/Card";
 import { EmptyState } from "@/components/ui/EmptyState";
+import { Icon } from "@/components/ui/Icon";
 import { ApiError, getBook, getLearning } from "@/lib/api";
 import { getAccessToken } from "@/lib/auth/server";
 import type { EmotionPoint, Word } from "@/lib/types";
@@ -37,96 +39,126 @@ export default async function LearnPage({
     emotion.length === 0;
 
   return (
-    <section className="mx-auto max-w-2xl">
+    <div className="mx-auto w-full max-w-[740px] px-6 pb-20 pt-6">
       <LearningOpenTracker bookId={bookId} />
-      <Link href={`/books/${bookId}/read`} className="text-sm font-bold text-muted">
-        ← 이야기로 돌아가기
+      <Link
+        href={`/books/${bookId}/read`}
+        className="inline-flex items-center gap-1.5 py-1.5 text-[length:var(--text-sm)] font-bold text-ink-3"
+      >
+        <Icon name="arrow-left" size={16} />
+        이야기로 돌아가기
       </Link>
-      <h1 className="mt-2 text-3xl font-extrabold">
+      <h1
+        className="mb-1 mt-2"
+        style={{
+          fontFamily: "var(--font-serif)",
+          fontWeight: 600,
+          fontSize: 36,
+          letterSpacing: "-.02em",
+          color: "var(--text-1)",
+        }}
+      >
         학습 활동{book.title ? ` · ${book.title}` : ""}
       </h1>
-      <p className="mt-1 text-muted">이야기로 낱말도 배우고 생각도 나눠 봐요.</p>
+      <p className="mb-7 text-[length:var(--text-md)] text-ink-2">
+        이야기로 낱말도 배우고 생각도 나눠 봐요.
+      </p>
 
       {isEmpty ? (
-        <EmptyState className="mt-6">
+        <EmptyState icon="graduation-cap" title="아직 학습 활동이 없어요">
           아직 학습 활동이 준비되지 않았어요. 이야기를 더 읽고 와요!
         </EmptyState>
       ) : (
-        <div className="mt-6 space-y-10">
+        <div className="flex flex-col gap-9">
           {vocab.length > 0 && (
-            <Block title="📖 낱말 카드">
-              <ul className="grid gap-3 sm:grid-cols-2">
+            <Block icon="book-a" title="낱말 카드">
+              <div className="grid gap-3 [grid-template-columns:repeat(auto-fill,minmax(220px,1fr))]">
                 {vocab.map((w, i) => (
                   <VocabCard key={i} word={w} />
                 ))}
-              </ul>
+              </div>
             </Block>
           )}
 
           {quiz.length > 0 && (
-            <Block title="❓ 퀴즈">
+            <Block icon="circle-help" title="퀴즈">
               <Quiz items={quiz} bookId={bookId} />
             </Block>
           )}
 
           {essayBlanks.length > 0 && (
-            <Block title="✍️ 독후감 채우기">
+            <Block icon="notebook-pen" title="독후감 채우기">
               <EssayForm bookId={bookId} blanks={essayBlanks} />
             </Block>
           )}
 
           {emotion.length > 0 && (
-            <Block title="💗 감정 곡선">
+            <Block icon="pen-line" title="감정 곡선">
               <EmotionCurve points={emotion} />
             </Block>
           )}
 
-          <Block title="💌 인물에게 편지 쓰기">
+          <Block icon="mail" title="인물에게 편지 쓰기">
             <LetterForm bookId={bookId} />
           </Block>
         </div>
       )}
-    </section>
+    </div>
   );
 }
 
 function Block({
+  icon,
   title,
   children,
 }: {
+  icon: string;
   title: string;
   children: React.ReactNode;
 }) {
   return (
-    <div>
-      <h2 className="mb-3 text-xl font-bold">{title}</h2>
+    <section>
+      <div className="mb-3.5 flex items-center gap-2.5">
+        <span
+          className="flex h-[34px] w-[34px] items-center justify-center rounded-[10px]"
+          style={{ background: "var(--accent-tint)", color: "var(--accent-text)" }}
+          aria-hidden
+        >
+          <Icon name={icon} size={18} />
+        </span>
+        <h2 className="text-[length:var(--text-lg)] font-extrabold text-ink">
+          {title}
+        </h2>
+      </div>
       {children}
-    </div>
+    </section>
   );
 }
 
 function VocabCard({ word }: { word: Word }) {
   return (
-    <li className="rounded-card bg-surface p-4 ring-1 ring-border">
-      <p className="text-lg font-bold">
+    <Card padding="md">
+      <p style={{ fontFamily: "var(--font-serif)", fontWeight: 600, fontSize: 20, color: "var(--text-1)" }}>
         {word.term}
         {word.reading && word.reading !== word.term && (
-          <span className="ml-2 text-sm font-normal text-muted">
+          <span className="ml-1.5 text-[length:var(--text-xs)] font-normal text-ink-3">
             [{word.reading}]
           </span>
         )}
       </p>
-      <p className="mt-1 text-muted">{word.meaning}</p>
-    </li>
+      <p className="mt-1.5 text-[length:var(--text-sm)] text-ink-2">
+        {word.meaning}
+      </p>
+    </Card>
   );
 }
 
-/** 감정 곡선: value(0~1)를 챕터 순서대로 잇는 간단한 선 그래프. */
+/** 감정 곡선: value(0~1)를 챕터 순서대로 잇는 간단한 선 그래프(accent stroke). */
 function EmotionCurve({ points }: { points: EmotionPoint[] }) {
   const W = 600;
-  const H = 160;
-  const padX = 30;
-  const padY = 24;
+  const H = 180;
+  const padX = 40;
+  const padY = 34;
   const innerW = W - padX * 2;
   const innerH = H - padY * 2;
   const n = points.length;
@@ -135,10 +167,10 @@ function EmotionCurve({ points }: { points: EmotionPoint[] }) {
   const line = points.map((p, i) => `${x(i)},${y(p.value)}`).join(" ");
 
   return (
-    <div className="overflow-x-auto rounded-card bg-surface p-5 ring-1 ring-border">
+    <Card padding="lg" className="overflow-x-auto">
       <svg
         viewBox={`0 0 ${W} ${H}`}
-        className="h-40 w-full min-w-[480px]"
+        className="h-[200px] w-full min-w-[480px]"
         role="img"
         aria-label="감정 곡선"
       >
@@ -146,7 +178,7 @@ function EmotionCurve({ points }: { points: EmotionPoint[] }) {
           <polyline
             points={line}
             fill="none"
-            stroke="var(--color-primary, #f5872e)"
+            stroke="var(--accent)"
             strokeWidth={3}
             strokeLinecap="round"
             strokeLinejoin="round"
@@ -154,31 +186,26 @@ function EmotionCurve({ points }: { points: EmotionPoint[] }) {
         )}
         {points.map((p, i) => (
           <g key={i}>
-            <circle
-              cx={x(i)}
-              cy={y(p.value)}
-              r={5}
-              fill="var(--color-primary, #f5872e)"
-            />
+            <circle cx={x(i)} cy={y(p.value)} r={6} fill="var(--accent)" />
             <text
               x={x(i)}
-              y={H - 6}
+              y={y(p.value) - 14}
               textAnchor="middle"
-              className="fill-muted text-[11px]"
+              style={{ fill: "var(--text-1)", font: "700 13px var(--font-sans)" }}
             >
-              {p.chapterIdx}장
+              {p.label}
             </text>
             <text
               x={x(i)}
-              y={y(p.value) - 10}
+              y={H - 8}
               textAnchor="middle"
-              className="fill-foreground text-[11px] font-bold"
+              style={{ fill: "var(--text-3)", font: "500 12px var(--font-mono)" }}
             >
-              {p.label}
+              {p.chapterIdx}장
             </text>
           </g>
         ))}
       </svg>
-    </div>
+    </Card>
   );
 }

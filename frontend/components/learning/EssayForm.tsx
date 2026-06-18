@@ -2,8 +2,10 @@
 
 import { useState } from "react";
 
-import { buttonClass } from "@/components/ui/Button";
+import { Button } from "@/components/ui/Button";
+import { Card } from "@/components/ui/Card";
 import { ErrorText } from "@/components/ui/ErrorText";
+import { Textarea } from "@/components/ui/Textarea";
 import { ApiError, postLearningResult } from "@/lib/api";
 import { getClientAccessToken } from "@/lib/auth/client";
 import type { EssayBlank } from "@/lib/types";
@@ -45,23 +47,23 @@ export function EssayForm({
 
   return (
     <div>
-      <ul className="space-y-4">
+      <div className="flex flex-col gap-4">
         {blanks.map((b, i) => (
-          <li key={i} className="rounded-card bg-surface p-5 ring-1 ring-border">
-            <p className="font-bold">{b.prompt}</p>
+          <Card key={i} padding="lg">
+            <p className="font-bold text-ink">{b.prompt}</p>
             {b.hints.length > 0 && (
               <ul className="mt-2 flex flex-wrap gap-1.5">
                 {b.hints.map((h, hi) => (
                   <li
                     key={hi}
-                    className="rounded-full bg-secondary/15 px-2.5 py-0.5 text-sm text-secondary-strong"
+                    className="rounded-full bg-accent-tint px-2.5 py-0.5 text-[length:var(--text-sm)] text-accent-text"
                   >
                     {h}
                   </li>
                 ))}
               </ul>
             )}
-            <textarea
+            <Textarea
               value={texts[i]}
               onChange={(e) =>
                 setTexts((prev) => {
@@ -73,23 +75,23 @@ export function EssayForm({
               }
               rows={3}
               placeholder="여기에 생각을 적어 봐요."
-              className="mt-3 w-full rounded-xl border-2 border-border bg-background p-3"
+              className="mt-3"
             />
-          </li>
+          </Card>
         ))}
-      </ul>
+      </div>
       {error && <ErrorText className="mt-3">{error}</ErrorText>}
       <div className="mt-3 flex items-center gap-3">
-        <button
-          onClick={() => void save()}
-          disabled={!canSave}
-          className={buttonClass("primary", "md")}
-        >
+        <Button onClick={() => void save()} disabled={!canSave} loading={saving}>
           {saving ? "저장 중…" : "독후감 저장"}
-        </button>
+        </Button>
         {saved && (
-          <span role="status" className="text-sm font-bold text-success-strong">
-            저장했어요! 🎉
+          <span
+            role="status"
+            className="text-[length:var(--text-sm)] font-bold"
+            style={{ color: "var(--success-text)" }}
+          >
+            저장했어요!
           </span>
         )}
       </div>
