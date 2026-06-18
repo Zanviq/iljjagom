@@ -142,6 +142,42 @@ export function getClasses(
   return apiFetch<{ classes: ClassSummary[] }>("/classes", { token });
 }
 
+/** 학급 생성(04 기능개선 교사/01). 코드는 서버 생성. */
+export function createClass(
+  token: string | null,
+  name: string,
+): Promise<ClassSummary> {
+  return apiFetch<ClassSummary>("/classes", {
+    token,
+    method: "POST",
+    body: { name },
+  });
+}
+
+/** 학급 이름 변경. */
+export function updateClass(
+  token: string | null,
+  classId: string,
+  name: string,
+): Promise<ClassSummary> {
+  return apiFetch<ClassSummary>(`/classes/${classId}`, {
+    token,
+    method: "PATCH",
+    body: { name },
+  });
+}
+
+/** 가입 코드 재발급(기존 가입 유지). */
+export function rotateClassCode(
+  token: string | null,
+  classId: string,
+): Promise<{ id: string; code: string }> {
+  return apiFetch<{ id: string; code: string }>(
+    `/classes/${classId}/rotate-code`,
+    { token, method: "POST" },
+  );
+}
+
 export function getPrompts(
   token: string | null,
   classId: string,

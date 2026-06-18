@@ -1,17 +1,17 @@
 "use client";
 
 import Link from "next/link";
-import { usePathname } from "next/navigation";
+import { usePathname, useRouter } from "next/navigation";
 import { useEffect, useState } from "react";
 
 import { Avatar } from "@/components/ui/Avatar";
 import { Badge } from "@/components/ui/Badge";
 import { Icon } from "@/components/ui/Icon";
-import { getClassSafetyFlags } from "@/lib/api";
+import { getClassSafetyFlags, getClasses } from "@/lib/api";
 import { logout } from "@/lib/auth/actions";
 import { getClientAccessToken } from "@/lib/auth/client";
 import { cn } from "@/lib/cn";
-import type { Me } from "@/lib/types";
+import type { ClassSummary, Me } from "@/lib/types";
 
 /**
  * 교사 워크벤치 좌측 사이드바(new-design_version2 TeacherSidebar).
@@ -20,9 +20,30 @@ import type { Me } from "@/lib/types";
  */
 export function TeacherSidebar({ me }: { me: Me }) {
   const pathname = usePathname() || "";
+  const router = useRouter();
   const classMatch = pathname.match(/^\/classes\/([^/]+)/);
   const classId = classMatch ? classMatch[1] : null;
+  // 현재 학급 하위 화면(발제/대시보드/안전) — 학급 전환 시 같은 화면 유지.
+  const subMatch = pathname.match(/^\/classes\/[^/]+\/([^/]+)/);
+  const sub = subMatch ? subMatch[1] : "dashboard";
   const [openFlags, setOpenFlags] = useState(0);
+  const [classes, setClasses] = useState<ClassSummary[]>([]);
+
+  useEffect(() => {
+    let cancelled = false;
+    void (async () => {
+      try {
+        const token = await getClientAccessToken();
+        const { classes: cs } = await getClasses(token);
+        if (!cancelled) setClasses(cs);
+      } catch {
+        // 목록 실패 시 셀렉터 생략
+      }
+    })();
+    return () => {
+      cancelled = true;
+    };
+  }, []);
 
   useEffect(() => {
     if (!classId) return;
@@ -107,6 +128,31 @@ export function TeacherSidebar({ me }: { me: Me }) {
           </p>
         </div>
       </div>
+
+      {classId && classes.length > 0 && (
+        <div className="mb-3 px-1">
+          <label
+            className="ijg-eyebrow mb-1.5 block"
+            style={{ color: "var(--text-3)" }}
+            htmlFor="class-switch"
+          >
+            학급 선택
+          </label>
+          <select
+            id="class-switch"
+            value={classId}
+            onChange={(e) => router.push(`/classes/${e.target.value}/${sub}`)}
+            className="ijg-control"
+            style={{ height: "var(--control-h)", padding: "0 12px", width: "100%" }}
+          >
+            {classes.map((c) => (
+              <option key={c.id} value={c.id}>
+                {c.name}
+              </option>
+            ))}
+          </select>
+        </div>
+      )}
 
       <nav className="flex flex-col gap-0.5">
         {items.map((n) => (
