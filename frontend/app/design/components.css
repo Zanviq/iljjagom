@@ -163,3 +163,22 @@
 .ijg-checkbox-input:checked + .ijg-switch-track > .ijg-switch-knob {
   inset-inline-start: 21px;
 }
+
+/* TypingIndicator — AI 대기(회색 문구 + 점 3개 파동). 기존 ijg-pulse 재사용. */
+.ijg-typing {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+}
+.ijg-typing-dots {
+  display: inline-flex;
+  gap: 4px;
+}
+.ijg-typing-dots > i {
+  width: 6px;
+  height: 6px;
+  border-radius: 50%;
+  background: var(--text-faint);
+  animation: ijg-pulse 1.1s var(--ease-in-out) infinite;
+  animation-delay: calc(var(--i) * 0.18s);
+}

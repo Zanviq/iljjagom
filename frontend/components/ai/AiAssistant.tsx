@@ -6,7 +6,8 @@ import { useEffect, useRef, useState } from "react";
 import { Button } from "@/components/ui/Button";
 import { ChatBubble } from "@/components/ui/ChatBubble";
 import { Icon } from "@/components/ui/Icon";
-import { Input } from "@/components/ui/Input";
+import { Textarea } from "@/components/ui/Textarea";
+import { TypingIndicator } from "@/components/ui/TypingIndicator";
 import { ApiError } from "@/lib/api";
 import { postOverseerMessage, type OverseerAction } from "@/lib/ai";
 import { getClientAccessToken } from "@/lib/auth/client";
@@ -152,8 +153,8 @@ export function AiAssistant() {
             </div>
           ))}
           {sending && (
-            <ChatBubble from="ai" name="곰 작가" streaming>
-              생각하고 있어요
+            <ChatBubble from="ai" name="곰 작가">
+              <TypingIndicator />
             </ChatBubble>
           )}
           <div ref={endRef} />
@@ -164,14 +165,17 @@ export function AiAssistant() {
             e.preventDefault();
             void send();
           }}
-          className="flex items-center gap-2 border-t border-line p-4"
+          className="flex items-end gap-2 border-t border-line p-4"
         >
-          <Input
+          <Textarea
             value={input}
             onChange={(e) => setInput(e.target.value)}
+            onSubmit={() => void send()}
+            autoGrow
             placeholder="질문을 적어요"
             aria-label="곰 작가에게 질문"
             disabled={sending}
+            className="flex-1"
           />
           <Button type="submit" icon="send" aria-label="보내기" disabled={sending || !input.trim()} className="flex-none" />
         </form>
