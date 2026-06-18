@@ -57,6 +57,9 @@ class InMemoryStore(Store):
         self.settings: dict[str, Any] = {}
         self.audit: list[AuditRecord] = []
         self._rate_hits: dict[tuple[str, str], deque[float]] = defaultdict(deque)
+        # 책 최근활동 정렬용 단조 카운터 — now_iso() 동일-마이크로초 동률에도 안정 정렬(테스트 결정성).
+        self._book_tick = 0
+        self._book_touch: dict[str, int] = {}
 
     # --- profiles ---
     def get_profile(self, user_id: str) -> ProfileRecord | None:
@@ -180,29 +183,35 @@ class InMemoryStore(Store):
             updated_at=ts,
         )
         self.books[rec.id] = rec
+        self._touch_book(rec.id)
         return rec
 
     def get_book(self, book_id: str) -> BookRecord | None:
         return self.books.get(book_id)
+
+    def _touch_book(self, book_id: str) -> None:
+        self._book_tick += 1
+        self._book_touch[book_id] = self._book_tick
 
     def update_book(self, book_id: str, **fields: Any) -> BookRecord:
         rec = self.books[book_id]
         for k, v in fields.items():
             setattr(rec, k, v)
         rec.updated_at = now_iso()  # 모든 변경은 마지막 활동 시각을 갱신한다.
+        self._touch_book(book_id)
         return rec
 
     def list_books_for_student(self, student_id: str) -> list[BookRecord]:
         return sorted(
             (b for b in self.books.values() if b.student_id == student_id),
-            key=lambda b: b.updated_at or b.created_at,
+            key=lambda b: (b.updated_at or b.created_at, self._book_touch.get(b.id, 0)),
             reverse=True,
         )
 
     def list_books_for_class(self, classroom_id: str) -> list[BookRecord]:
         return sorted(
             (b for b in self.books.values() if b.classroom_id == classroom_id),
-            key=lambda b: b.updated_at or b.created_at,
+            key=lambda b: (b.updated_at or b.created_at, self._book_touch.get(b.id, 0)),
             reverse=True,
         )
 
