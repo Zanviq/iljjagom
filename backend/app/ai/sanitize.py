@@ -25,9 +25,55 @@ _EMOJI = re.compile(
 # 인라인 마크다운 기호(강조·코드·헤딩·취소선).
 _MD_INLINE = re.compile(r"[*`#~]")
 
+# 본문 머리말/소제목(통째 생략): 마크다운 헤딩, "1장." 류 장 번호.
+_HEADING = re.compile(r"^#{1,6}\s+")
+_CHAPTER_HEADER = re.compile(r"^\d+\s*장\s*[.:、]?\s*$")
+
 
 def strip_emoji(text: str | None) -> str:
     return _EMOJI.sub("", text or "")
+
+
+def _strip_inline_md(s: str) -> str:
+    s = re.sub(r"\*\*([^*]+)\*\*", r"\1", s)   # **굵게**
+    s = re.sub(r"\*([^*]+)\*", r"\1", s)        # *기울임*
+    s = re.sub(r"__([^_]+)__", r"\1", s)        # __강조__
+    s = re.sub(r"`([^`]+)`", r"\1", s)          # `코드`
+    return s.replace("**", "").replace("`", "").replace("#", "").replace("~~", "")
+
+
+def sanitize_line(line: str | None) -> str | None:
+    """본문 한 줄 정제.
+
+    - 머리말/헤딩 줄("1장.", "## …")이면 ``None``(줄 통째 생략).
+    - 빈 줄이면 ``""``(문단 구분 보존).
+    - 그 외엔 인용·리스트 머리표와 인라인 마크다운을 제거한 평문.
+    """
+    s = strip_emoji(line or "")
+    stripped = s.strip()
+    if stripped == "":
+        return ""
+    if _HEADING.match(stripped) or _CHAPTER_HEADER.match(stripped):
+        return None
+    s = re.sub(r"^\s*>+\s*", "", s)      # 인용
+    s = re.sub(r"^\s*[-*+]\s+", "", s)    # 불릿
+    s = re.sub(r"^\s*\d+\.\s+", "", s)    # 번호 리스트
+    return _strip_inline_md(s).rstrip()
+
+
+def sanitize_body(text: str | None) -> str:
+    """이야기 본문 전체 정제(저장·재생성 결과용). 머리말 줄 제거 + 인라인 마크다운 제거."""
+    if not text:
+        return ""
+    out: list[str] = []
+    for line in text.splitlines():
+        c = sanitize_line(line)
+        if c is None:
+            continue
+        out.append(c)
+    t = "\n".join(out)
+    t = re.sub(r"\n{3,}", "\n\n", t)     # 과도한 빈 줄 정리
+    return t.strip()
 
 
 def sanitize_reply(text: str | None) -> str:

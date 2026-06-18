@@ -34,8 +34,16 @@ def build_prompt(
         f"{ending_line}"
         f"{obj_line}"
         f"참고(설정/이전 내용):\n{rag_context}\n\n"
-        f"이번 장 개요: {event.get('summary', '')}\n\n본문:"
+        f"이번 장 개요: {event.get('summary', '')}\n\n"
+        f"{_OUTPUT_RULE}\n본문:"
     )
+
+
+# 출력 형식 제약(08): 마크다운·제목/장번호/머리말·메타 금지, 산문만.
+_OUTPUT_RULE = (
+    "규칙: 마크다운 기호(**, *, #, -, > 등)를 쓰지 마라. 장 제목·장 번호·'첫 번째 순간' 같은 "
+    "소제목이나 머리말을 붙이지 마라. 설명·메모·따옴표 안내 없이 이야기 본문만 자연스러운 산문으로 출력하라."
+)
 
 
 def _mock_chapter_text(
@@ -46,17 +54,14 @@ def _mock_chapter_text(
     if chars:
         hero = chars[0].get("name", "주인공")
     objective = event.get("objective") or "새로운 것"
-    idx = event.get("chapterIdx", 1)
     if is_final:
         arc = (bible.get("secretArc") or {}).get("outline", "모두가 성장했어요")
         return (
-            f"{idx}장.\n"
             f"{hero}은(는) 그동안 배운 '{objective}'을(를) 모두 떠올렸어요. "
             f"마침내 모든 실마리가 하나로 모였어요.\n"
             f"{arc} 그렇게 이야기는 따뜻하게 매듭지어졌답니다. 끝."
         )
     return (
-        f"{idx}장.\n"
         f"{hero}은(는) 오늘도 호기심 가득한 눈으로 길을 나섰어요. "
         f"오늘은 '{objective}'에 대해 알아보기로 한 날이거든요.\n"
         f"\"이게 정말 그렇게 되는 걸까?\" {hero}은(는) 고개를 갸웃했어요. "
@@ -127,6 +132,7 @@ async def revise_text(
         "너는 어린이 동화 작가다. 아래 본문을 독자의 요청에 맞게 자연스럽게 고쳐 쓴다. "
         "결말을 새로 만들지 말고, 이 장면의 흐름은 유지한 채 요청만 반영한다. "
         "고친 전체 본문만 출력한다.\n"
+        f"{_OUTPUT_RULE}\n"
         f"분위기 참고: {bible.get('world', {}).get('tone', '따뜻한')}\n"
         f"설정 참고:\n{rag_context}\n\n"
         f"독자 요청: {directive}\n\n현재 본문:\n{current_body}\n\n고친 본문:"

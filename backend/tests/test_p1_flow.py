@@ -224,6 +224,9 @@ async def test_full_p1_vertical_slice(client):
     # 본문이 토큰을 이어 붙인 것과 일치하는지 (글자 단위 흐름 확인)
     body = "".join(e[1]["text"] for e in events if e[0] == "token")
     assert len(body) == done["charCount"]
+    # 학생/08: 스트림 본문에 마크다운/장번호 머리말이 없다(정제됨).
+    assert "**" not in body and "# " not in body
+    assert not any(line.strip() in ("1장.", "1 장") for line in body.splitlines())
 
     # 단어 도움 최소판
     r = await client.get(

@@ -12,6 +12,7 @@ from collections.abc import AsyncIterator
 
 from app.ai import chat, editor, imagen, rag, safety, writer
 from app.ai.gemini import GeminiClient
+from app.ai.sanitize import sanitize_body, sanitize_line
 from app.ai.skills.base import estimate_tokens
 from app.ai.trace import Trace
 from app.deps import CurrentUser
@@ -54,6 +55,27 @@ async def _emit_token(queue: asyncio.Queue, chunk: str, running: int, from_offse
     return new_running
 
 
+async def _emit_text(queue: asyncio.Queue, text: str, running: int, from_offset: int) -> int:
+    """문자열을 작은 조각(4자)으로 나눠 흐르듯 emit. 갱신된 running(UTF-16) 반환."""
+    for i in range(0, len(text), 4):
+        await asyncio.sleep(0)  # 이벤트 루프 양보(하트비트/취소 반영)
+        running = await _emit_token(queue, text[i : i + 4], running, from_offset)
+    return running
+
+
+def _clean_segment(line: str, *, terminated: bool, has_content: bool) -> str:
+    """스트리밍 한 줄을 정제해 emit·저장에 쓸 세그먼트로. 머리말 줄은 통째 생략('').
+
+    저장본 == 스트림본 == offset 기준이 되도록, emit 한 문자열을 그대로 누적한다(08↔09 정합).
+    """
+    c = sanitize_line(line)
+    if c is None:
+        return ""                       # 머리말/헤딩 줄 → 통째 생략
+    if c == "":
+        return "\n" if (has_content and terminated) else ""  # 선두 빈 줄 제거, 중간은 문단 구분
+    return c + ("\n" if terminated else "")
+
+
 def _find_event(bible: dict, idx: int) -> dict | None:
     return next((e for e in bible.get("events", []) if e.get("chapterIdx") == idx), None)
 
@@ -87,7 +109,8 @@ async def _stream_body(
     """
     last_exc: Exception | None = None
     for _attempt in range(2):
-        body = ""
+        body = ""        # 정제된 누적(저장·offset 기준) — 줄 단위로 정제해 emit·저장 일치(08).
+        line_buf = ""    # 미완성 줄 버퍼(토큰 경계의 마크다운 분할 방지)
         running = 0
         got = False
         agen = writer.stream_chapter(gemini, bible, event, context, is_final)
@@ -99,8 +122,18 @@ async def _stream_body(
                 except StopAsyncIteration:
                     break
                 got = True
-                body += chunk
-                running = await _emit_token(queue, chunk, running, from_offset)
+                line_buf += chunk
+                while "\n" in line_buf:
+                    line, line_buf = line_buf.split("\n", 1)
+                    seg = _clean_segment(line, terminated=True, has_content=bool(body))
+                    if seg:
+                        body += seg
+                        running = await _emit_text(queue, seg, running, from_offset)
+            # 마지막 미완 줄 flush(개행 없음).
+            seg = _clean_segment(line_buf, terminated=False, has_content=bool(body))
+            if seg:
+                body += seg
+                running = await _emit_text(queue, seg, running, from_offset)
             if body:
                 return body, running
             # 빈 본문(토큰 0) → 재시도.
@@ -178,9 +211,7 @@ async def _produce(
         running = 0
         if served_stored:
             body = chapter.body
-            for i in range(0, len(body), 4):
-                await asyncio.sleep(0)  # 이벤트 루프 양보(하트비트/취소 반영)
-                running = await _emit_token(queue, body[i : i + 4], running, from_offset)
+            running = await _emit_text(queue, body, running, from_offset)
             words = chapter.words
         else:
             # 첫 집필: RAG 컨텍스트 고정 + 생성(타임아웃/재시도) + 저장 + 적재.
@@ -284,19 +315,20 @@ async def run_first_draft_review(
         trace.end(status="error", error="editor_failed")
         store.update_chapter(chapter.id, review_status="ok")
         return
+    reviewed = sanitize_body(result.body)  # 검수본도 마크다운/머리말 없는 산문으로(08)
     trace.step(
         "초고 검수·다듬기",
         "generate_text",
         {"role": "editor", "chapterIdx": idx},
-        {"changed": result.body != chapter.body, "reviewStatus": result.review_status, "notes": result.notes},
+        {"changed": reviewed != chapter.body, "reviewStatus": result.review_status, "notes": result.notes},
         model=gemini.settings.gemini_model_flash,
         tokens_in=estimate_tokens(chapter.body),
-        tokens_out=estimate_tokens(result.body),
+        tokens_out=estimate_tokens(reviewed),
     )
     # 출력 안전: 무거운 장면 신호는 교사 사후 확인용으로 기록(학생 흐름은 막지 않음).
     try:
         level = store.get_setting("safety_level") or "strict"
-        out = safety.filter_output(result.body, safety_level=str(level))
+        out = safety.filter_output(reviewed, safety_level=str(level))
         if out.flags:
             book = store.get_book(book_id)
             store.add_safety_flag(
@@ -309,13 +341,13 @@ async def run_first_draft_review(
     except Exception:
         pass
     trace.end(status="done", summary=f"{idx}장 검수 완료")
-    if result.body != chapter.body:
-        await rag.index_text(store, gemini, book_id, chapter.id, result.body)
+    if reviewed != chapter.body:
+        await rag.index_text(store, gemini, book_id, chapter.id, reviewed)
         store.update_chapter(
             chapter.id,
-            body=result.body,
-            char_count=len(result.body),
-            words=writer.select_words(result.body),
+            body=reviewed,
+            char_count=len(reviewed),
+            words=writer.select_words(reviewed),
             review_status=result.review_status,
         )
     else:
@@ -367,12 +399,13 @@ async def run_revise(
         return
 
     trace.end(status="done", summary=f"{idx}장 수정 반영")
-    await rag.index_text(store, gemini, book_id, chapter.id, result.body)
+    revised_body = sanitize_body(result.body)  # 수정본도 산문 정제(08)
+    await rag.index_text(store, gemini, book_id, chapter.id, revised_body)
     store.update_chapter(
         chapter.id,
-        body=result.body,
-        char_count=len(result.body),
-        words=writer.select_words(result.body),
+        body=revised_body,
+        char_count=len(revised_body),
+        words=writer.select_words(revised_body),
         review_status=result.review_status,
     )
     store.update_book(book_id)  # 마지막 활동 시각 갱신(이어 읽기 정렬)
