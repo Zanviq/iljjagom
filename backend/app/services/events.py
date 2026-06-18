@@ -42,6 +42,27 @@ def save_learning_result(
     book = get_book_or_404(store, book_id)
     assert_owner_student(user, book) if user.role != "admin" else None
 
+    # emotion 학생 입력 검증(학생/11): 라벨 화이트리스트·value 0~1·장 범위.
+    if type == "emotion":
+        from app.services.learning import _EMOTION_LABELS
+
+        written = {c.idx for c in store.list_chapters(book_id) if c.char_count > 0}
+        for pt in (data.get("points") or []):
+            pt = pt or {}
+            label = pt.get("label")
+            value = pt.get("value")
+            cidx = pt.get("chapterIdx", pt.get("chapter_idx"))
+            if label is not None and label not in _EMOTION_LABELS:
+                raise validation_error("감정 라벨이 올바르지 않아요.", {"field": "label"})
+            if value is not None:
+                try:
+                    if not (0.0 <= float(value) <= 1.0):
+                        raise ValueError
+                except (TypeError, ValueError):
+                    raise validation_error("감정 강도는 0~1 사이여야 해요.", {"field": "value"}) from None
+            if cidx is not None and written and cidx not in written:
+                raise validation_error("그 장은 아직 없어요.", {"field": "chapterIdx"})
+
     # essay 자유 텍스트는 안전 게이트 통과 필수.
     if type == "essay":
         for blank in (data.get("blanks") or []):

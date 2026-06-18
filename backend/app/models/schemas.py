@@ -255,15 +255,30 @@ class EssayBlank(CamelModel):
 
 class EmotionPoint(CamelModel):
     chapter_idx: int
-    label: str
-    value: float
+    # 학생 입력 활동(학생/11): 미입력 장은 null. 라벨은 팔레트 화이트리스트 값.
+    label: str | None = None
+    value: float | None = None
+
+
+class EmotionFrame(CamelModel):
+    """감정 곡선 입력 틀 — 시스템 자동 곡선 대신 장 목록 + 라벨 팔레트(학생/11)."""
+    labels: list[str] = []
+    points: list[EmotionPoint] = []
+
+
+class LetterCharacter(CamelModel):
+    """편지 대상 인물 선택지(학생/12) — Bible characters 파생."""
+    id: str
+    name: str
+    traits: list[str] = []
 
 
 class LearningResponse(CamelModel):
     vocab: list[Word] = []
     quiz: list[QuizItem] = []
     essay_blanks: list[EssayBlank] = []
-    emotion: list[EmotionPoint] = []
+    emotion: EmotionFrame = EmotionFrame()
+    letter_characters: list[LetterCharacter] = []
 
 
 class LetterRequest(CamelModel):
