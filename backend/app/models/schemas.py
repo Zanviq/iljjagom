@@ -170,6 +170,8 @@ class PlanReply(CamelModel):
     reply: str
     character_draft: CharacterDraft = CharacterDraft()
     ready_to_write: bool = False
+    # 인터뷰 마무리 모드(ready 충족 → 새 질문 없이 공감만). 협업 화면 전환 신호(학생/03·15).
+    interview_closed: bool = False
 
 
 # --- 설계(Bible) ---

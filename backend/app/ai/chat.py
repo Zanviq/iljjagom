@@ -26,6 +26,32 @@ _INTERVIEWER_SYSTEM = (
     "초등학생이 이해할 쉬운 한국어로 한두 문장만 답한다."
 )
 
+# readyToWrite 충족 후: 새 질문 금지, 공감/칭찬 한 문장만(학생/03).
+_INTERVIEWER_SYSTEM_READY = (
+    "너는 어린이 작가를 돕는 다정한 인터뷰어다. "
+    "이미 이야기를 시작할 준비가 끝났다. 새로운 질문은 절대 하지 않는다. "
+    "학생이 방금 한 말에 공감하고 칭찬하는 한 문장만 답한다. "
+    "물음표(?)나 '~할까요?', '어떤가요?' 같은 되묻는 말은 쓰지 않는다. "
+    "이야기의 결말이나 줄거리는 말하지 않는다."
+)
+
+
+def _strip_trailing_question(text: str) -> str:
+    """ready 안전망 — 끝에 붙은 질문절을 제거. 남는 게 없으면 칭찬 기본문."""
+    t = (text or "").strip()
+    if not t:
+        return "와, 정말 멋진 이야기 준비가 됐어요!"
+    # 문장 분리 후 물음표로 끝나는 마지막 문장을 잘라낸다.
+    import re
+
+    sentences = re.split(r"(?<=[.!?。])\s+", t)
+    kept = [s for s in sentences if not s.rstrip().endswith("?")]
+    result = " ".join(kept).strip()
+    if not result:
+        # 전부 질문이면 물음표 앞부분만 살리거나 기본 칭찬.
+        result = t.split("?")[0].strip() or "와, 정말 멋진 이야기 준비가 됐어요!"
+    return result
+
 # 간단한 형용사 사전(mock 인물 특성 추출).
 _TRAIT_WORDS = {
     "용감": "용감함",
@@ -56,19 +82,26 @@ async def interview_reply(
     ready = len(student_messages) >= _READY_THRESHOLD
 
     if gemini.mock:
-        idx = (len(student_messages) - 1) % len(_INTERVIEW_QUESTIONS)
-        reply = _INTERVIEW_QUESTIONS[idx]
         if ready:
-            reply = "좋아요, 멋진 인물이 만들어졌어요! 이제 이야기를 시작해 볼까요?"
-        return PlanReply(reply=reply, character_draft=draft, ready_to_write=ready)
+            reply = "와, 정말 멋진 인물이 만들어졌어요!"  # 질문 어미 없는 공감(학생/03)
+        else:
+            idx = (len(student_messages) - 1) % len(_INTERVIEW_QUESTIONS)
+            reply = _INTERVIEW_QUESTIONS[idx]
+        return PlanReply(
+            reply=reply, character_draft=draft, ready_to_write=ready, interview_closed=ready
+        )
 
     history = "\n".join(f"- {m}" for m in student_messages)
+    system = _INTERVIEWER_SYSTEM_READY if ready else _INTERVIEWER_SYSTEM
     prompt = (
-        f"{_INTERVIEWER_SYSTEM}\n\n지금까지 학생이 말한 것:\n{history}\n\n"
+        f"{system}\n\n지금까지 학생이 말한 것:\n{history}\n\n"
         f"학생의 마지막 말: {latest}\n\n인터뷰어의 다음 한 마디:"
     )
     reply = await gemini.generate_text(gemini.settings.gemini_model_flash_lite, prompt)
-    return PlanReply(reply=reply.strip(), character_draft=draft, ready_to_write=ready)
+    reply = _strip_trailing_question(reply.strip()) if ready else reply.strip()
+    return PlanReply(
+        reply=reply, character_draft=draft, ready_to_write=ready, interview_closed=ready
+    )
 
 
 async def guided_prompt(
