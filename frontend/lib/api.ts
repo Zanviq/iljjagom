@@ -20,6 +20,10 @@ import type {
   AppNotification,
   BackupImportRequest,
   Book,
+  BoardPost,
+  BoardPostCreated,
+  BoardPostsResponse,
+  BoardPostStatus,
   BookCreated,
   BookSummary,
   ClassSummary,
@@ -464,6 +468,65 @@ export function getLearningResults(
     `/books/${bookId}/learning-results`,
     { token },
   );
+}
+
+/* ── 학급 게시판/발표 (04 기능개선 학생/15·14) ── */
+
+/** 완성 책을 학급 게시판에 발표 등록(책 status=="done"). */
+export function postBoardPost(
+  token: string | null,
+  bookId: string,
+  intro?: string,
+): Promise<BoardPostCreated> {
+  return apiFetch<BoardPostCreated>(`/books/${bookId}/board-posts`, {
+    token,
+    method: "POST",
+    body: intro ? { intro } : {},
+  });
+}
+
+/** 학급 게시판 목록(학생=published, 교사=전체). */
+export function getBoardPosts(
+  token: string | null,
+  classId: string,
+  status?: BoardPostStatus,
+): Promise<BoardPostsResponse> {
+  const q = status ? `?status=${encodeURIComponent(status)}` : "";
+  return apiFetch<BoardPostsResponse>(`/classes/${classId}/board-posts${q}`, {
+    token,
+  });
+}
+
+/** 발표 상세(스냅샷 전체). */
+export function getBoardPost(
+  token: string | null,
+  postId: string,
+): Promise<BoardPost> {
+  return apiFetch<BoardPost>(`/board-posts/${postId}`, { token });
+}
+
+/** 발표 승인(교사). */
+export function approveBoardPost(
+  token: string | null,
+  postId: string,
+): Promise<{ status: string }> {
+  return apiFetch<{ status: string }>(`/board-posts/${postId}/approve`, {
+    token,
+    method: "POST",
+  });
+}
+
+/** 발표 반려(교사). */
+export function rejectBoardPost(
+  token: string | null,
+  postId: string,
+  note?: string,
+): Promise<{ status: string }> {
+  return apiFetch<{ status: string }>(`/board-posts/${postId}/reject`, {
+    token,
+    method: "POST",
+    body: note ? { note } : {},
+  });
 }
 
 /* ── 관리자 콘솔 (추가기능 06, §4.2) — 전부 admin ── */

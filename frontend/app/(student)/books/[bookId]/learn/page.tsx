@@ -4,6 +4,7 @@ import { notFound } from "next/navigation";
 import { EmotionCurve } from "@/components/learning/EmotionCurve";
 import { EmotionInput } from "@/components/learning/EmotionInput";
 import { EssayForm } from "@/components/learning/EssayForm";
+import { LearningFinish } from "@/components/learning/LearningFinish";
 import { LearningOpenTracker } from "@/components/learning/LearningOpenTracker";
 import { LetterForm } from "@/components/learning/LetterForm";
 import { Quiz } from "@/components/learning/Quiz";
@@ -113,6 +114,12 @@ export default async function LearnPage({
           <Block icon="mail" title="인물에게 편지 쓰기">
             <LetterForm bookId={bookId} characters={letterCharacters} />
           </Block>
+
+          <LearningFinish
+            bookId={bookId}
+            classId={book.classId}
+            canPublish={book.status === "done"}
+          />
         </div>
       )}
     </div>

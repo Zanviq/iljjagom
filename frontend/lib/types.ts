@@ -357,6 +357,60 @@ export interface LearningResult {
   createdAt: string;
 }
 
+/* ── 학급 게시판/발표 (04 기능개선 학생/15·14, §4 B·§7) ── */
+export type BoardPostStatus = "pending" | "published" | "rejected";
+
+/** 발표 스냅샷(책 요약). 목록은 일부, 상세는 전체. */
+export interface BoardSnapshot {
+  coverIllustration?: string | null;
+  chapterCount?: number;
+  emotionLogged?: boolean;
+  letterCount?: number;
+  quizScore?: number | null;
+}
+
+export interface BoardPostSummary {
+  id: string;
+  title: string;
+  studentName: string;
+  status: BoardPostStatus;
+  createdAt: string;
+  snapshot: BoardSnapshot;
+}
+
+export interface BoardPost {
+  id: string;
+  classroomId: string;
+  bookId: string;
+  studentId: string;
+  title: string;
+  intro?: string | null;
+  snapshot: BoardSnapshot;
+  status: BoardPostStatus;
+  reviewedBy?: string | null;
+  reviewedAt?: string | null;
+  reviewNote?: string | null;
+  createdAt: string;
+}
+
+export interface BoardPostCreate {
+  intro?: string;
+}
+
+/** POST /books/{id}/board-posts 응답 */
+export interface BoardPostCreated {
+  postId: string;
+  status: BoardPostStatus;
+}
+
+export interface BoardPostsResponse {
+  posts: BoardPostSummary[];
+}
+
+export interface BoardRejectRequest {
+  note?: string;
+}
+
 /** ask_user 질문(SSE `ask` 이벤트 / PlanReply.ask). lib/ai.ts AskUserPrompt 와 동일 구조. */
 export interface Ask {
   sessionId: string;
