@@ -21,6 +21,7 @@ from app.store.records import (
     ChunkRecord,
     ClassPostRecord,
     ClassroomRecord,
+    ClassSettingsRecord,
     EventRecord,
     LearningArtifactRecord,
     LetterRecord,
@@ -118,6 +119,12 @@ class SupabaseStore(Store):
         )
         return ClassroomRecord(**row) if row else None
 
+    def update_classroom(self, classroom_id: str, **fields: Any) -> ClassroomRecord:
+        row = self._one(
+            self.client.table("classrooms").update(fields).eq("id", classroom_id).execute()
+        )
+        return ClassroomRecord(**row)
+
     def get_classroom_by_code(self, code: str) -> ClassroomRecord | None:
         # 리터럴 매칭(.eq). ilike 는 %/_ 가 와일드카드로 해석돼 패턴 주입 위험이 있다.
         row = self._one(
@@ -188,20 +195,19 @@ class SupabaseStore(Store):
         learning_objectives: list[str],
         assessment: dict[str, Any],
         language: str,
+        **options: Any,
     ) -> PromptRecord:
-        row = self._one(
-            self.client.table("prompts")
-            .insert(
-                {
-                    "classroom_id": classroom_id,
-                    "topic": topic,
-                    "learning_objectives": learning_objectives,
-                    "assessment": assessment,
-                    "language": language,
-                }
-            )
-            .execute()
-        )
+        payload = {
+            "classroom_id": classroom_id,
+            "topic": topic,
+            "learning_objectives": learning_objectives,
+            "assessment": assessment,
+            "language": language,
+        }
+        for k in ("grade_band", "chapters_planned", "due_at", "status", "safety_level"):
+            if options.get(k) is not None:
+                payload[k] = options[k]
+        row = self._one(self.client.table("prompts").insert(payload).execute())
         return PromptRecord(**row)
 
     def get_prompt(self, prompt_id: str) -> PromptRecord | None:
@@ -210,11 +216,45 @@ class SupabaseStore(Store):
         )
         return PromptRecord(**row) if row else None
 
+    def update_prompt(self, prompt_id: str, **fields: Any) -> PromptRecord:
+        row = self._one(
+            self.client.table("prompts").update(fields).eq("id", prompt_id).execute()
+        )
+        return PromptRecord(**row)
+
     def list_prompts_for_class(self, classroom_id: str) -> list[PromptRecord]:
         rows = self._rows(
             self.client.table("prompts").select("*").eq("classroom_id", classroom_id).execute()
         )
         return [PromptRecord(**r) for r in rows]
+
+    def list_books_for_prompt(self, prompt_id: str) -> list[BookRecord]:
+        rows = self._rows(
+            self.client.table("books").select("*").eq("prompt_id", prompt_id)
+            .order("created_at").execute()
+        )
+        return [BookRecord(**r) for r in rows]
+
+    # --- class_settings ---
+    def get_class_settings(self, classroom_id: str) -> ClassSettingsRecord | None:
+        row = self._one(
+            self.client.table("class_settings").select("*")
+            .eq("classroom_id", classroom_id).limit(1).execute()
+        )
+        return ClassSettingsRecord(**row) if row else None
+
+    def upsert_class_settings(
+        self, classroom_id: str, value: dict[str, Any], updated_by: str | None
+    ) -> ClassSettingsRecord:
+        existing = self.get_class_settings(classroom_id)
+        merged = {**(existing.value if existing else {}), **value}
+        row = self._one(
+            self.client.table("class_settings")
+            .upsert({"classroom_id": classroom_id, "value": merged, "updated_by": updated_by,
+                     "updated_at": now_iso()})
+            .execute()
+        )
+        return ClassSettingsRecord(**row)
 
     # --- books ---
     def create_book(

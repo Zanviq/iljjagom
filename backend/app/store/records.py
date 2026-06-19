@@ -44,7 +44,21 @@ class PromptRecord:
     learning_objectives: list[str]
     assessment: dict[str, Any]
     language: str = "ko"
+    # 발제 옵션(선생님/02): 권장 학년·장수·마감·상태·발제별 안전강도 오버라이드.
+    grade_band: int | None = None
+    chapters_planned: int | None = None
+    due_at: str | None = None
+    status: str = "open"  # 'open' | 'closed'
+    safety_level: str | None = None
     created_at: str = ""
+
+
+@dataclass
+class ClassSettingsRecord:
+    classroom_id: str
+    value: dict[str, Any] = field(default_factory=dict)
+    updated_by: str | None = None
+    updated_at: str = ""
 
 
 @dataclass

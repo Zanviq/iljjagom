@@ -369,8 +369,9 @@ async def run_first_draft_review(
     )
     # 출력 안전: 무거운 장면 신호는 교사 사후 확인용으로 기록(학생 흐름은 막지 않음).
     try:
-        level = store.get_setting("safety_level") or "strict"
-        out = safety.filter_output(reviewed, safety_level=str(level))
+        from app.services.policy import resolve_safety_level
+
+        out = safety.filter_output(reviewed, safety_level=resolve_safety_level(store, book_id))
         if out.flags:
             book = store.get_book(book_id)
             store.add_safety_flag(

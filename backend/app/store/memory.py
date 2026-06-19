@@ -20,6 +20,7 @@ from app.store.records import (
     ChunkRecord,
     ClassPostRecord,
     ClassroomRecord,
+    ClassSettingsRecord,
     EventRecord,
     LearningArtifactRecord,
     LetterRecord,
@@ -49,6 +50,7 @@ class InMemoryStore(Store):
         self.paragraphs: list[ParagraphRecord] = []
         self.writing_turns: list[WritingTurnRecord] = []
         self.class_posts: list[ClassPostRecord] = []
+        self.class_settings: dict[str, ClassSettingsRecord] = {}
         self.chunks: list[ChunkRecord] = []
         self.safety_flags: list[SafetyFlagRecord] = []
         self.letters: list[LetterRecord] = []
@@ -122,6 +124,12 @@ class InMemoryStore(Store):
     def get_classroom(self, classroom_id: str) -> ClassroomRecord | None:
         return self.classrooms.get(classroom_id)
 
+    def update_classroom(self, classroom_id: str, **fields: Any) -> ClassroomRecord:
+        rec = self.classrooms[classroom_id]
+        for k, v in fields.items():
+            setattr(rec, k, v)
+        return rec
+
     def get_classroom_by_code(self, code: str) -> ClassroomRecord | None:
         for c in self.classrooms.values():
             if c.code.upper() == code.upper():
@@ -155,6 +163,7 @@ class InMemoryStore(Store):
         learning_objectives: list[str],
         assessment: dict[str, Any],
         language: str,
+        **options: Any,
     ) -> PromptRecord:
         rec = PromptRecord(
             id=new_id(),
@@ -163,6 +172,11 @@ class InMemoryStore(Store):
             learning_objectives=learning_objectives,
             assessment=assessment,
             language=language,
+            grade_band=options.get("grade_band"),
+            chapters_planned=options.get("chapters_planned"),
+            due_at=options.get("due_at"),
+            status=options.get("status", "open"),
+            safety_level=options.get("safety_level"),
             created_at=now_iso(),
         )
         self.prompts[rec.id] = rec
@@ -171,8 +185,35 @@ class InMemoryStore(Store):
     def get_prompt(self, prompt_id: str) -> PromptRecord | None:
         return self.prompts.get(prompt_id)
 
+    def update_prompt(self, prompt_id: str, **fields: Any) -> PromptRecord:
+        rec = self.prompts[prompt_id]
+        for k, v in fields.items():
+            setattr(rec, k, v)
+        return rec
+
     def list_prompts_for_class(self, classroom_id: str) -> list[PromptRecord]:
         return [p for p in self.prompts.values() if p.classroom_id == classroom_id]
+
+    def list_books_for_prompt(self, prompt_id: str) -> list[BookRecord]:
+        return sorted(
+            (b for b in self.books.values() if b.prompt_id == prompt_id),
+            key=lambda b: b.created_at,
+        )
+
+    # --- class_settings ---
+    def get_class_settings(self, classroom_id: str) -> ClassSettingsRecord | None:
+        return self.class_settings.get(classroom_id)
+
+    def upsert_class_settings(
+        self, classroom_id: str, value: dict[str, Any], updated_by: str | None
+    ) -> ClassSettingsRecord:
+        existing = self.class_settings.get(classroom_id)
+        merged = {**(existing.value if existing else {}), **value}
+        rec = ClassSettingsRecord(
+            classroom_id=classroom_id, value=merged, updated_by=updated_by, updated_at=now_iso()
+        )
+        self.class_settings[classroom_id] = rec
+        return rec
 
     # --- books ---
     def create_book(

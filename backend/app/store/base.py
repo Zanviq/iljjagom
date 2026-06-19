@@ -14,6 +14,7 @@ from app.store.records import (
     ChunkRecord,
     ClassPostRecord,
     ClassroomRecord,
+    ClassSettingsRecord,
     EventRecord,
     LearningArtifactRecord,
     LetterRecord,
@@ -58,6 +59,9 @@ class Store(ABC):
     def get_classroom(self, classroom_id: str) -> ClassroomRecord | None: ...
 
     @abstractmethod
+    def update_classroom(self, classroom_id: str, **fields: Any) -> ClassroomRecord: ...
+
+    @abstractmethod
     def get_classroom_by_code(self, code: str) -> ClassroomRecord | None: ...
 
     @abstractmethod
@@ -87,13 +91,29 @@ class Store(ABC):
         learning_objectives: list[str],
         assessment: dict[str, Any],
         language: str,
+        **options: Any,
     ) -> PromptRecord: ...
 
     @abstractmethod
     def get_prompt(self, prompt_id: str) -> PromptRecord | None: ...
 
     @abstractmethod
+    def update_prompt(self, prompt_id: str, **fields: Any) -> PromptRecord: ...
+
+    @abstractmethod
     def list_prompts_for_class(self, classroom_id: str) -> list[PromptRecord]: ...
+
+    @abstractmethod
+    def list_books_for_prompt(self, prompt_id: str) -> list[BookRecord]: ...
+
+    # --- 학급 설정 (선생님/02) ---
+    @abstractmethod
+    def get_class_settings(self, classroom_id: str) -> ClassSettingsRecord | None: ...
+
+    @abstractmethod
+    def upsert_class_settings(
+        self, classroom_id: str, value: dict[str, Any], updated_by: str | None
+    ) -> ClassSettingsRecord: ...
 
     # --- books ---
     @abstractmethod

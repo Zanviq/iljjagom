@@ -55,6 +55,44 @@ async def get_book(
     return serialize(detail)
 
 
+# --- 학생 데이터 열람 (선생님/03, 책 접근자: 소유 학생·담당 교사·admin) ---
+@router.get("/books/{book_id}/chapters")
+async def list_chapters_content(
+    book_id: str,
+    user: CurrentUser = Depends(get_current_user),
+    store: Store = Depends(get_store_dep),
+) -> dict:
+    return serialize(books.list_chapters_content(store, user, book_id))
+
+
+@router.get("/books/{book_id}/chapters/{idx}/content")
+async def get_chapter_content(
+    book_id: str,
+    idx: int,
+    user: CurrentUser = Depends(get_current_user),
+    store: Store = Depends(get_store_dep),
+) -> dict:
+    return serialize(books.get_chapter_content(store, user, book_id, idx))
+
+
+@router.get("/books/{book_id}/plan-messages")
+async def get_plan_messages(
+    book_id: str,
+    user: CurrentUser = Depends(get_current_user),
+    store: Store = Depends(get_store_dep),
+) -> dict:
+    return serialize(books.get_plan_messages(store, user, book_id))
+
+
+@router.get("/books/{book_id}/bible")
+async def get_bible(
+    book_id: str,
+    user: CurrentUser = Depends(get_current_user),
+    store: Store = Depends(get_store_dep),
+) -> dict:
+    return serialize(books.get_bible_view(store, user, book_id))
+
+
 @router.get("/books/{book_id}/words")
 async def get_word(
     book_id: str,
