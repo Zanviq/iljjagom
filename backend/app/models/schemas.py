@@ -633,6 +633,7 @@ class AdminMessage(CamelModel):
     id: str
     book_id: str | None = None
     user_id: str | None = None
+    user_email: str | None = None  # 관리자/01 enrich
     role: str
     kind: str
     content: str
@@ -755,14 +756,74 @@ class AiSessionView(CamelModel):
     step_count: int | None = None
     tokens_in: int | None = None
     tokens_out: int | None = None
+    # 관리자/01 드릴다운 — 책 맥락·단계 라벨
+    book_title: str | None = None
+    book_status: str | None = None
+    stage: str | None = None
 
 
 class AiSessionsResponse(CamelModel):
     sessions: list[AiSessionView] = []
 
 
+class SessionContext(CamelModel):
+    user_email: str | None = None
+    book_id: str | None = None
+    book_title: str | None = None
+    stage: str | None = None
+
+
 class AiSessionDetail(AiSessionView):
     steps: list[AiStepView] = []
+    # 관리자/01 — 세션 대화 전문 + 맥락
+    transcript: list[AdminMessage] = []
+    context: SessionContext = SessionContext()
+
+
+# --- 관리자 드릴다운 (관리자/01) ---
+class UserOverviewBook(CamelModel):
+    id: str
+    title: str | None = None
+    status: BookStatus
+    created_at: str = ""
+    session_count: int = 0
+    message_count: int = 0
+
+
+class UserOverview(CamelModel):
+    user: AdminUser
+    books: list[UserOverviewBook] = []
+    sessions: list[AiSessionView] = []
+    recent_messages: list[AdminMessage] = []
+
+
+class BookTimelineChapter(CamelModel):
+    idx: int
+    review_status: ReviewStatus
+    char_count: int = 0
+
+
+class BookTimeline(CamelModel):
+    book: Book
+    prompt: Prompt | None = None
+    chapters: list[BookTimelineChapter] = []
+    sessions: list[AiSessionView] = []
+    plan_messages: list[PlanMessageView] = []
+    messages: list[AdminMessage] = []
+    learning: list[LearningResult] = []
+
+
+class MessagesByUserRow(CamelModel):
+    user_id: str
+    email: str | None = None
+    role: str | None = None
+    message_count: int = 0
+    book_count: int = 0
+    last_at: str | None = None
+
+
+class MessagesByUser(CamelModel):
+    users: list[MessagesByUserRow] = []
 
 
 class AnswerRequest(CamelModel):
