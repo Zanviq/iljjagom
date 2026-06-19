@@ -65,11 +65,39 @@ async def list_messages(
     kind: str | None = Query(default=None),
     since: str | None = Query(default=None, alias="from"),
     until: str | None = Query(default=None, alias="to"),
+    group_by: str | None = Query(default=None, alias="groupBy"),
     limit: int = Query(default=100, ge=1, le=500),
     user: CurrentUser = Depends(require_role("admin")),
     store: Store = Depends(get_store_dep),
 ) -> dict:
+    if group_by == "user":
+        return serialize(svc.list_messages_by_user(store))
     return serialize(svc.list_messages(store, user_id, book_id, kind, since, until, limit))
+
+
+@router.get("/admin/users/{user_id}/overview")
+async def user_overview(
+    user_id: str,
+    user: CurrentUser = Depends(require_role("admin")),
+    store: Store = Depends(get_store_dep),
+) -> dict:
+    return serialize(svc.user_overview(store, user, user_id))
+
+
+@router.get("/admin/books/{book_id}/timeline")
+async def book_timeline(
+    book_id: str,
+    user: CurrentUser = Depends(require_role("admin")),
+    store: Store = Depends(get_store_dep),
+) -> dict:
+    return serialize(svc.book_timeline(store, user, book_id))
+
+
+@router.get("/admin/settings/schema")
+async def settings_schema(
+    user: CurrentUser = Depends(require_role("admin")),
+) -> dict:
+    return svc.settings_schema()
 
 
 @router.get("/admin/settings")

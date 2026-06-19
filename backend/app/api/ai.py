@@ -19,12 +19,14 @@ from app.deps import (
 )
 from app.errors import conflict, forbidden, not_found, validation_error
 from app.models.schemas import (
+    AdminMessage,
     AiSessionDetail,
     AiSessionsResponse,
     AiSessionView,
     AiStepView,
     AnswerRequest,
     OverseerMessageRequest,
+    SessionContext,
     serialize,
 )
 from app.ratelimit import rate_limit
@@ -73,14 +75,28 @@ async def list_sessions(
     return serialize(AiSessionsResponse(sessions=views))
 
 
+# role → 사람이 읽는 단계 라벨(관리자/01 §5).
+_STAGE_LABEL = {
+    "designer": "설계(Bible)", "writer": "집필", "editor": "편집(수정)",
+    "chat": "학습 대화", "tutor": "학습 대화", "overseer": "총괄(곰 작가)", "letter": "편지 검수",
+}
+
+
+def _stage_label(role: str | None) -> str | None:
+    return _STAGE_LABEL.get(role or "", role)
+
+
 def _enrich_session(store: Store, s: AiSessionRecord) -> AiSessionView:
     view = _session_view(s)
-    # 책 소유 학생 → userId/userEmail. overseer 등 book 없는 세션은 session.user_id 로.
+    view.stage = _stage_label(s.role)
+    # 책 소유 학생 → userId/userEmail + 책 제목·상태. book 없는 세션은 session.user_id 로.
     owner_id = None
     if s.book_id:
         book = store.get_book(s.book_id)
         if book:
             owner_id = book.student_id
+            view.book_title = book.title
+            view.book_status = book.status
     if not owner_id:
         owner_id = s.user_id
     if owner_id:
@@ -94,6 +110,16 @@ def _enrich_session(store: Store, s: AiSessionRecord) -> AiSessionView:
     return view
 
 
+def _admin_message_view(store: Store, m) -> AdminMessage:
+    prof = store.get_profile(m.user_id) if m.user_id else None
+    return AdminMessage(
+        id=m.id, book_id=m.book_id, user_id=m.user_id,
+        user_email=prof.email if prof else None,
+        role=m.role, kind=m.kind, content=m.content,
+        session_id=m.session_id, created_at=m.created_at,
+    )
+
+
 @router.get("/ai/sessions/{session_id}")
 async def get_session(
     session_id: str,
@@ -104,9 +130,16 @@ async def get_session(
     if not session:
         raise not_found("세션을 찾을 수 없습니다.")
     steps = store.list_ai_steps(session_id)
+    enriched = _enrich_session(store, session)  # userEmail·bookTitle·stage 포함
+    transcript = [_admin_message_view(store, m) for m in store.list_messages_for_session(session_id)]
     detail = AiSessionDetail(
-        **_session_view(session).model_dump(),
+        **enriched.model_dump(),
         steps=[_step_view(s) for s in steps],
+        transcript=transcript,
+        context=SessionContext(
+            user_email=enriched.user_email, book_id=session.book_id,
+            book_title=enriched.book_title, stage=enriched.stage,
+        ),
     )
     return serialize(detail)
 

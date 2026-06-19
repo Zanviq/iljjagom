@@ -16,23 +16,68 @@ from app.models.schemas import (
     AdminUser,
     AdminUserPatch,
     AdminUsersResponse,
+    AiSessionView,
     BackupExportResponse,
     BackupImportResponse,
+    BookTimeline,
+    BookTimelineChapter,
+    LearningResult,
+    MessagesByUser,
+    MessagesByUserRow,
     Notification,
     NotificationCreate,
     NotificationsResponse,
+    PlanMessageView,
     SettingPut,
     TokenUsageBucket,
     TokenUsageResponse,
+    UserOverview,
+    UserOverviewBook,
 )
 from app.store.base import Store
-from app.store.records import NotificationRecord, ProfileRecord
+from app.store.records import AiSessionRecord, NotificationRecord, ProfileRecord
 from app.util import now_iso
+
+# role → 단계 라벨(관리자/01 §5).
+_STAGE_LABEL = {
+    "designer": "설계(Bible)", "writer": "집필", "editor": "편집(수정)",
+    "chat": "학습 대화", "tutor": "학습 대화", "overseer": "총괄(곰 작가)", "letter": "편지 검수",
+}
+
+
+def _session_brief(store: Store, s: AiSessionRecord) -> AiSessionView:
+    """드릴다운용 세션 요약(스텝 합산 없이 가볍게). 단계 라벨·책 맥락 포함."""
+    view = AiSessionView(
+        id=s.id, book_id=s.book_id, role=s.role, model=s.model, status=s.status,
+        summary=s.summary, error=s.error, started_at=s.started_at, ended_at=s.ended_at,
+        stage=_STAGE_LABEL.get(s.role or "", s.role),
+    )
+    if s.book_id:
+        b = store.get_book(s.book_id)
+        if b:
+            view.book_title = b.title
+            view.book_status = b.status
+    return view
 
 # app_settings 에 허용되는 비-시크릿 런타임 키(시크릿 저장 방지).
 ALLOWED_SETTING_KEYS = {
     "models", "feature_toggles", "rate_limits", "notify_interval_sec", "safety_level",
 }
+
+# 설정 키별 enum/타입 스키마 — 콘솔이 raw JSON 대신 Select/Switch/Stepper 로 렌더(관리자/02).
+SETTINGS_SCHEMA: dict[str, Any] = {
+    "safety_level": {"type": "enum", "options": ["relaxed", "standard", "strict"],
+                     "default": "standard"},
+    "notify_interval_sec": {"type": "int", "min": 30, "max": 3600, "default": 180},
+    "feature_toggles": {"type": "object", "valueType": "boolean"},
+    "models": {"type": "object",
+               "roles": ["designer", "writer", "editor", "chat", "embed", "imagen"]},
+    "rate_limits": {"type": "object", "valueType": "number"},
+}
+
+
+def settings_schema() -> dict[str, Any]:
+    return {"schema": SETTINGS_SCHEMA}
 
 # 백업 대상 화이트리스트(임베딩·rate 카운터 제외).
 ALLOWED_BACKUP_TABLES = [
@@ -136,14 +181,123 @@ def list_messages(
     rows = store.list_messages_admin(
         user_id=user_id, book_id=book_id, kind=kind, since=since, until=until, limit=limit
     )
+    emails = _email_cache(store, {m.user_id for m in rows if m.user_id})
     return AdminMessagesResponse(
         messages=[
             AdminMessage(
-                id=m.id, book_id=m.book_id, user_id=m.user_id, role=m.role, kind=m.kind,
-                content=m.content, session_id=m.session_id, created_at=m.created_at,
+                id=m.id, book_id=m.book_id, user_id=m.user_id, user_email=emails.get(m.user_id),
+                role=m.role, kind=m.kind, content=m.content, session_id=m.session_id,
+                created_at=m.created_at,
             )
             for m in rows
         ]
+    )
+
+
+def _email_cache(store: Store, user_ids: set[str]) -> dict[str, str | None]:
+    out: dict[str, str | None] = {}
+    for uid in user_ids:
+        prof = store.get_profile(uid)
+        out[uid] = prof.email if prof else None
+    return out
+
+
+def list_messages_by_user(store: Store, limit: int = 1000) -> MessagesByUser:
+    """대화 페이지 '사용자 목록' — user 단위 집계(관리자/01)."""
+    rows = store.list_messages_admin(limit=limit)
+    agg: dict[str, dict] = {}
+    for m in rows:
+        if not m.user_id:
+            continue
+        a = agg.setdefault(m.user_id, {"count": 0, "books": set(), "last": ""})
+        a["count"] += 1
+        if m.book_id:
+            a["books"].add(m.book_id)
+        if (m.created_at or "") > a["last"]:
+            a["last"] = m.created_at or ""
+    users = []
+    for uid, a in agg.items():
+        prof = store.get_profile(uid)
+        users.append(MessagesByUserRow(
+            user_id=uid, email=prof.email if prof else None,
+            role=prof.role if prof else None,
+            message_count=a["count"], book_count=len(a["books"]), last_at=a["last"] or None,
+        ))
+    users.sort(key=lambda u: u.last_at or "", reverse=True)
+    return MessagesByUser(users=users)
+
+
+def user_overview(store: Store, admin: CurrentUser, user_id: str) -> UserOverview:
+    """한 사용자의 책·세션·최근 대화 요약(관리자/01)."""
+    prof = store.get_profile(user_id)
+    if not prof:
+        raise not_found("사용자를 찾을 수 없습니다.")
+    audit(store, admin, "view_user_overview", user_id, {})
+
+    books = []
+    sessions: list[AiSessionView] = []
+    for b in store.list_books_for_student(user_id):
+        bsessions = store.list_ai_sessions(book_id=b.id, limit=50)
+        bmsgs = store.list_messages_admin(book_id=b.id, limit=500)
+        books.append(UserOverviewBook(
+            id=b.id, title=b.title, status=b.status, created_at=b.created_at,
+            session_count=len(bsessions), message_count=len(bmsgs),
+        ))
+        sessions.extend(_session_brief(store, s) for s in bsessions)
+    recent = store.list_messages_admin(user_id=user_id, limit=20)
+    emails = _email_cache(store, {user_id})
+    return UserOverview(
+        user=_to_admin_user(store, prof),
+        books=books,
+        sessions=sessions,
+        recent_messages=[
+            AdminMessage(
+                id=m.id, book_id=m.book_id, user_id=m.user_id, user_email=emails.get(m.user_id),
+                role=m.role, kind=m.kind, content=m.content, session_id=m.session_id,
+                created_at=m.created_at,
+            )
+            for m in recent
+        ],
+    )
+
+
+def book_timeline(store: Store, admin: CurrentUser, book_id: str) -> BookTimeline:
+    """한 책의 단계별 통합 타임라인(관리자/01)."""
+    from app.services.books import _to_book
+    from app.services.teacher import _to_prompt
+
+    book = store.get_book(book_id)
+    if not book:
+        raise not_found("책을 찾을 수 없습니다.")
+    audit(store, admin, "view_book_timeline", book_id, {})
+
+    prompt = store.get_prompt(book.prompt_id) if book.prompt_id else None
+    chapters = [
+        BookTimelineChapter(idx=c.idx, review_status=c.review_status, char_count=c.char_count)
+        for c in store.list_chapters(book_id)
+    ]
+    sessions = [_session_brief(store, s) for s in store.list_ai_sessions(book_id=book_id, limit=100)]
+    plan_msgs = [
+        PlanMessageView(role=m.role, content=m.content, created_at=m.created_at)
+        for m in store.list_plan_messages(book_id)
+    ]
+    emails = _email_cache(store, {book.student_id} if book.student_id else set())
+    messages = [
+        AdminMessage(
+            id=m.id, book_id=m.book_id, user_id=m.user_id, user_email=emails.get(m.user_id),
+            role=m.role, kind=m.kind, content=m.content, session_id=m.session_id,
+            created_at=m.created_at,
+        )
+        for m in store.list_messages_admin(book_id=book_id, limit=500)
+    ]
+    learning = [
+        LearningResult(id=a.id, type=a.type, data=a.data, created_at=a.created_at)
+        for a in store.list_learning_artifacts(book_id=book_id) if a.type != "learning_set"
+    ]
+    return BookTimeline(
+        book=_to_book(book), prompt=_to_prompt(prompt) if prompt else None,
+        chapters=chapters, sessions=sessions, plan_messages=plan_msgs,
+        messages=messages, learning=learning,
     )
 
 
@@ -176,6 +330,10 @@ def put_settings(
             f"허용되지 않은 설정 키: {', '.join(bad)} (시크릿은 환경변수로만).",
             {"allowed": sorted(ALLOWED_SETTING_KEYS)},
         )
+    # enum 검증(관리자/02): safety_level 은 정의된 값만.
+    if "safety_level" in updates and updates["safety_level"] not in SETTINGS_SCHEMA["safety_level"]["options"]:
+        raise validation_error("안전강도 값이 올바르지 않아요.",
+                               {"options": SETTINGS_SCHEMA["safety_level"]["options"]})
     for k, v in updates.items():
         store.set_setting(k, v, updated_by=admin.id)
     # 런타임 반영 — rate limit 설정 캐시 무효화.
