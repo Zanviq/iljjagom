@@ -44,6 +44,7 @@ import type {
   Letter,
   LetterReply,
   Me,
+  MessagesByUser,
   NotificationCreate,
   OnboardingRequest,
   PlanMessagesResponse,
@@ -51,6 +52,7 @@ import type {
   Prompt,
   PromptSubmissionsResponse,
   StudentBooksResponse,
+  UserOverview,
   SafetyFlag,
   SafetyFlagDetail,
   SafetyFlagStatus,
@@ -730,6 +732,21 @@ export function deactivateAdminUser(
     `/admin/users/${id}/deactivate`,
     { token, method: "POST" },
   );
+}
+
+/** 대화 사용자 묶음(04 기능개선 관리자/01, groupBy=user). */
+export function getMessagesByUser(
+  token: string | null,
+): Promise<MessagesByUser> {
+  return apiFetch<MessagesByUser>("/admin/messages?groupBy=user", { token });
+}
+
+/** 한 사용자의 책·세션·대화 요약(04 기능개선 관리자/01). */
+export function getUserOverview(
+  token: string | null,
+  userId: string,
+): Promise<UserOverview> {
+  return apiFetch<UserOverview>(`/admin/users/${userId}/overview`, { token });
 }
 
 export function getAdminMessages(

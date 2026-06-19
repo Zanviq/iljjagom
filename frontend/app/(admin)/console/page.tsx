@@ -1,4 +1,4 @@
-import { GroupLabel, Metric } from "@/components/admin/Metric";
+import { GroupLabel, Metric, MetricLink } from "@/components/admin/Metric";
 import { getAdminUsage } from "@/lib/api";
 import { getAccessToken } from "@/lib/auth/server";
 
@@ -28,9 +28,10 @@ export default async function AdminConsolePage() {
           />
         )}
         {usage.eventsTotal !== undefined && (
-          <Metric label="이벤트" value={num(usage.eventsTotal)} />
+          <MetricLink href="/console/usage" label="이벤트" value={num(usage.eventsTotal)} />
         )}
-        <Metric
+        <MetricLink
+          href="/console/safety?status=open"
           label="미처리 안전신호"
           value={usage.safetyFlags.open}
           unit={`/ ${usage.safetyFlags.total}`}
@@ -40,10 +41,10 @@ export default async function AdminConsolePage() {
 
       <GroupLabel>사용자</GroupLabel>
       <div className="grid gap-3.5 [grid-template-columns:repeat(2,1fr)] sm:[grid-template-columns:repeat(4,1fr)]">
-        <Metric label="전체" value={num(usage.users.total)} />
-        <Metric label="학생" value={num(usage.users.students)} unit="명" />
-        <Metric label="교사" value={usage.users.teachers} unit="명" />
-        <Metric label="관리자" value={usage.users.admins} unit="명" />
+        <MetricLink href="/console/users" label="전체" value={num(usage.users.total)} />
+        <MetricLink href="/console/users?role=student" label="학생" value={num(usage.users.students)} unit="명" />
+        <MetricLink href="/console/users?role=teacher" label="교사" value={usage.users.teachers} unit="명" />
+        <MetricLink href="/console/users?role=admin" label="관리자" value={usage.users.admins} unit="명" />
       </div>
 
       <GroupLabel>콘텐츠</GroupLabel>
