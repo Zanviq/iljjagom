@@ -11,13 +11,19 @@ from app.ai.trace import Trace
 from app.deps import CurrentUser
 from app.errors import conflict, forbidden, not_found, validation_error
 from app.models.schemas import (
+    BibleResponse,
     Book,
     BookDetail,
     BooksResponse,
     BookSummary,
+    ChapterContent,
     ChapterMeta,
+    ChaptersContentResponse,
     DesignResponse,
+    PlanMessagesResponse,
+    PlanMessageView,
     PlanReply,
+    StudentBooksResponse,
 )
 from app.services.prefetch import acquire_prefetch, release_prefetch
 from app.store.base import Store
@@ -124,6 +130,75 @@ def get_book_detail(store: Store, user: CurrentUser, book_id: str) -> BookDetail
         chapters=chapters,
         total_chapters_planned=book.total_chapters_planned,
     )
+
+
+# --- 학생 데이터 열람 (선생님/03, 책 접근자) ---
+def _chapter_content(c) -> ChapterContent:
+    return ChapterContent(
+        idx=c.idx, mode=c.mode, review_status=c.review_status, body=c.body,
+        char_count=c.char_count, words=c.words,
+        illustration_url=c.illustration_path, updated_at=c.created_at,
+    )
+
+
+def list_chapters_content(store: Store, user: CurrentUser, book_id: str) -> ChaptersContentResponse:
+    book = get_book_or_404(store, book_id)
+    assert_can_access_book(store, user, book)
+    return ChaptersContentResponse(
+        chapters=[_chapter_content(c) for c in store.list_chapters(book_id)]
+    )
+
+
+def get_chapter_content(store: Store, user: CurrentUser, book_id: str, idx: int) -> ChapterContent:
+    book = get_book_or_404(store, book_id)
+    assert_can_access_book(store, user, book)
+    c = store.get_chapter(book_id, idx)
+    if not c:
+        raise not_found("챕터를 찾을 수 없습니다.")
+    return _chapter_content(c)
+
+
+def get_plan_messages(store: Store, user: CurrentUser, book_id: str) -> PlanMessagesResponse:
+    book = get_book_or_404(store, book_id)
+    assert_can_access_book(store, user, book)
+    return PlanMessagesResponse(messages=[
+        PlanMessageView(role=m.role, content=m.content, created_at=m.created_at)
+        for m in store.list_plan_messages(book_id)
+    ])
+
+
+def get_bible_view(store: Store, user: CurrentUser, book_id: str) -> BibleResponse:
+    book = get_book_or_404(store, book_id)
+    assert_can_access_book(store, user, book)
+    rec = store.get_bible(book_id)
+    return BibleResponse(bible=rec.data if rec else {})
+
+
+def list_student_books(
+    store: Store, user: CurrentUser, class_id: str, student_id: str
+) -> StudentBooksResponse:
+    # 담당 교사·admin 만, 해당 학생이 그 학급 소속일 때.
+    classroom = store.get_classroom(class_id)
+    if not classroom:
+        raise not_found("학급을 찾을 수 없습니다.")
+    if user.role != "admin" and classroom.teacher_id != user.id:
+        raise forbidden("담당 학급이 아닙니다.")
+    if not store.is_enrolled(class_id, student_id):
+        raise not_found("그 학급의 학생이 아닙니다.")
+    summaries: list[BookSummary] = []
+    for rec in store.list_books_for_student(student_id):
+        if rec.classroom_id != class_id:
+            continue
+        done = sum(
+            1 for c in store.list_chapters(rec.id)
+            if c.char_count > 0 and not getattr(c, "prefetched", False)
+        )
+        summaries.append(BookSummary(
+            id=rec.id, title=rec.title, status=rec.status, chapters_done=done,
+            total_chapters_planned=rec.total_chapters_planned,
+            updated_at=rec.updated_at or rec.created_at,
+        ))
+    return StudentBooksResponse(books=summaries)
 
 
 # --- FR-S2 기획 인터뷰 대화 ---

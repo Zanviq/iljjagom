@@ -19,6 +19,10 @@ from app.models.schemas import (
     DashboardSummary,
     ObjectiveAchievement,
     Prompt,
+    PromptSubmission,
+    PromptSubmissionCounts,
+    PromptSubmissionsResponse,
+    PromptSubmissionStudent,
     RotateCodeResponse,
 )
 from app.store.base import Store
@@ -352,6 +356,56 @@ def class_dashboard_history(
         essays_submitted=len(essays),
     )
     return DashboardHistory(buckets=out, totals=totals)
+
+
+def prompt_submissions(
+    store: Store, user: CurrentUser, class_id: str, prompt_id: str
+) -> PromptSubmissionsResponse:
+    """발제별 참여 학생·작성 요약(선생님/05). 본문 전문은 03 열람 API로 분리."""
+    _assert_teacher_owns_class(store, user, class_id)
+    prompt = store.get_prompt(prompt_id)
+    if not prompt or prompt.classroom_id != class_id:
+        raise not_found("발제를 찾을 수 없습니다.")
+
+    books = store.list_books_for_prompt(prompt_id)
+    submissions: list[PromptSubmission] = []
+    started_ids: set[str] = set()
+    finished = 0
+    for b in books:
+        started_ids.add(b.student_id)
+        if b.status == "done":
+            finished += 1
+        chapters = [c for c in store.list_chapters(b.id) if not getattr(c, "prefetched", False)]
+        written = [c for c in chapters if c.char_count > 0]
+        arts = store.list_learning_artifacts(book_id=b.id)
+        prof = store.get_profile(b.student_id)
+        submissions.append(PromptSubmission(
+            student_id=b.student_id, student_email=prof.email if prof else "",
+            book_id=b.id, title=b.title, status=b.status,
+            chapters_done=len(written), total_chapters_planned=b.total_chapters_planned,
+            char_total=sum(c.char_count for c in written),
+            quiz_count=sum(1 for a in arts if a.type == "quiz"),
+            essay_count=sum(1 for a in arts if a.type == "essay"),
+            emotion_logged=any(a.type == "emotion" for a in arts),
+            letter_count=sum(1 for a in arts if a.type == "letter"),
+            last_activity_at=b.updated_at or b.created_at,
+        ))
+
+    enrolled_ids = store.list_student_ids(class_id)
+    not_started = []
+    for sid in enrolled_ids:
+        if sid not in started_ids:
+            prof = store.get_profile(sid)
+            not_started.append(PromptSubmissionStudent(
+                student_id=sid, student_email=prof.email if prof else ""
+            ))
+    return PromptSubmissionsResponse(
+        prompt=_to_prompt(prompt),
+        counts=PromptSubmissionCounts(
+            enrolled=len(enrolled_ids), started=len(started_ids), finished=finished
+        ),
+        submissions=submissions, not_started=not_started,
+    )
 
 
 def list_prompts(store: Store, user: CurrentUser, class_id: str) -> list[Prompt]:

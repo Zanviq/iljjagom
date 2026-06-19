@@ -141,3 +141,25 @@ async def list_prompts(
 ) -> dict:
     prompts = teacher.list_prompts(store, user, class_id)
     return serialize(PromptsResponse(prompts=prompts))
+
+
+@router.get("/classes/{class_id}/prompts/{prompt_id}/submissions")
+async def prompt_submissions(
+    class_id: str,
+    prompt_id: str,
+    user: CurrentUser = Depends(require_role("teacher", "admin")),
+    store: Store = Depends(get_store_dep),
+) -> dict:
+    return serialize(teacher.prompt_submissions(store, user, class_id, prompt_id))
+
+
+@router.get("/classes/{class_id}/students/{student_id}/books")
+async def student_books(
+    class_id: str,
+    student_id: str,
+    user: CurrentUser = Depends(require_role("teacher", "admin")),
+    store: Store = Depends(get_store_dep),
+) -> dict:
+    from app.services import books
+
+    return serialize(books.list_student_books(store, user, class_id, student_id))
