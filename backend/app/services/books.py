@@ -9,7 +9,7 @@ from app.ai.safety import check_input
 from app.ai.skills.base import estimate_tokens
 from app.ai.trace import Trace
 from app.deps import CurrentUser
-from app.errors import forbidden, not_found, validation_error
+from app.errors import conflict, forbidden, not_found, validation_error
 from app.models.schemas import (
     Book,
     BookDetail,
@@ -68,6 +68,8 @@ def create_book(store: Store, user: CurrentUser, prompt_id: str) -> Book:
     # 학생은 자기 학급의 발제로만 책을 만들 수 있다.
     if user.role != "admin" and not store.is_enrolled(prompt.classroom_id, user.id):
         raise forbidden("이 발제가 속한 학급의 학생이 아닙니다.")
+    if getattr(prompt, "status", "open") == "closed":
+        raise conflict("마감된 발제로는 새 이야기를 만들 수 없어요.")
     rec = store.create_book(
         student_id=user.id, classroom_id=prompt.classroom_id, prompt_id=prompt_id
     )

@@ -49,9 +49,26 @@ class ClassesResponse(CamelModel):
     classes: list[ClassSummary]
 
 
+# --- 다중 학급(P5, 선생님/01) ---
+class CreateClassRequest(CamelModel):
+    name: str = Field(min_length=1, max_length=60)
+
+
+class UpdateClassRequest(CamelModel):
+    name: str = Field(min_length=1, max_length=60)
+
+
+class RotateCodeResponse(CamelModel):
+    id: str
+    code: str
+
+
 class Assessment(CamelModel):
     type: Literal["quiz", "essay", "none"] = "none"
     detail: str = ""
+
+
+SafetyLevel = Literal["relaxed", "standard", "strict"]
 
 
 class CreatePromptRequest(CamelModel):
@@ -59,6 +76,22 @@ class CreatePromptRequest(CamelModel):
     learning_objectives: list[str] = Field(min_length=1)
     assessment: Assessment = Assessment()
     language: str = "ko"
+    # 발제 옵션(선생님/02, 선택).
+    grade_band: int | None = Field(default=None, ge=1, le=12)
+    chapters_planned: int | None = Field(default=None, ge=1, le=20)
+    due_at: str | None = None
+    safety_level: SafetyLevel | None = None
+
+
+class UpdatePromptRequest(CamelModel):
+    topic: str | None = Field(default=None, min_length=1)
+    learning_objectives: list[str] | None = None
+    assessment: Assessment | None = None
+    grade_band: int | None = Field(default=None, ge=1, le=12)
+    chapters_planned: int | None = Field(default=None, ge=1, le=20)
+    due_at: str | None = None
+    status: Literal["open", "closed"] | None = None
+    safety_level: SafetyLevel | None = None
 
 
 class Prompt(CamelModel):
@@ -68,11 +101,40 @@ class Prompt(CamelModel):
     learning_objectives: list[str]
     assessment: Assessment
     language: str
+    grade_band: int | None = None
+    chapters_planned: int | None = None
+    due_at: str | None = None
+    status: Literal["open", "closed"] = "open"
+    safety_level: SafetyLevel | None = None
     created_at: str
 
 
 class PromptsResponse(CamelModel):
     prompts: list[Prompt]
+
+
+# --- 학급 설정 (선생님/02) ---
+class ClassSettingsResponse(CamelModel):
+    value: dict[str, Any] = {}
+    defaults: dict[str, Any] = {}
+
+
+class ClassSettingsPut(CamelModel):
+    value: dict[str, Any] = {}
+
+
+# --- 대시보드 시계열 (선생님/02) ---
+class DashboardHistoryBucket(CamelModel):
+    period_start: str
+    active_students: int = 0
+    chapters_done: int = 0
+    books_finished: int = 0
+    essays_submitted: int = 0
+
+
+class DashboardHistory(CamelModel):
+    buckets: list[DashboardHistoryBucket] = []
+    totals: DashboardHistoryBucket = DashboardHistoryBucket(period_start="")
 
 
 # --- 교사 대시보드 (FR-T2) ---

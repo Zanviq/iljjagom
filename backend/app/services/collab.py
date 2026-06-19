@@ -102,8 +102,9 @@ async def collab_turn(
 
     # 출력 안전(무거운 장면 신호만 교사용 기록, 학생 흐름 비차단).
     try:
-        level = store.get_setting("safety_level") or "standard"
-        out = safety.filter_output(body, safety_level=str(level))
+        from app.services.policy import resolve_safety_level
+
+        out = safety.filter_output(body, safety_level=resolve_safety_level(store, book_id))
         if out.flags:
             store.add_safety_flag(book_id, user.id, "output", f"무거운 장면 신호: {', '.join(out.flags)}",
                                   category="heavy_scene")

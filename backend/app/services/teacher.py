@@ -2,26 +2,42 @@
 from __future__ import annotations
 
 from collections import defaultdict
+from datetime import date, timedelta
 
 from app.deps import CurrentUser
-from app.errors import forbidden, not_found
+from app.errors import forbidden, not_found, validation_error
 from app.models.schemas import (
     Assessment,
+    ClassSettingsPut,
+    ClassSettingsResponse,
     ClassSummary,
     CreatePromptRequest,
+    DashboardHistory,
+    DashboardHistoryBucket,
     DashboardResponse,
     DashboardStudent,
     DashboardSummary,
     ObjectiveAchievement,
     Prompt,
+    RotateCodeResponse,
 )
 from app.store.base import Store
 from app.store.records import BookRecord, PromptRecord
 
+# 학급 설정 허용 키(시크릿/모델 무단설정 차단) + 전역 기본값.
+_ALLOWED_SETTING_KEYS = {"safetyLevel", "featureToggles", "boardAutoPublish"}
+_SETTINGS_DEFAULTS = {"safetyLevel": "standard", "featureToggles": {}, "boardAutoPublish": False}
 
-def compute_class_metrics(store: Store, class_id: str) -> dict:
-    """events·learning_artifacts 로 04 지표 산출(학급 범위)."""
-    events = store.list_events(class_id=class_id, limit=5000)
+
+def compute_class_metrics(
+    store: Store, class_id: str, since: str | None = None, until: str | None = None
+) -> dict:
+    """events·learning_artifacts 로 04 지표 산출(학급 범위). from/to(날짜) 필터 선택."""
+    def _in(ts: str) -> bool:
+        d = (ts or "")[:10]
+        return not ((since and d < since) or (until and d > until))
+
+    events = [e for e in store.list_events(class_id=class_id, limit=5000) if _in(e.created_at)]
     opened = {e.student_id for e in events if e.type == "chapter_open"}
     finished = {e.student_id for e in events if e.type == "book_finished"}
     completion = round(len(finished & opened) / len(opened), 2) if opened else None
@@ -34,7 +50,7 @@ def compute_class_metrics(store: Store, class_id: str) -> dict:
     revisitors = sum(1 for d in days.values() if len(d) >= 2)
     revisit_rate = round(revisitors / active, 2) if active else 0.0
 
-    arts = store.list_learning_artifacts(class_id=class_id)
+    arts = [a for a in store.list_learning_artifacts(class_id=class_id) if _in(a.created_at)]
     total_ans = 0
     correct = 0
     obj: dict[str, list[int]] = defaultdict(lambda: [0, 0])  # [correct, total]
@@ -79,6 +95,38 @@ def list_classes(store: Store, user: CurrentUser) -> list[ClassSummary]:
     ]
 
 
+def _summary(store: Store, c) -> ClassSummary:
+    return ClassSummary(
+        id=c.id, name=c.name, school_id=c.school_id,
+        student_count=store.count_students(c.id), code=c.code,
+    )
+
+
+def create_class(store: Store, user: CurrentUser, name: str) -> ClassSummary:
+    """교사 학급 생성(선생님/01). 코드는 서버 CSPRNG 생성."""
+    from app.services.accounts import _generate_class_code
+
+    code = _generate_class_code(store)
+    rec = store.create_classroom(teacher_id=user.id, name=name.strip(), code=code)
+    return _summary(store, rec)
+
+
+def rename_class(store: Store, user: CurrentUser, class_id: str, name: str) -> ClassSummary:
+    _assert_teacher_owns_class(store, user, class_id)
+    rec = store.update_classroom(class_id, name=name.strip())
+    return _summary(store, rec)
+
+
+def rotate_class_code(store: Store, user: CurrentUser, class_id: str) -> RotateCodeResponse:
+    """가입 코드 재발급(분실·유출 대응). 기존 enrollments 는 유지."""
+    from app.services.accounts import _generate_class_code
+
+    _assert_teacher_owns_class(store, user, class_id)
+    code = _generate_class_code(store)
+    rec = store.update_classroom(class_id, code=code)
+    return RotateCodeResponse(id=rec.id, code=rec.code)
+
+
 def _assert_teacher_owns_class(store: Store, user: CurrentUser, class_id: str) -> None:
     classroom = store.get_classroom(class_id)
     if not classroom:
@@ -95,6 +143,11 @@ def _to_prompt(rec: PromptRecord) -> Prompt:
         learning_objectives=rec.learning_objectives,
         assessment=Assessment(**rec.assessment) if rec.assessment else Assessment(),
         language=rec.language,
+        grade_band=getattr(rec, "grade_band", None),
+        chapters_planned=getattr(rec, "chapters_planned", None),
+        due_at=getattr(rec, "due_at", None),
+        status=getattr(rec, "status", "open") or "open",
+        safety_level=getattr(rec, "safety_level", None),
         created_at=rec.created_at,
     )
 
@@ -109,12 +162,49 @@ def create_prompt(
         learning_objectives=req.learning_objectives,
         assessment=req.assessment.model_dump(),
         language=req.language,
+        grade_band=req.grade_band,
+        chapters_planned=req.chapters_planned,
+        due_at=req.due_at,
+        safety_level=req.safety_level,
     )
     return _to_prompt(rec)
 
 
-def class_dashboard(store: Store, user: CurrentUser, class_id: str) -> DashboardResponse:
-    # 담당 교사(또는 admin)만. 학급 학생별 진척 + 요약 집계 (FR-T2).
+def update_prompt(
+    store: Store, user: CurrentUser, class_id: str, prompt_id: str, req
+) -> Prompt:
+    _assert_teacher_owns_class(store, user, class_id)
+    prompt = store.get_prompt(prompt_id)
+    if not prompt or prompt.classroom_id != class_id:
+        raise not_found("발제를 찾을 수 없습니다.")
+    fields: dict = {}
+    if req.topic is not None:
+        fields["topic"] = req.topic
+    if req.learning_objectives is not None:
+        fields["learning_objectives"] = req.learning_objectives
+    if req.assessment is not None:
+        fields["assessment"] = req.assessment.model_dump()
+    for k in ("grade_band", "chapters_planned", "due_at", "status", "safety_level"):
+        v = getattr(req, k)
+        if v is not None:
+            fields[k] = v
+    rec = store.update_prompt(prompt_id, **fields) if fields else prompt
+    return _to_prompt(rec)
+
+
+def close_prompt(store: Store, user: CurrentUser, class_id: str, prompt_id: str) -> Prompt:
+    _assert_teacher_owns_class(store, user, class_id)
+    prompt = store.get_prompt(prompt_id)
+    if not prompt or prompt.classroom_id != class_id:
+        raise not_found("발제를 찾을 수 없습니다.")
+    return _to_prompt(store.update_prompt(prompt_id, status="closed"))
+
+
+def class_dashboard(
+    store: Store, user: CurrentUser, class_id: str,
+    since: str | None = None, until: str | None = None,
+) -> DashboardResponse:
+    # 담당 교사(또는 admin)만. 학급 학생별 진척 + 요약 집계 (FR-T2). from/to 는 지표에 적용.
     _assert_teacher_owns_class(store, user, class_id)
 
     student_ids = store.list_student_ids(class_id)
@@ -156,7 +246,7 @@ def class_dashboard(store: Store, user: CurrentUser, class_id: str) -> Dashboard
     status_completion = round(books_done / student_count, 2) if student_count else 0.0
 
     # 04 실데이터 지표(events·learning_artifacts). 완독률은 book_finished 우선, 없으면 status 폴백.
-    metrics = compute_class_metrics(store, class_id)
+    metrics = compute_class_metrics(store, class_id, since, until)
     completion_rate = (
         metrics["completion_from_events"]
         if metrics["completion_from_events"] is not None
@@ -174,6 +264,94 @@ def class_dashboard(store: Store, user: CurrentUser, class_id: str) -> Dashboard
         essays_submitted=metrics["essays_submitted"],
     )
     return DashboardResponse(students=students, summary=summary)
+
+
+def get_class_settings(store: Store, user: CurrentUser, class_id: str) -> ClassSettingsResponse:
+    _assert_teacher_owns_class(store, user, class_id)
+    cs = store.get_class_settings(class_id)
+    return ClassSettingsResponse(value=cs.value if cs else {}, defaults=dict(_SETTINGS_DEFAULTS))
+
+
+def put_class_settings(
+    store: Store, user: CurrentUser, class_id: str, req: ClassSettingsPut
+) -> ClassSettingsResponse:
+    _assert_teacher_owns_class(store, user, class_id)
+    clean: dict = {}
+    for k, v in (req.value or {}).items():
+        if k not in _ALLOWED_SETTING_KEYS:
+            continue  # 미허용 키(시크릿/모델 등) 무시
+        if k == "safetyLevel" and v not in ("relaxed", "standard", "strict"):
+            raise validation_error("안전강도 값이 올바르지 않아요.", {"field": "safetyLevel"})
+        clean[k] = v
+    # 게시판 자동공개는 classrooms 컬럼과 동기(board.py 가 읽는 권위 소스).
+    if "boardAutoPublish" in clean:
+        store.update_classroom(class_id, board_auto_publish=bool(clean["boardAutoPublish"]))
+    cs = store.upsert_class_settings(class_id, clean, user.id)
+    return ClassSettingsResponse(value=cs.value, defaults=dict(_SETTINGS_DEFAULTS))
+
+
+def _period_start(ts: str, group_by: str) -> str:
+    """이벤트 시각 → 버킷 시작일(day=그날, week=그 주 월요일) ISO 날짜 문자열."""
+    d = (ts or "")[:10]
+    if group_by != "week":
+        return d
+    try:
+        dt = date.fromisoformat(d)
+    except ValueError:
+        return d
+    return (dt - timedelta(days=dt.weekday())).isoformat()
+
+
+def class_dashboard_history(
+    store: Store, user: CurrentUser, class_id: str, group_by: str = "week",
+    since: str | None = None, until: str | None = None,
+) -> DashboardHistory:
+    _assert_teacher_owns_class(store, user, class_id)
+    group_by = "day" if group_by == "day" else "week"
+
+    def in_range(ts: str) -> bool:
+        d = (ts or "")[:10]
+        if since and d < since:
+            return False
+        if until and d > until:
+            return False
+        return True
+
+    events = [e for e in store.list_events(class_id=class_id, limit=5000) if in_range(e.created_at)]
+    essays = [
+        a for a in store.list_learning_artifacts(class_id=class_id)
+        if a.type == "essay" and in_range(a.created_at)
+    ]
+
+    buckets: dict[str, dict] = defaultdict(
+        lambda: {"active": set(), "chapters": 0, "finished": 0, "essays": 0}
+    )
+    for e in events:
+        b = buckets[_period_start(e.created_at, group_by)]
+        if e.student_id:
+            b["active"].add(e.student_id)
+        if e.type == "chapter_open":
+            b["chapters"] += 1
+        elif e.type == "book_finished":
+            b["finished"] += 1
+    for a in essays:
+        buckets[_period_start(a.created_at, group_by)]["essays"] += 1
+
+    out = [
+        DashboardHistoryBucket(
+            period_start=k, active_students=len(v["active"]), chapters_done=v["chapters"],
+            books_finished=v["finished"], essays_submitted=v["essays"],
+        )
+        for k, v in sorted(buckets.items())
+    ]
+    totals = DashboardHistoryBucket(
+        period_start="",
+        active_students=len({e.student_id for e in events if e.student_id}),
+        chapters_done=sum(b.chapters_done for b in out),
+        books_finished=sum(b.books_finished for b in out),
+        essays_submitted=len(essays),
+    )
+    return DashboardHistory(buckets=out, totals=totals)
 
 
 def list_prompts(store: Store, user: CurrentUser, class_id: str) -> list[Prompt]:
