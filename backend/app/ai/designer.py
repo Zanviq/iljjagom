@@ -32,6 +32,46 @@ def _distribute_objectives(objectives: list[str], total: int) -> list[dict[str, 
     return events
 
 
+def _normalize_bible(
+    data: dict[str, Any], objectives: list[str], default_total: int
+) -> dict[str, Any]:
+    """LLM Bible 결과를 안전하게 정규화(이슈a 재발 방지).
+
+    실 Gemini 가 events 를 totalChaptersPlanned 만큼 채우지 못하거나 chapterIdx 가
+    누락되면, 해당 장의 event/챕터 행이 안 만들어져 독서 시 '해당 챕터가 없습니다' 가 된다.
+    여기서 events 를 1..total 로 완전히 채우고 앞 절반 free / 뒤 절반 guided 를 강제한다.
+    """
+    if not isinstance(data, dict):
+        data = {}
+    raw_total = data.get("totalChaptersPlanned")
+    events_in = data.get("events") if isinstance(data.get("events"), list) else []
+    total = raw_total if isinstance(raw_total, int) and raw_total > 0 else (len(events_in) or default_total)
+    total = max(2, min(int(total), 12))  # 합리 범위로 제한
+
+    by_idx: dict[int, dict] = {}
+    for e in events_in:
+        if isinstance(e, dict) and isinstance(e.get("chapterIdx"), int):
+            by_idx[e["chapterIdx"]] = e
+
+    norm: list[dict[str, Any]] = []
+    for tmpl in _distribute_objectives(objectives, total):
+        src = by_idx.get(tmpl["chapterIdx"], {})
+        norm.append(
+            {
+                "chapterIdx": tmpl["chapterIdx"],
+                "mode": tmpl["mode"],  # 앞 절반 free / 뒤 절반 guided 강제(게이트·완독 일관)
+                "objective": src.get("objective") or tmpl["objective"],
+                "summary": src.get("summary") or tmpl["summary"],
+            }
+        )
+    data["events"] = norm
+    data["totalChaptersPlanned"] = total
+    data.setdefault("characters", [])
+    data.setdefault("world", {})
+    data.setdefault("learningObjectives", objectives)
+    return data
+
+
 async def build_bible(
     gemini: GeminiClient,
     prompt: PromptRecord | None,
@@ -77,8 +117,8 @@ async def build_bible(
     raw = await gemini.generate_text(gemini.settings.gemini_model_pro, instruction)
     try:
         data = json.loads(_strip_code_fence(raw))
-        data.setdefault("totalChaptersPlanned", total)
-        return data
+        # events 를 1..total 로 완전히 채우고 free/guided 분할 강제(이슈a 재발 방지).
+        return _normalize_bible(data, objectives, total)
     except (json.JSONDecodeError, TypeError):
         # 파싱 실패 시 안전한 기본 Bible 로 폴백.
         return {
