@@ -12,7 +12,7 @@ from collections.abc import AsyncIterator
 
 from app.ai import chat, editor, imagen, rag, safety, writer
 from app.ai.gemini import GeminiClient
-from app.ai.sanitize import sanitize_body, sanitize_line
+from app.ai.sanitize import sanitize_body
 from app.ai.skills.base import estimate_tokens
 from app.ai.trace import Trace
 from app.deps import CurrentUser
@@ -22,9 +22,8 @@ from app.store.base import Store
 
 HEARTBEAT_SECS = 15.0
 # 생성 타임아웃(C2): 첫 토큰까지 / 토큰 사이 최대 간격.
-FIRST_TOKEN_TIMEOUT = 25.0
-TOKEN_GAP_TIMEOUT = 60.0
 PREFETCH_TIMEOUT = 90.0  # 선생성 전체 상한(스톨 시 폴백 본문 저장, 이슈a)
+LIVE_GEN_TIMEOUT = 60.0  # 읽기 첫 집필 라이브 생성 상한(스톨 시 폴백, 이슈a)
 
 
 def _sse(event: str, data: dict) -> str:
@@ -63,19 +62,6 @@ async def _emit_text(queue: asyncio.Queue, text: str, running: int, from_offset:
         await asyncio.sleep(0)  # 이벤트 루프 양보(하트비트/취소 반영)
         running = await _emit_token(queue, text[i : i + 4], running, from_offset)
     return running
-
-
-def _clean_segment(line: str, *, terminated: bool, has_content: bool) -> str:
-    """스트리밍 한 줄을 정제해 emit·저장에 쓸 세그먼트로. 머리말 줄은 통째 생략('').
-
-    저장본 == 스트림본 == offset 기준이 되도록, emit 한 문자열을 그대로 누적한다(08↔09 정합).
-    """
-    c = sanitize_line(line)
-    if c is None:
-        return ""                       # 머리말/헤딩 줄 → 통째 생략
-    if c == "":
-        return "\n" if (has_content and terminated) else ""  # 선두 빈 줄 제거, 중간은 문단 구분
-    return c + ("\n" if terminated else "")
 
 
 def _find_event(bible: dict, idx: int) -> dict | None:
@@ -117,63 +103,6 @@ async def _collect_chapter(
     return "".join(
         [c async for c in writer.stream_chapter(gemini, bible, event, context, is_final)]
     )
-
-
-async def _stream_body(
-    queue: asyncio.Queue,
-    gemini: GeminiClient,
-    bible: dict,
-    event: dict,
-    context: str,
-    is_final: bool,
-    from_offset: int,
-) -> tuple[str, int]:
-    """본문 토큰 스트림 — 첫 토큰 타임아웃 시 1회 재시도, 토큰 간 간격 타임아웃 감시(C2).
-
-    (body, running[UTF-16]) 반환. 첫 토큰을 한 번도 못 받으면 재시도, 일부라도 받은 뒤
-    멈추면 예외를 올려 error(retryable) 로 처리(클라이언트 ?from= 재연결).
-    """
-    last_exc: Exception | None = None
-    for _attempt in range(2):
-        body = ""        # 정제된 누적(저장·offset 기준) — 줄 단위로 정제해 emit·저장 일치(08).
-        line_buf = ""    # 미완성 줄 버퍼(토큰 경계의 마크다운 분할 방지)
-        running = 0
-        got = False
-        agen = writer.stream_chapter(gemini, bible, event, context, is_final)
-        try:
-            while True:
-                timeout = TOKEN_GAP_TIMEOUT if got else FIRST_TOKEN_TIMEOUT
-                try:
-                    chunk = await asyncio.wait_for(agen.__anext__(), timeout=timeout)
-                except StopAsyncIteration:
-                    break
-                got = True
-                line_buf += chunk
-                while "\n" in line_buf:
-                    line, line_buf = line_buf.split("\n", 1)
-                    seg = _clean_segment(line, terminated=True, has_content=bool(body))
-                    if seg:
-                        body += seg
-                        running = await _emit_text(queue, seg, running, from_offset)
-            # 마지막 미완 줄 flush(개행 없음).
-            seg = _clean_segment(line_buf, terminated=False, has_content=bool(body))
-            if seg:
-                body += seg
-                running = await _emit_text(queue, seg, running, from_offset)
-            if body:
-                return body, running
-            # 빈 본문(토큰 0) → 재시도.
-        except asyncio.TimeoutError as exc:
-            last_exc = exc
-            await agen.aclose()
-            if got:
-                raise  # 일부 전송됨 → 재시도 시 중복. error 로 넘겨 재연결에 맡김.
-            continue  # 첫 토큰도 못 받음 → 재시도
-        finally:
-            await agen.aclose()
-    if last_exc:
-        raise last_exc
-    raise RuntimeError("empty_generation")
 
 
 async def _produce(
@@ -257,13 +186,26 @@ async def _produce(
             running = await _emit_text(queue, body, running, from_offset)
             words = chapter.words
         else:
-            # 첫 집필: RAG 컨텍스트 고정 + 생성(타임아웃/재시도) + 저장 + 적재.
+            # 첫 집필(선생성 미완 진입): 전체 생성을 타임아웃으로 감싸 만든 뒤 저장·emit.
+            # 스톨/실패/빈 본문이면 즉시 폴백 본문으로 저장·제공해 완독이 막히지 않게 한다(이슈a).
+            # (선생성된 챕터는 served_stored 로 청크 스트리밍되므로 이 경로는 드문 폴백 경로.)
             context = await rag.retrieve_context(
                 store, gemini, book_id, event.get("summary", ""), k=5
             )
-            body, running = await _stream_body(
-                queue, gemini, bible, event, context, is_final, from_offset
-            )
+            try:
+                raw = await asyncio.wait_for(
+                    _collect_chapter(gemini, bible, event, context, is_final),
+                    timeout=LIVE_GEN_TIMEOUT,
+                )
+                body = sanitize_body(raw)
+            except Exception:
+                body = ""
+            if not body:
+                # 결말 장만 폴백으로 완독을 보장한다. 비-결말은 재시도 가능 에러로(AI 다운 시
+                # 책 전체가 조용히 폴백으로 채워지는 것 방지, 학생/09 재시도 UX 유지).
+                if not is_final:
+                    raise RuntimeError("empty_generation")
+                body = sanitize_body(writer.fallback_chapter(bible, event, is_final))
             words = writer.select_words(
                 body, _student_grade(store, book_id), _character_names(bible)
             )
@@ -271,6 +213,7 @@ async def _produce(
                 chapter.id, body=body, char_count=len(body), words=words, review_status="pending"
             )
             await rag.index_text(store, gemini, book_id, chapter.id, body)
+            running = await _emit_text(queue, body, running, from_offset)
 
         # 3b) 완료/활동 갱신 — 첫 집필·선생성 진입(served_stored) 공통(완독은 1회만).
         book_now = store.get_book(book_id)
@@ -461,6 +404,10 @@ async def prefetch_chapter(
         except Exception:
             body = ""
         if not body:
+            # 결말 장만 폴백 저장(완독 보장). 비-결말은 저장 안 함 → 진입 시 라이브 재시도 여지.
+            if not is_final:
+                trace.end(status="error", error="empty_prefetch")
+                return
             body = sanitize_body(writer.fallback_chapter(bible, event, is_final))
         words = writer.select_words(body, _student_grade(store, book_id), _character_names(bible))
         store.update_chapter(
