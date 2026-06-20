@@ -262,6 +262,10 @@ class BookSummary(CamelModel):
     chapters_done: int = 0
     total_chapters_planned: int | None = None
     updated_at: str
+    # 이어가기 목적지(05-기능수정 §03) — 홈이 mode/단계에 맞는 화면으로 보낸다.
+    current_chapter_idx: int | None = None
+    current_chapter_mode: str | None = None  # 'free' | 'guided'
+    current_stage: Literal["plan", "collab", "mid_activity", "read", "done"] | None = None
 
 
 class BooksResponse(CamelModel):

@@ -181,6 +181,10 @@ export interface BookSummary {
   totalChaptersPlanned: number | null;
   /** 마지막 활동 시각(ISO8601). 목록은 이 값 내림차순 */
   updatedAt: string;
+  /** 이어가기 목적지(05-기능수정 §03) — 없으면 status 기반 폴백 */
+  currentChapterIdx?: number | null;
+  currentChapterMode?: "free" | "guided" | null;
+  currentStage?: "plan" | "collab" | "mid_activity" | "read" | "done" | null;
 }
 
 /** POST /books 응답 */

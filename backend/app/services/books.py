@@ -83,6 +83,38 @@ def create_book(store: Store, user: CurrentUser, prompt_id: str) -> Book:
 
 
 # --- GET /books (내 책 목록/이어 읽기) ---
+def _resume_for(store: Store, rec) -> tuple[int | None, str | None, str | None]:
+    """이어가기 목적지(05-기능수정 §03): (현재 챕터 idx, mode, stage).
+
+    plan → collab(미완 free) → mid_activity(기·승 후 필수) → read(전·결) → done 순.
+    """
+    from app.services import midactivity
+    from app.services.collab import COLLAB_TARGET_PARAGRAPHS
+
+    if rec.status == "planning":
+        return 1, "free", "plan"
+    chapters = sorted(store.list_chapters(rec.id), key=lambda c: c.idx)
+    if not chapters:
+        return None, None, None
+    # 미완 free 챕터(기·승) → 협업 이어쓰기.
+    for c in chapters:
+        if c.mode == "free" and len(store.list_paragraphs(c.id)) < COLLAB_TARGET_PARAGRAPHS:
+            return c.idx, "free", "collab"
+    # 기·승 끝 + 중간활동 필수·미완 → 중간활동.
+    if midactivity.gate_blocked(store, rec.id):
+        guided = next((c for c in chapters if c.mode == "guided"), chapters[-1])
+        return guided.idx, "guided", "mid_activity"
+    if rec.status == "done":
+        last = chapters[-1]
+        return last.idx, last.mode, "done"
+    # 전·결 읽기: 아직 본문 없는 첫 guided, 없으면 마지막.
+    for c in chapters:
+        if c.mode == "guided" and c.char_count <= 0:
+            return c.idx, "guided", "read"
+    last = chapters[-1]
+    return last.idx, last.mode, "read"
+
+
 def list_books(store: Store, user: CurrentUser) -> BooksResponse:
     # 학생은 자기 책만. (교사/관리자 목록은 교사 대시보드 §T2 별도 제공.)
     records = store.list_books_for_student(user.id)
@@ -94,6 +126,7 @@ def list_books(store: Store, user: CurrentUser) -> BooksResponse:
             1 for c in store.list_chapters(rec.id)
             if c.char_count > 0 and not getattr(c, "prefetched", False)
         )
+        idx, mode, stage = _resume_for(store, rec)
         summaries.append(
             BookSummary(
                 id=rec.id,
@@ -102,6 +135,9 @@ def list_books(store: Store, user: CurrentUser) -> BooksResponse:
                 chapters_done=done,
                 total_chapters_planned=rec.total_chapters_planned,
                 updated_at=rec.updated_at or rec.created_at,
+                current_chapter_idx=idx,
+                current_chapter_mode=mode,
+                current_stage=stage,
             )
         )
     return BooksResponse(books=summaries)

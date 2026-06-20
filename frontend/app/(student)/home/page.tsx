@@ -221,8 +221,33 @@ const STATUS_META: Record<
   },
 };
 
+/** 이어가기 목적지(05-기능수정 §03). 백엔드 resume(currentStage)을 화면으로 매핑, 없으면 status 폴백. */
+function resumeTarget(book: BookSummary): { href: string; cta: string } {
+  const idx = book.currentChapterIdx;
+  switch (book.currentStage) {
+    case "plan":
+      return { href: `/books/${book.id}/plan`, cta: "기획 이어가기" };
+    case "collab":
+      return {
+        href: `/books/${book.id}/write${idx ? `?idx=${idx}` : ""}`,
+        cta: "이어서 함께 쓰기",
+      };
+    case "mid_activity":
+      return { href: `/books/${book.id}/mid-activity`, cta: "중간활동 하기" };
+    case "read":
+      return { href: `/books/${book.id}/read`, cta: "이어 읽기" };
+    case "done":
+      return { href: `/books/${book.id}/read`, cta: "다시 읽기" };
+    default: {
+      const m = STATUS_META[book.status];
+      return { href: m.href(book.id), cta: m.cta };
+    }
+  }
+}
+
 function BookRow({ book }: { book: BookSummary }) {
   const meta = STATUS_META[book.status];
+  const resume = resumeTarget(book);
   const total = book.totalChaptersPlanned;
   return (
     <Card interactive padding="md" style={{ display: "flex", gap: 16, alignItems: "center" }}>
@@ -259,10 +284,10 @@ function BookRow({ book }: { book: BookSummary }) {
         </div>
       </div>
       <Link
-        href={meta.href(book.id)}
+        href={resume.href}
         className={buttonClass("outline", "md", "flex-none")}
       >
-        {meta.cta}
+        {resume.cta}
         <Icon name="arrow-right" size={18} />
       </Link>
     </Card>

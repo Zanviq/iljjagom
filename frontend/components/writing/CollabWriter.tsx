@@ -15,6 +15,7 @@ import { Textarea } from "@/components/ui/Textarea";
 import { TypingIndicator } from "@/components/ui/TypingIndicator";
 import {
   ApiError,
+  getBook,
   getCollab,
   patchParagraph,
   postCollab,
@@ -66,6 +67,7 @@ export function CollabWriter({
   const [editText, setEditText] = useState("");
   const [savingEdit, setSavingEdit] = useState(false);
   const [flashSeq, setFlashSeq] = useState<number | null>(null);
+  const [nextHref, setNextHref] = useState<string | null>(null);
   const dragSeq = useRef<number | null>(null);
 
   const endRef = useRef<HTMLDivElement>(null);
@@ -103,6 +105,35 @@ export function CollabWriter({
       active = false;
     };
   }, [bookId, chapterIdx, router]);
+
+  // 챕터 완료 시 다음 목적지 결정: 다음 free 챕터가 남았으면 그 협업으로, 아니면 중간활동(§03).
+  useEffect(() => {
+    if (!chapterComplete || !token) return;
+    let active = true;
+    (async () => {
+      const COLLAB_TARGET = 4;
+      try {
+        const book = await getBook(token, bookId);
+        const nextFree = book.chapters
+          .filter((c) => c.mode === "free")
+          .sort((a, b) => a.idx - b.idx)
+          .find(
+            (c) => c.idx > chapterIdx && (c.paragraphCount ?? 0) < COLLAB_TARGET,
+          );
+        if (active)
+          setNextHref(
+            nextFree
+              ? `/books/${bookId}/write?idx=${nextFree.idx}`
+              : `/books/${bookId}/mid-activity`,
+          );
+      } catch {
+        if (active) setNextHref(`/books/${bookId}/mid-activity`);
+      }
+    })();
+    return () => {
+      active = false;
+    };
+  }, [chapterComplete, token, bookId, chapterIdx]);
 
   function flash(seq: number) {
     setFlashSeq(seq);
@@ -443,9 +474,13 @@ export function CollabWriter({
             </p>
             <Button
               iconRight="arrow-right"
-              onClick={() => router.push(`/books/${bookId}/mid-activity`)}
+              onClick={() =>
+                router.push(nextHref ?? `/books/${bookId}/mid-activity`)
+              }
             >
-              이야기 이어보기
+              {nextHref?.includes("/write")
+                ? "다음 이야기 함께 쓰기"
+                : "이야기 이어보기"}
             </Button>
           </div>
         ) : (
