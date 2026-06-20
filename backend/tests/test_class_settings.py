@@ -34,6 +34,19 @@ async def test_class_settings_get_put(client):
     assert bad.status_code == 400
 
 
+async def test_settings_feature_toggles_default_and_sync(client):
+    th, class_id, _ = await _teacher_class(client, email="teacher_cs_ft@test")
+    got = (await client.get(f"/classes/{class_id}/settings", headers=th)).json()
+    # featureToggles 기본값에 boardAutoPublish 노출(프론트가 토글 렌더 가능, 이슈3).
+    assert "boardAutoPublish" in got["defaults"]["featureToggles"]
+    # featureToggles.boardAutoPublish 저장 → classrooms 컬럼 동기.
+    put = await client.put(f"/classes/{class_id}/settings", headers=th,
+                           json={"value": {"featureToggles": {"boardAutoPublish": True}}})
+    assert put.status_code == 200
+    assert put.json()["value"]["featureToggles"]["boardAutoPublish"] is True
+    assert get_store().get_classroom(class_id).board_auto_publish is True
+
+
 async def test_safety_resolution_chain(client):
     th, class_id, code = await _teacher_class(client, email="teacher_cs2@test")
     # 발제 안전강도 오버라이드.

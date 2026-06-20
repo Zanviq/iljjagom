@@ -8,7 +8,7 @@ from __future__ import annotations
 from app.ai import chat, rag, safety, writer
 from app.ai.gemini import GeminiClient
 from app.ai.safety import check_input
-from app.ai.sanitize import sanitize_body
+from app.ai.sanitize import sanitize_body, sanitize_reply
 from app.ai.skills.base import run_skill
 from app.ai.trace import Trace
 from app.deps import CurrentUser
@@ -109,7 +109,9 @@ async def collab_turn(
                 gemini, store.get_bible(book_id).data, prev_body, objective, message
             )
         if decision.get("action") == "coach":
-            text = decision.get("suggestion") or chat._coach_text(decision.get("reasons", []), objective)
+            text = sanitize_reply(
+                decision.get("suggestion") or chat._coach_text(decision.get("reasons", []), objective)
+            )
             store.add_writing_turn(chapter.id, book_id, "writer", "coaching", text)
             trace.end(status="done", summary=f"{idx}장 협업 지도")
             return CollabReply(
@@ -168,6 +170,7 @@ async def collab_turn(
                 gemini, bible, [p.body for p in paragraphs] + [body], event
             )
         )
+        question = sanitize_reply(question)
         store.add_writing_turn(chapter.id, book_id, "writer", "question", question)
     else:
         await rag.index_text(store, gemini, book_id, chapter.id, full)  # 완료 시 1회 인덱스
@@ -190,9 +193,17 @@ def collab_state(store: Store, user: CurrentUser, book_id: str, idx: int) -> Col
     paragraphs = store.list_paragraphs(chapter.id)
     turns = store.list_writing_turns(chapter.id)
     return CollabState(
-        paragraphs=[CollabParagraphView(seq=p.seq, body=p.body, source=p.source) for p in paragraphs],
-        turns=[CollabTurnView(role=t.role, kind=t.kind, content=t.content, created_at=t.created_at)
-               for t in turns],
+        # 본문 문단·대화는 평문으로 정제해 내보낸다(신규는 무영향, 옛 마크다운 데이터도 깨끗히, 이슈2).
+        paragraphs=[
+            CollabParagraphView(seq=p.seq, body=sanitize_body(p.body), source=p.source)
+            for p in paragraphs
+        ],
+        turns=[
+            CollabTurnView(
+                role=t.role, kind=t.kind, content=sanitize_reply(t.content), created_at=t.created_at
+            )
+            for t in turns
+        ],
         chapter_complete=len(paragraphs) >= COLLAB_TARGET_PARAGRAPHS,
     )
 
@@ -206,7 +217,7 @@ def _resync_chapter(store: Store, book_id: str, chapter, bible: dict) -> str:
     """문단 변경(생성/교체/순서변경) 후 chapters.body·낱말·검수상태를 재동기화."""
     full = _rebuild_body(store, chapter.id)
     grade = _student_grade(store, book_id)
-    names = [c.get("name", "") for c in bible.get("characters", []) if c.get("name")]
+    names = writer.proper_nouns(bible)
     store.update_chapter(
         chapter.id, body=full, char_count=len(full),
         words=writer.select_words(full, grade, names), review_status="pending",
@@ -295,7 +306,7 @@ async def edit_paragraph(
     verdict = await chat.assess_edit(
         gemini, bible, prev_body, next_body, clean, event.get("objective")
     )
-    suggestion = verdict.get("suggestion") if verdict.get("weird") else None
+    suggestion = sanitize_reply(verdict.get("suggestion")) if verdict.get("weird") else None
     if suggestion:
         store.add_writing_turn(chapter.id, book_id, "writer", "coaching", suggestion)
     return ParagraphEditResult(paragraph=CollabParagraph(seq=seq, body=clean), suggestion=suggestion)

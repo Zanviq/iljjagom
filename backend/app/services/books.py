@@ -170,9 +170,13 @@ def get_book_detail(store: Store, user: CurrentUser, book_id: str) -> BookDetail
 
 # --- 학생 데이터 열람 (선생님/03, 책 접근자) ---
 def _chapter_content(c) -> ChapterContent:
+    # 본문은 평문으로 정제해 내보낸다(신규 무영향, 옛 마크다운 데이터도 깨끗히, 이슈2).
+    from app.ai.sanitize import sanitize_body
+
+    body = sanitize_body(c.body)
     return ChapterContent(
-        idx=c.idx, mode=c.mode, review_status=c.review_status, body=c.body,
-        char_count=c.char_count, words=c.words,
+        idx=c.idx, mode=c.mode, review_status=c.review_status, body=body,
+        char_count=len(body), words=c.words,
         illustration_url=c.illustration_path, updated_at=c.created_at,
     )
 

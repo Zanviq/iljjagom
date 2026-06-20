@@ -104,6 +104,26 @@ def _has_korean(s: str) -> bool:
     return any("가" <= ch <= "힣" for ch in s)
 
 
+def proper_nouns(bible: dict[str, Any]) -> list[str]:
+    """작품 고유명사 — 낱말 후보에서 제외(인물명 + 제목 토큰, 이슈1).
+
+    제목의 지명/고유명("초록산" 등)이 일반어로 잘못 풀이되지 않게 후보에서 뺀다.
+    """
+    out: list[str] = []
+    for c in bible.get("characters", []) or []:
+        if isinstance(c, dict):
+            n = (c.get("name") or "").strip()
+            if n:
+                out.append(n)
+    title = bible.get("title")
+    if isinstance(title, str):
+        for w in title.split():
+            w = w.strip()
+            if len(w) >= 2:
+                out.append(w)
+    return out
+
+
 def select_words(
     text: str, grade: int | None = None, exclude: list[str] | None = None
 ) -> list[str]:

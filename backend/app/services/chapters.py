@@ -92,8 +92,8 @@ def _student_grade(store: Store, book_id: str) -> int | None:
 
 
 def _character_names(bible: dict) -> list[str]:
-    """작품 고유명사(인물명) — 낱말 후보에서 제외(학생/05)."""
-    return [c.get("name", "") for c in bible.get("characters", []) if c.get("name")]
+    """작품 고유명사(인물명 + 제목 토큰) — 낱말 후보에서 제외(학생/05, 이슈1)."""
+    return writer.proper_nouns(bible)
 
 
 def _record_complete(store: Store, book_id: str, total: int | None) -> None:
@@ -242,7 +242,8 @@ async def _produce(
         running = 0
         is_final = bool(total and idx == total)
         if served_stored:
-            body = chapter.body
+            # 저장본을 정제해 흘린다(신규는 무영향, 옛 마크다운 데이터도 평문으로, 이슈2).
+            body = sanitize_body(chapter.body)
             running = await _emit_text(queue, body, running, from_offset)
             words = chapter.words
         else:

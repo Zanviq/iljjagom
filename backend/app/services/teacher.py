@@ -30,7 +30,11 @@ from app.store.records import BookRecord, PromptRecord
 
 # 학급 설정 허용 키(시크릿/모델 무단설정 차단) + 전역 기본값.
 _ALLOWED_SETTING_KEYS = {"safetyLevel", "featureToggles", "boardAutoPublish"}
-_SETTINGS_DEFAULTS = {"safetyLevel": "standard", "featureToggles": {}, "boardAutoPublish": False}
+# featureToggles 에 제어 가능한 기능 토글을 기본값과 함께 노출(프론트가 키로 토글 렌더, 이슈3).
+_SETTINGS_DEFAULTS = {
+    "safetyLevel": "standard",
+    "featureToggles": {"boardAutoPublish": False},
+}
 
 
 def compute_class_metrics(
@@ -288,8 +292,11 @@ def put_class_settings(
             raise validation_error("안전강도 값이 올바르지 않아요.", {"field": "safetyLevel"})
         clean[k] = v
     # 게시판 자동공개는 classrooms 컬럼과 동기(board.py 가 읽는 권위 소스).
-    if "boardAutoPublish" in clean:
-        store.update_classroom(class_id, board_auto_publish=bool(clean["boardAutoPublish"]))
+    # 프론트는 featureToggles.boardAutoPublish 로 보내고, 구버전 top-level 도 허용.
+    ft = clean.get("featureToggles") if isinstance(clean.get("featureToggles"), dict) else {}
+    bap = ft.get("boardAutoPublish", clean.get("boardAutoPublish"))
+    if bap is not None:
+        store.update_classroom(class_id, board_auto_publish=bool(bap))
     cs = store.upsert_class_settings(class_id, clean, user.id)
     return ClassSettingsResponse(value=cs.value, defaults=dict(_SETTINGS_DEFAULTS))
 

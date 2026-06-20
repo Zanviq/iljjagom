@@ -31,6 +31,21 @@ def test_select_words_excludes_proper_nouns():
     assert "초록산" not in words and "별이" not in words
 
 
+def test_proper_nouns_includes_title_tokens():
+    from app.ai.writer import proper_nouns
+
+    pn = proper_nouns({"title": "우당탕탕 초록산 대작전", "characters": [{"name": "별이"}]})
+    assert "초록산" in pn and "별이" in pn and "대작전" in pn
+
+
+def test_select_words_excludes_title_proper_noun():
+    from app.ai.writer import proper_nouns
+
+    bible = {"title": "우당탕탕 초록산 대작전", "characters": [{"name": "별이"}]}
+    words = select_words(TEXT, exclude=proper_nouns(bible))
+    assert "초록산" not in words  # 제목 속 지명은 낱말 후보에서 제외(이슈1)
+
+
 def test_select_words_grade_band():
     text = "보물 계곡 모험 우정 약속 신비한 아름다운"
     g6 = select_words(text, grade=6)
