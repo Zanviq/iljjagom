@@ -68,6 +68,32 @@ def _envelope(code: str, message: str, detail: dict[str, Any]) -> dict[str, Any]
     return {"error": {"code": code, "message": message, "detail": detail}}
 
 
+def _cors_headers(request: Request) -> dict[str, str]:
+    """catch-all 500 응답용 CORS 헤더 보강.
+
+    Starlette 의 catch-all Exception 핸들러는 ServerErrorMiddleware(최외곽)에서 실행돼
+    CORSMiddleware 를 거치지 않는다 → 500 응답에 CORS 헤더가 빠져 브라우저가 불투명한
+    network/CORS 오류를 받는다(프론트가 에러 envelope 파싱 불가). 여기서 직접 보강한다.
+    (ApiError/HTTPException/validation 응답은 CORSMiddleware 가 처리하므로 건드리지 않는다.)
+    """
+    origin = request.headers.get("origin")
+    if not origin:
+        return {}
+    try:
+        from app.config import get_settings
+
+        allowed = get_settings().origins
+    except Exception:
+        allowed = []
+    if origin in allowed or "*" in allowed:
+        return {
+            "Access-Control-Allow-Origin": origin,
+            "Access-Control-Allow-Credentials": "true",
+            "Vary": "Origin",
+        }
+    return {}
+
+
 def register_exception_handlers(app: FastAPI) -> None:
     @app.exception_handler(ApiError)
     async def _api_error(_: Request, exc: ApiError) -> JSONResponse:
@@ -93,8 +119,9 @@ def register_exception_handlers(app: FastAPI) -> None:
         )
 
     @app.exception_handler(Exception)
-    async def _unhandled(_: Request, exc: Exception) -> JSONResponse:
+    async def _unhandled(request: Request, exc: Exception) -> JSONResponse:
         return JSONResponse(
             status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
             content=_envelope("internal_error", "서버 오류가 발생했습니다.", {}),
+            headers=_cors_headers(request),  # 500 은 CORS 미들웨어를 못 거치므로 직접 보강
         )

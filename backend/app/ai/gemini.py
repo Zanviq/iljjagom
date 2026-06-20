@@ -14,6 +14,7 @@ from collections.abc import AsyncIterator, Callable
 from typing import TypeVar
 
 from app.config import Settings, get_settings
+from app.errors import ai_unavailable
 
 logger = logging.getLogger("app.ai.gemini")
 
@@ -118,7 +119,11 @@ class GeminiClient:
             )
             return resp.text or ""
 
-        return await asyncio.to_thread(lambda: _retry_call(_call))
+        try:
+            return await asyncio.to_thread(lambda: _retry_call(_call))
+        except Exception as e:  # 제공자 오류 → 깔끔한 503(ai_unavailable). 500 raw 방지(CORS 포함).
+            logger.warning("gemini generate_text 실패: %s", e)
+            raise ai_unavailable() from e
 
     async def stream_text(self, model: str, prompt: str) -> AsyncIterator[str]:
         """토큰(조각) 단위 비동기 스트림. mock 은 호출자가 조립한다(여기선 단일 반환)."""
@@ -134,11 +139,15 @@ class GeminiClient:
                 model=model, contents=prompt, config=config
             )
 
-        stream = await asyncio.to_thread(lambda: _retry_call(_iter))
-        for chunk in stream:
-            text = getattr(chunk, "text", None)
-            if text:
-                yield text
+        try:
+            stream = await asyncio.to_thread(lambda: _retry_call(_iter))
+            for chunk in stream:
+                text = getattr(chunk, "text", None)
+                if text:
+                    yield text
+        except Exception as e:  # 스트림 제공자 오류 → 503(호출부가 폴백/재시도 에러로 처리)
+            logger.warning("gemini stream_text 실패: %s", e)
+            raise ai_unavailable() from e
 
     async def generate_image(self, prompt: str) -> bytes | None:
         """Imagen 4 로 이미지 1장 생성 → PNG bytes. mock/실패 시 None(호출자가 폴백)."""
@@ -185,7 +194,11 @@ class GeminiClient:
             )
             return list(resp.embeddings[0].values)
 
-        return await asyncio.to_thread(lambda: _retry_call(_call))
+        try:
+            return await asyncio.to_thread(lambda: _retry_call(_call))
+        except Exception as e:  # 임베딩 제공자 오류 → 503
+            logger.warning("gemini embed 실패: %s", e)
+            raise ai_unavailable() from e
 
 
 _client: GeminiClient | None = None
