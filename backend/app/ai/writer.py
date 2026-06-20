@@ -13,6 +13,13 @@ from app.ai.brief import bible_brief
 from app.ai.gemini import GeminiClient
 
 
+def fallback_chapter(
+    bible: dict[str, Any], event: dict[str, Any], is_final: bool = False
+) -> str:
+    """생성 실패/스톨 시 쓰는 결정적 본문(이슈a). 완독이 막히지 않도록 마지막 장도 매듭짓는다."""
+    return _mock_chapter_text(bible, event, is_final)
+
+
 def build_prompt(
     bible: dict[str, Any], event: dict[str, Any], rag_context: str, is_final: bool = False
 ) -> str:

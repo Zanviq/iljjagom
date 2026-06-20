@@ -24,6 +24,7 @@ HEARTBEAT_SECS = 15.0
 # 생성 타임아웃(C2): 첫 토큰까지 / 토큰 사이 최대 간격.
 FIRST_TOKEN_TIMEOUT = 25.0
 TOKEN_GAP_TIMEOUT = 60.0
+PREFETCH_TIMEOUT = 90.0  # 선생성 전체 상한(스톨 시 폴백 본문 저장, 이슈a)
 
 
 def _sse(event: str, data: dict) -> str:
@@ -107,6 +108,15 @@ def _record_complete(store: Store, book_id: str, total: int | None) -> None:
             )
     except Exception:
         pass
+
+
+async def _collect_chapter(
+    gemini: GeminiClient, bible: dict, event: dict, context: str, is_final: bool
+) -> str:
+    """선생성용: 스트림을 끝까지 모아 한 문자열로(타임아웃은 호출부에서 감쌈, 이슈a)."""
+    return "".join(
+        [c async for c in writer.stream_chapter(gemini, bible, event, context, is_final)]
+    )
 
 
 async def _stream_body(
@@ -440,13 +450,18 @@ async def prefetch_chapter(
                 store.update_chapter(chapter.id, illustration_path=url)
         is_final = bool(total and idx == total)
         context = await rag.retrieve_context(store, gemini, book_id, event.get("summary", ""), k=5)
-        raw = "".join(
-            [c async for c in writer.stream_chapter(gemini, bible, event, context, is_final)]
-        )
-        body = sanitize_body(raw)  # 스트림 경로와 동일 정제(학생/08)
+        # 생성 스톨/지연 방지: 전체 생성을 타임아웃으로 감싸고, 비거나 실패하면 결정적 폴백으로
+        # 반드시 본문을 저장한다(특히 마지막 결말 장이 완독을 막지 않게, 이슈a).
+        try:
+            raw = await asyncio.wait_for(
+                _collect_chapter(gemini, bible, event, context, is_final),
+                timeout=PREFETCH_TIMEOUT,
+            )
+            body = sanitize_body(raw)
+        except Exception:
+            body = ""
         if not body:
-            trace.end(status="error", error="empty_prefetch")
-            return
+            body = sanitize_body(writer.fallback_chapter(bible, event, is_final))
         words = writer.select_words(body, _student_grade(store, book_id), _character_names(bible))
         store.update_chapter(
             chapter.id, body=body, char_count=len(body), words=words,

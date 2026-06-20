@@ -22,9 +22,12 @@ async def _designed_book(client, email="kid_co@test"):
     return sh, book_id
 
 
-async def _collab(client, sh, book_id, idx, message, accept=False):
-    r = await client.post(f"/books/{book_id}/chapters/{idx}/collab", headers=sh,
-                          json={"message": message, "accept": accept})
+async def _collab(client, sh, book_id, idx, message, accept=None):
+    # 일반 메시지는 accept 를 보내지 않는다(None=흐름 점검). 버튼만 true/false.
+    body = {"message": message}
+    if accept is not None:
+        body["accept"] = accept
+    r = await client.post(f"/books/{book_id}/chapters/{idx}/collab", headers=sh, json=body)
     return r
 
 
@@ -52,6 +55,17 @@ async def test_offtopic_gets_coaching_then_accept_generates(client):
     # 제안 수용 → 생성.
     acc = (await _collab(client, sh, book_id, 1, "그래 토끼는 계속 걸었어", accept=True)).json()
     assert acc["kind"] == "paragraph"
+
+
+async def test_insist_keep_generates_not_recoaches(client):
+    """'이대로 갈래요'(accept=false, 의도 고수)는 재코칭이 아니라 생성한다(아동 주도성, 이슈b)."""
+    sh, book_id = await _designed_book(client, email="kid_co_keep@test")
+    await _collab(client, sh, book_id, 1, "토끼가 숲으로 갔어")          # para1
+    coach = (await _collab(client, sh, book_id, 1, "갑자기 우주선이 나타났어")).json()
+    assert coach["kind"] == "coaching"
+    # 고수(accept=false) → 학생 의도대로 생성(코칭 반복 아님).
+    keep = (await _collab(client, sh, book_id, 1, "갑자기 우주선이 나타났어", accept=False)).json()
+    assert keep["kind"] == "paragraph"
 
 
 async def test_state_restores_paragraphs_and_turns(client):
@@ -136,6 +150,27 @@ async def test_reorder_rejects_bad_order(client):
     r = await client.post(f"/books/{book_id}/chapters/1/paragraphs/reorder", headers=sh,
                           json={"order": [1, 2, 3]})  # 존재하지 않는 seq
     assert r.status_code == 409
+
+
+async def test_final_chapter_prefetch_falls_back_when_empty(client, monkeypatch):
+    """결말 장 생성이 비어/스톨이어도 폴백 본문으로 저장돼 완독이 막히지 않는다(이슈a)."""
+    from app.ai import writer
+    from app.ai.gemini import get_gemini
+    from app.services import chapters
+
+    sh, book_id = await _designed_book(client, email="kid_co_fin@test")
+    store = get_store()
+    last = store.get_bible(book_id).data["totalChaptersPlanned"]  # 마지막 guided 장
+
+    async def _empty_stream(*_a, **_k):  # 생성 빈 스트림(스톨/실패 모사)
+        return
+        yield  # pragma: no cover
+
+    monkeypatch.setattr(writer, "stream_chapter", _empty_stream)
+    await chapters.prefetch_chapter(store, get_gemini(), book_id, last)
+
+    ch = store.get_chapter(book_id, last)
+    assert ch and ch.char_count > 0  # 폴백으로라도 본문이 저장됨(완독 차단 방지)
 
 
 async def test_collab_uses_skills_and_traces(client):

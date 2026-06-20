@@ -67,7 +67,7 @@ def _require_free_chapter(store: Store, book_id: str, idx: int):
 
 async def collab_turn(
     store: Store, gemini: GeminiClient, user: CurrentUser, book_id: str, idx: int,
-    message: str, accept: bool,
+    message: str, accept: bool | None,
 ) -> CollabReply:
     book = get_book_or_404(store, book_id)
     assert_owner_student(user, book)
@@ -91,15 +91,17 @@ async def collab_turn(
     trace = Trace(store, gemini, gemini.settings, "writer", book_id, gemini.settings.gemini_model_flash)
 
     # 2.5) 대화 수정 의도("N번째 문단 고쳐줘") → 새 문단 append 가 아니라 대상 문단 교체(§02).
-    if not accept:
+    # accept 가 None(일반 메시지)일 때만. 버튼 응답(true/false)은 직전 의도 재전송이라 생성으로.
+    if accept is None:
         target = chat.detect_edit_target(message, len(paragraphs))
         if target is not None:
             return await _revise_paragraph_turn(
                 store, gemini, book_id, chapter, event, paragraphs, target, message, trace
             )
 
-    # 3) 흐름/주제 점검(accept 면 제안 수용 → 바로 생성). assess_flow 스킬.
-    if not accept:
+    # 3) 흐름/주제 점검은 일반 메시지(accept=None)만. "제안대로"(true)·"이대로 갈래요"(false)는
+    #    모두 흐름 점검 없이 바로 생성한다 — false=학생 의도 고수(아동 주도성, 05 §2.1 규칙3).
+    if accept is None:
         decision = await _skill(
             trace, "assess_flow",
             {"book_id": book_id, "chapter_idx": idx, "intent": message}, "의도 점검",

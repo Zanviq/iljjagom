@@ -334,8 +334,9 @@ class ReviseResponse(CamelModel):
 # --- 자유집필 협업(P2, 학생/15 §2) ---
 class CollabRequest(CamelModel):
     message: str = Field(min_length=1, max_length=2000)
-    # 직전 AI 지도(coaching) 제안을 받아들였는지. true 면 제안대로 생성.
-    accept: bool = False
+    # 직전 AI 지도(coaching) 응답. None=일반 메시지(흐름 점검) · true="제안대로"(대안 생성)
+    # · false="이대로 갈래요"(학생 의도 고수 → 그대로 생성, 아동 주도성). (05 §2.1 규칙3)
+    accept: bool | None = None
 
 
 class CollabParagraph(CamelModel):
