@@ -10,6 +10,7 @@ import { Icon } from "@/components/ui/Icon";
 import {
   ApiError,
   getBible,
+  getBookLetters,
   getChaptersContent,
   getLearningResults,
   getPlanMessages,
@@ -18,16 +19,18 @@ import { getClientAccessToken } from "@/lib/auth/client";
 import type {
   ChapterContent,
   LearningResult,
+  Letter,
   PlanMessage,
 } from "@/lib/types";
 
-type TabKey = "body" | "plan" | "bible" | "learning";
+type TabKey = "body" | "plan" | "bible" | "learning" | "letter";
 
 const TABS: { key: TabKey; label: string; icon: string }[] = [
   { key: "body", label: "본문", icon: "book-open" },
   { key: "plan", label: "기획 대화", icon: "messages-square" },
   { key: "bible", label: "설계", icon: "scroll-text" },
   { key: "learning", label: "학습 결과", icon: "graduation-cap" },
+  { key: "letter", label: "편지", icon: "mail" },
 ];
 
 /** 교사용 학생 작업 열람(04 기능개선 교사/03). 읽기 전용 탭. 미구현 시 graceful. */
@@ -37,6 +40,7 @@ export function StudentWorkViewer({ bookId }: { bookId: string }) {
   const [plan, setPlan] = useState<PlanMessage[] | null>(null);
   const [bible, setBible] = useState<Record<string, unknown> | null>(null);
   const [learning, setLearning] = useState<LearningResult[] | null>(null);
+  const [letters, setLetters] = useState<Letter[] | null>(null);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
@@ -46,7 +50,8 @@ export function StudentWorkViewer({ bookId }: { bookId: string }) {
       (tab === "body" && chapters) ||
       (tab === "plan" && plan) ||
       (tab === "bible" && bible) ||
-      (tab === "learning" && learning);
+      (tab === "learning" && learning) ||
+      (tab === "letter" && letters);
     if (loaded) return;
     (async () => {
       try {
@@ -63,9 +68,12 @@ export function StudentWorkViewer({ bookId }: { bookId: string }) {
         } else if (tab === "bible") {
           const { bible: b } = await getBible(token, bookId);
           if (active) setBible(b);
-        } else {
+        } else if (tab === "learning") {
           const { results } = await getLearningResults(token, bookId);
           if (active) setLearning(results);
+        } else {
+          const { letters: ls } = await getBookLetters(token, bookId);
+          if (active) setLetters(ls);
         }
       } catch (e) {
         if (active)
@@ -81,7 +89,7 @@ export function StudentWorkViewer({ bookId }: { bookId: string }) {
     return () => {
       active = false;
     };
-  }, [tab, bookId, chapters, plan, bible, learning]);
+  }, [tab, bookId, chapters, plan, bible, learning, letters]);
 
   return (
     <div>
@@ -123,9 +131,64 @@ export function StudentWorkViewer({ bookId }: { bookId: string }) {
         <PlanView messages={plan ?? []} />
       ) : tab === "bible" ? (
         <BibleView bible={bible ?? {}} />
-      ) : (
+      ) : tab === "learning" ? (
         <LearningView results={learning ?? []} />
+      ) : (
+        <LetterView letters={letters ?? []} />
       )}
+    </div>
+  );
+}
+
+function LetterView({ letters }: { letters: Letter[] }) {
+  if (letters.length === 0) {
+    return (
+      <EmptyState icon="mail" title="주고받은 편지가 없어요">
+        학생이 이야기 속 인물에게 편지를 쓰면 여기에 보여요.
+      </EmptyState>
+    );
+  }
+  const STATUS: Record<string, { label: string; tone: "neutral" | "primary" | "success" | "danger" }> = {
+    pending: { label: "확인 전", tone: "neutral" },
+    answered: { label: "답장 받음", tone: "success" },
+    held: { label: "확인 보류", tone: "danger" },
+    approved: { label: "승인됨", tone: "success" },
+    rejected: { label: "반려됨", tone: "danger" },
+  };
+  return (
+    <div className="flex flex-col gap-4">
+      {letters.map((l) => {
+        const st = STATUS[l.status] ?? { label: l.status, tone: "neutral" as const };
+        return (
+          <Card key={l.id} padding="lg">
+            <div className="mb-2.5 flex items-center justify-between gap-2">
+              <Badge tone="accent">{l.recipient}에게</Badge>
+              <Badge tone={st.tone} dot>
+                {st.label}
+              </Badge>
+            </div>
+            <p
+              className="whitespace-pre-wrap"
+              style={{ fontSize: "var(--text-md)", lineHeight: "var(--leading-normal)", color: "var(--text-1)" }}
+            >
+              {l.body}
+            </p>
+            {l.reply && (
+              <div className="mt-3 rounded-[var(--radius-input)] bg-surface-inset p-3">
+                <p className="ijg-eyebrow mb-1.5" style={{ color: "var(--accent-text)" }}>
+                  {l.recipient}의 답장
+                </p>
+                <p
+                  className="whitespace-pre-wrap text-[length:var(--text-sm)]"
+                  style={{ color: "var(--text-2)" }}
+                >
+                  {l.reply}
+                </p>
+              </div>
+            )}
+          </Card>
+        );
+      })}
     </div>
   );
 }

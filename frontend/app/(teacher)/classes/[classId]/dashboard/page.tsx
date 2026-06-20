@@ -1,6 +1,7 @@
 import Link from "next/link";
 import { notFound } from "next/navigation";
 
+import { DashboardRange } from "@/components/teacher/DashboardRange";
 import { DashboardTrend } from "@/components/teacher/DashboardTrend";
 import { TeacherHeader } from "@/components/teacher/TeacherHeader";
 import { Avatar } from "@/components/ui/Avatar";
@@ -26,15 +27,18 @@ const STATUS_TONE: Record<BookStatus, "neutral" | "primary" | "success"> = {
 
 export default async function DashboardPage({
   params,
+  searchParams,
 }: {
   params: Promise<{ classId: string }>;
+  searchParams: Promise<{ from?: string; to?: string }>;
 }) {
   const { classId } = await params;
+  const { from, to } = await searchParams;
   const token = await getAccessToken();
 
   const [{ classes }, dashboard] = await Promise.all([
     getClasses(token),
-    getDashboard(token, classId).catch((e) => {
+    getDashboard(token, classId, { from, to }).catch((e) => {
       if (e instanceof ApiError && (e.status === 404 || e.status === 403)) {
         notFound();
       }
@@ -56,6 +60,8 @@ export default async function DashboardPage({
         title={`대시보드${klass ? ` · ${klass.name}` : ""}`}
         sub="학급의 진척과 완독률을 한눈에 봐요."
       />
+
+      <DashboardRange from={from} to={to} />
 
       <div className="mb-3.5 grid grid-cols-2 gap-3.5 sm:grid-cols-4">
         <StatCard label="학생" value={summary.studentCount} unit="명" icon="users" />

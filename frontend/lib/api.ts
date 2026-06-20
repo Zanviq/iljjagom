@@ -53,6 +53,7 @@ import type {
   Prompt,
   PromptSubmissionsResponse,
   StudentBooksResponse,
+  BookTimeline,
   UserOverview,
   SafetyFlag,
   SafetyFlagDetail,
@@ -390,8 +391,16 @@ export function getDashboardHistory(
 export function getDashboard(
   token: string | null,
   classId: string,
+  range?: { from?: string; to?: string },
 ): Promise<Dashboard> {
-  return apiFetch<Dashboard>(`/classes/${classId}/dashboard`, { token });
+  const params = new URLSearchParams();
+  if (range?.from) params.set("from", range.from);
+  if (range?.to) params.set("to", range.to);
+  const qs = params.toString();
+  return apiFetch<Dashboard>(
+    `/classes/${classId}/dashboard${qs ? `?${qs}` : ""}`,
+    { token },
+  );
 }
 
 /** 학습 활동 (FR-S8~S12). 책 접근 가능자. */
@@ -767,6 +776,14 @@ export function getUserOverview(
   userId: string,
 ): Promise<UserOverview> {
   return apiFetch<UserOverview>(`/admin/users/${userId}/overview`, { token });
+}
+
+/** 책 단계별 통합 타임라인(04 기능개선 관리자/01). */
+export function getBookTimeline(
+  token: string | null,
+  bookId: string,
+): Promise<BookTimeline> {
+  return apiFetch<BookTimeline>(`/admin/books/${bookId}/timeline`, { token });
 }
 
 export function getAdminMessages(

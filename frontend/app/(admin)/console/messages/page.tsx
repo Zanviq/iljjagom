@@ -155,15 +155,21 @@ async function UserDrilldown({
         ) : (
           <div className="grid gap-3 [grid-template-columns:repeat(auto-fill,minmax(240px,1fr))]">
             {ov.books.map((b) => (
-              <Card key={b.id} padding="md">
-                <p className="font-bold text-ink">{b.title || "제목 없음"}</p>
-                <p className="mt-1 text-ink-3" style={{ fontFamily: "var(--font-mono)", fontSize: 11.5 }}>
-                  세션 {b.sessionCount} · 대화 {b.messageCount}
-                </p>
-                <Badge tone="neutral" className="mt-2">
-                  {b.status}
-                </Badge>
-              </Card>
+              <Link
+                key={b.id}
+                href={`/console/books/${b.id}`}
+                className="block rounded-[var(--radius-card)] transition hover:-translate-y-0.5 hover:brightness-105"
+              >
+                <Card padding="md">
+                  <p className="font-bold text-ink">{b.title || "제목 없음"}</p>
+                  <p className="mt-1 text-ink-3" style={{ fontFamily: "var(--font-mono)", fontSize: 11.5 }}>
+                    세션 {b.sessionCount} · 대화 {b.messageCount}
+                  </p>
+                  <Badge tone="neutral" className="mt-2">
+                    {b.status}
+                  </Badge>
+                </Card>
+              </Link>
             ))}
           </div>
         )}

@@ -5,7 +5,9 @@ import { redirect } from "next/navigation";
 
 import { ApiError, createPrompt } from "@/lib/api";
 import { getAccessToken } from "@/lib/auth/server";
-import type { AssessmentType } from "@/lib/types";
+import type { AssessmentType, CreatePromptRequest, SafetyLevel } from "@/lib/types";
+
+const SAFETY_LEVELS: SafetyLevel[] = ["relaxed", "standard", "strict"];
 
 export interface PromptFormState {
   error?: string;
@@ -44,6 +46,23 @@ export async function createPromptAction(
     return { error: "학습 목표를 하나 이상 입력해 주세요." };
   }
 
+  // 고급 옵션(선택) — 비면 미동봉. 잘못된 값은 무시(백엔드 기본값 적용).
+  const advanced: Partial<CreatePromptRequest> = {};
+  const gradeBand = Number(formData.get("gradeBand"));
+  if (Number.isInteger(gradeBand) && gradeBand >= 1 && gradeBand <= 6) {
+    advanced.gradeBand = gradeBand;
+  }
+  const chaptersPlanned = Number(formData.get("chaptersPlanned"));
+  if (Number.isInteger(chaptersPlanned) && chaptersPlanned >= 2 && chaptersPlanned <= 12) {
+    advanced.chaptersPlanned = chaptersPlanned;
+  }
+  const dueAt = String(formData.get("dueAt") ?? "").trim();
+  if (dueAt) advanced.dueAt = dueAt;
+  const safetyRaw = String(formData.get("safetyLevel") ?? "");
+  if (SAFETY_LEVELS.includes(safetyRaw as SafetyLevel)) {
+    advanced.safetyLevel = safetyRaw as SafetyLevel;
+  }
+
   const token = await getAccessToken();
   if (!token) redirect("/login");
 
@@ -54,6 +73,7 @@ export async function createPromptAction(
       learningObjectives,
       assessment: { type: assessmentType, detail: assessmentDetail },
       language,
+      ...advanced,
     });
     createdId = prompt.id;
   } catch (e) {

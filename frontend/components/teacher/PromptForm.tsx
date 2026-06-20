@@ -29,6 +29,23 @@ const LANGUAGE_OPTIONS = [
   { value: "en", label: "English" },
 ];
 
+const GRADE_OPTIONS = [
+  { value: "", label: "선택 안 함" },
+  ...[1, 2, 3, 4, 5, 6].map((g) => ({ value: String(g), label: `${g}학년` })),
+];
+
+const CHAPTERS_OPTIONS = [
+  { value: "", label: "자동" },
+  ...[4, 6, 8, 10].map((n) => ({ value: String(n), label: `${n}장` })),
+];
+
+const SAFETY_OPTIONS = [
+  { value: "", label: "학급 기본값" },
+  { value: "relaxed", label: "느슨하게" },
+  { value: "standard", label: "표준" },
+  { value: "strict", label: "엄격하게" },
+];
+
 export function PromptForm({ classId }: { classId: string }) {
   const router = useRouter();
   const [state, formAction] = useActionState(createPromptAction, initial);
@@ -139,6 +156,30 @@ function PromptFields() {
           <Input name="assessmentDetail" placeholder="예) 5문항 객관식" />
         </Field>
       )}
+
+      <details className="rounded-[var(--radius-input)] border border-line bg-surface-2 px-4 py-3">
+        <summary className="cursor-pointer text-[length:var(--text-sm)] font-bold text-ink-2">
+          상세 설정 (선택)
+        </summary>
+        <div className="mt-3.5 flex flex-col gap-[18px]">
+          <div className="grid gap-3.5 sm:grid-cols-2">
+            <Field label="대상 학년">
+              <Select name="gradeBand" defaultValue="" options={GRADE_OPTIONS} />
+            </Field>
+            <Field label="이야기 길이">
+              <Select name="chaptersPlanned" defaultValue="" options={CHAPTERS_OPTIONS} />
+            </Field>
+          </div>
+          <div className="grid gap-3.5 sm:grid-cols-2">
+            <Field label="마감일">
+              <Input name="dueAt" type="date" />
+            </Field>
+            <Field label="안전 강도">
+              <Select name="safetyLevel" defaultValue="" options={SAFETY_OPTIONS} />
+            </Field>
+          </div>
+        </div>
+      </details>
     </>
   );
 }
