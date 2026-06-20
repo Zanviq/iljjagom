@@ -226,6 +226,23 @@ export interface CollabReply {
   /** kind=paragraph 일 때 다음 진행 질문 */
   question?: string;
   chapterComplete: boolean;
+  /** 대화수정으로 교체된 문단 번호(추가 아님, 05-기능수정 §02) */
+  replacedSeq?: number;
+  /** 곰 작가의 대안 제안(있을 때만) */
+  suggestion?: string;
+  /** kind=error 안내 문구 */
+  message?: string;
+}
+
+/** PATCH .../paragraphs/{seq} 응답(직접편집) */
+export interface ParagraphEditResult {
+  paragraph: CollabParagraph;
+  suggestion?: string;
+}
+
+/** POST .../paragraphs/reorder 응답(순서변경) */
+export interface ParagraphReorderResult {
+  paragraphs: CollabStateParagraph[];
 }
 
 export interface CollabStateParagraph {

@@ -48,6 +48,8 @@ import type {
   MessagesByUser,
   NotificationCreate,
   OnboardingRequest,
+  ParagraphEditResult,
+  ParagraphReorderResult,
   PlanMessagesResponse,
   PlanReply,
   Prompt,
@@ -356,6 +358,33 @@ export function postCollab(
       method: "POST",
       body: accept === undefined ? { message } : { message, accept },
     },
+  );
+}
+
+/** 문단 직접편집(수정버튼) — 본문 교체. 과편집이면 suggestion 동봉(05-기능수정 §02). */
+export function patchParagraph(
+  token: string | null,
+  bookId: string,
+  chapterIdx: number,
+  seq: number,
+  body: string,
+): Promise<ParagraphEditResult> {
+  return apiFetch<ParagraphEditResult>(
+    `/books/${bookId}/chapters/${chapterIdx}/paragraphs/${seq}`,
+    { token, method: "PATCH", body: { body } },
+  );
+}
+
+/** 문단 순서변경(드래그) — order 는 새 순서(현재 seq 들의 순열). */
+export function reorderParagraphs(
+  token: string | null,
+  bookId: string,
+  chapterIdx: number,
+  order: number[],
+): Promise<ParagraphReorderResult> {
+  return apiFetch<ParagraphReorderResult>(
+    `/books/${bookId}/chapters/${chapterIdx}/paragraphs/reorder`,
+    { token, method: "POST", body: { order } },
   );
 }
 

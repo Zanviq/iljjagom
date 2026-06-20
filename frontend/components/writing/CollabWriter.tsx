@@ -9,10 +9,17 @@ import { ChatBubble } from "@/components/ui/ChatBubble";
 import { Chip } from "@/components/ui/Chip";
 import { EmptyState } from "@/components/ui/EmptyState";
 import { ErrorText } from "@/components/ui/ErrorText";
+import { Icon } from "@/components/ui/Icon";
 import { Loading } from "@/components/ui/Loading";
 import { Textarea } from "@/components/ui/Textarea";
 import { TypingIndicator } from "@/components/ui/TypingIndicator";
-import { ApiError, getCollab, postCollab } from "@/lib/api";
+import {
+  ApiError,
+  getCollab,
+  patchParagraph,
+  postCollab,
+  reorderParagraphs,
+} from "@/lib/api";
 import { getClientAccessToken } from "@/lib/auth/client";
 import type {
   CollabReply,
@@ -31,8 +38,9 @@ interface Coaching {
 }
 
 /**
- * CollabWriter — 자유집필(기·승) 2단 협업(04 기능개선 학생/15).
- * 좌: 학생↔AI가 한 문단씩 쌓는 본문. 우: 진행 질문·지도 대화 + 입력.
+ * CollabWriter — 자유집필(기·승) 2단 협업(학생/15 + 05-기능수정 §02).
+ * 좌: 문단을 '섹션 카드'로(좌상단 밖 번호·드래그 순서변경·수정버튼 직접편집).
+ * 우: 진행 질문·지도 대화 + 입력. 직접편집/대화수정/순서변경은 모두 AI에 동기화된다.
  * 협업 엔드포인트 미구현(404)이면 기존 독서 화면으로 폴백(현 동작 보존).
  */
 export function CollabWriter({
@@ -52,6 +60,13 @@ export function CollabWriter({
   const [input, setInput] = useState("");
   const [sending, setSending] = useState(false);
   const [error, setError] = useState<string | null>(null);
+
+  // 직접편집·순서변경 상태.
+  const [editingSeq, setEditingSeq] = useState<number | null>(null);
+  const [editText, setEditText] = useState("");
+  const [savingEdit, setSavingEdit] = useState(false);
+  const [flashSeq, setFlashSeq] = useState<number | null>(null);
+  const dragSeq = useRef<number | null>(null);
 
   const endRef = useRef<HTMLDivElement>(null);
   useEffect(() => {
@@ -89,42 +104,38 @@ export function CollabWriter({
     };
   }, [bookId, chapterIdx, router]);
 
+  function flash(seq: number) {
+    setFlashSeq(seq);
+    window.setTimeout(() => setFlashSeq((s) => (s === seq ? null : s)), 1300);
+  }
+
+  function pushWriterTurn(kind: CollabTurn["kind"], content: string) {
+    setTurns((t) => [...t, { role: "writer", kind, content, createdAt: "" }]);
+  }
+
   function applyReply(reply: CollabReply) {
     if (reply.kind === "paragraph" && reply.paragraph) {
-      setParagraphs((p) => [...p, { ...reply.paragraph!, source: "collab" }]);
-      setCoaching(null);
-      if (reply.question) {
-        setTurns((t) => [
-          ...t,
-          {
-            role: "writer",
-            kind: "question",
-            content: reply.question!,
-            createdAt: "",
-          },
-        ]);
+      const para = reply.paragraph;
+      if (reply.replacedSeq != null) {
+        // 대화수정: 새 문단 추가가 아니라 대상 문단 교체.
+        const target = reply.replacedSeq;
+        setParagraphs((ps) =>
+          ps.map((p) =>
+            p.seq === target ? { ...p, body: para.body, source: "revise" } : p,
+          ),
+        );
+        flash(target);
+      } else {
+        setParagraphs((p) => [...p, { ...para, source: "collab" }]);
       }
+      setCoaching(null);
+      if (reply.question) pushWriterTurn("question", reply.question);
+      if (reply.suggestion) pushWriterTurn("coaching", reply.suggestion);
     } else if (reply.kind === "coaching" && reply.coaching) {
       setCoaching({ ...reply.coaching, intent: lastIntentRef.current });
-      setTurns((t) => [
-        ...t,
-        {
-          role: "writer",
-          kind: "coaching",
-          content: reply.coaching!.text,
-          createdAt: "",
-        },
-      ]);
+      pushWriterTurn("coaching", reply.coaching.text);
     } else {
-      setTurns((t) => [
-        ...t,
-        {
-          role: "writer",
-          kind: "message",
-          content: "음, 무슨 이야기인지 한 번 더 말해 줄래?",
-          createdAt: "",
-        },
-      ]);
+      pushWriterTurn("message", "음, 무슨 이야기인지 한 번 더 말해 줄래?");
     }
     setChapterComplete(reply.chapterComplete);
   }
@@ -157,15 +168,73 @@ export function CollabWriter({
     }
   }
 
+  function startEdit(p: CollabStateParagraph) {
+    setEditingSeq(p.seq);
+    setEditText(p.body);
+  }
+
+  async function saveEdit(seq: number) {
+    const body = editText.trim();
+    if (!body || savingEdit) return;
+    setSavingEdit(true);
+    setError(null);
+    try {
+      const res = await patchParagraph(token, bookId, chapterIdx, seq, body);
+      setParagraphs((ps) =>
+        ps.map((p) =>
+          p.seq === seq
+            ? { ...p, body: res.paragraph.body, source: "revise" }
+            : p,
+        ),
+      );
+      setEditingSeq(null);
+      flash(seq);
+      if (res.suggestion) pushWriterTurn("coaching", res.suggestion);
+    } catch (e) {
+      setError(e instanceof ApiError ? e.message : "문단을 고치지 못했어요.");
+    } finally {
+      setSavingEdit(false);
+    }
+  }
+
+  /** fromSeq 문단을 toIndex 위치로 이동(드래그·키보드 공용). */
+  async function moveTo(fromSeq: number, toIndex: number) {
+    const cur = [...paragraphs];
+    const fromIndex = cur.findIndex((p) => p.seq === fromSeq);
+    if (
+      fromIndex < 0 ||
+      toIndex < 0 ||
+      toIndex >= cur.length ||
+      fromIndex === toIndex
+    )
+      return;
+    const [moved] = cur.splice(fromIndex, 1);
+    cur.splice(toIndex, 0, moved);
+    const order = cur.map((p) => p.seq); // 현재 seq 들의 새 순서
+    setParagraphs(cur.map((p, i) => ({ ...p, seq: i + 1 }))); // 낙관적
+    try {
+      const res = await reorderParagraphs(token, bookId, chapterIdx, order);
+      setParagraphs(res.paragraphs);
+    } catch {
+      try {
+        const state = await getCollab(token, bookId, chapterIdx);
+        setParagraphs(state.paragraphs);
+      } catch {
+        /* noop */
+      }
+      setError("순서를 바꾸지 못했어요.");
+    }
+  }
+
   if (loading) {
     return <Loading card>이야기를 준비하는 중이에요…</Loading>;
   }
 
   return (
     <div className="grid items-start gap-[22px] [grid-template-columns:1fr] md:[grid-template-columns:1.55fr_1fr]">
-      {/* 좌: 본문 누적 */}
-      <Card padding="lg" style={{ minHeight: 460 }}>
-        <p className="ijg-eyebrow mb-3" style={{ color: "var(--primary-text)" }}>
+      {/* 좌: 본문 누적(섹션 카드) */}
+      <Card padding="lg" style={{ minHeight: 460, overflow: "visible" }}>
+        <p className="ijg-eyebrow mb-4" style={{ color: "var(--primary-text)" }}>
           우리가 쓰는 이야기
         </p>
         {paragraphs.length === 0 ? (
@@ -173,21 +242,125 @@ export function CollabWriter({
             오른쪽에서 곰 작가와 한 문단씩 함께 써 봐요.
           </EmptyState>
         ) : (
-          <div className="flex flex-col gap-4">
-            {paragraphs.map((p) => (
-              <p
-                key={p.seq}
-                className="whitespace-pre-wrap"
-                style={{
-                  fontFamily: "var(--font-serif)",
-                  fontSize: "var(--text-lg)",
-                  lineHeight: "var(--leading-normal)",
-                  color: "var(--text-1)",
-                }}
-              >
-                {p.body}
-              </p>
-            ))}
+          <div className="flex flex-col gap-5 pl-3">
+            {paragraphs.map((p, i) => {
+              const editing = editingSeq === p.seq;
+              return (
+                <section
+                  key={p.seq}
+                  onDragOver={(e) => e.preventDefault()}
+                  onDrop={() => {
+                    if (dragSeq.current != null) void moveTo(dragSeq.current, i);
+                    dragSeq.current = null;
+                  }}
+                  className="relative rounded-[var(--radius-md)] border bg-surface p-4 transition-colors"
+                  style={{
+                    borderColor:
+                      flashSeq === p.seq ? "var(--primary)" : "var(--line)",
+                    boxShadow:
+                      flashSeq === p.seq ? "var(--elev-sm)" : undefined,
+                  }}
+                >
+                  {/* 번호 배지 — 카드 좌상단 바깥 */}
+                  <span
+                    aria-hidden
+                    className="absolute flex h-7 w-7 items-center justify-center rounded-full bg-primary text-[length:var(--text-sm)] font-extrabold text-on-primary"
+                    style={{ top: -12, left: -14, boxShadow: "var(--elev-sm)" }}
+                  >
+                    {i + 1}
+                  </span>
+
+                  {/* 도구: 드래그 핸들 · 순서 · 수정 */}
+                  {!editing && (
+                    <div className="mb-2 flex items-center justify-end gap-1">
+                      <span
+                        draggable
+                        onDragStart={() => {
+                          dragSeq.current = p.seq;
+                        }}
+                        onDragEnd={() => {
+                          dragSeq.current = null;
+                        }}
+                        role="button"
+                        aria-label="끌어서 순서 바꾸기"
+                        className="cursor-grab p-1 text-ink-3 active:cursor-grabbing"
+                      >
+                        <Icon name="grip-vertical" size={16} />
+                      </span>
+                      <Button
+                        variant="ghost"
+                        size="sm"
+                        icon="arrow-left"
+                        aria-label="위로"
+                        className="rotate-90"
+                        disabled={i === 0}
+                        onClick={() => void moveTo(p.seq, i - 1)}
+                      />
+                      <Button
+                        variant="ghost"
+                        size="sm"
+                        icon="arrow-right"
+                        aria-label="아래로"
+                        className="rotate-90"
+                        disabled={i === paragraphs.length - 1}
+                        onClick={() => void moveTo(p.seq, i + 1)}
+                      />
+                      <Button
+                        variant="ghost"
+                        size="sm"
+                        icon="pencil"
+                        aria-label="문단 수정"
+                        onClick={() => startEdit(p)}
+                      >
+                        수정
+                      </Button>
+                    </div>
+                  )}
+
+                  {editing ? (
+                    <div className="flex flex-col gap-2">
+                      <Textarea
+                        value={editText}
+                        onChange={(e) => setEditText(e.target.value)}
+                        autoGrow
+                        aria-label={`${i + 1}번 문단 수정`}
+                        disabled={savingEdit}
+                      />
+                      <div className="flex justify-end gap-2">
+                        <Button
+                          variant="ghost"
+                          size="sm"
+                          onClick={() => setEditingSeq(null)}
+                          disabled={savingEdit}
+                        >
+                          취소
+                        </Button>
+                        <Button
+                          size="sm"
+                          icon="save"
+                          onClick={() => void saveEdit(p.seq)}
+                          disabled={savingEdit || !editText.trim()}
+                        >
+                          저장
+                        </Button>
+                      </div>
+                    </div>
+                  ) : (
+                    <p
+                      className="whitespace-pre-wrap"
+                      style={{
+                        fontFamily: "var(--font-serif)",
+                        fontSize: "var(--text-lg)",
+                        lineHeight: "var(--leading-normal)",
+                        color: "var(--text-1)",
+                      }}
+                    >
+                      {p.body}
+                    </p>
+                  )}
+                </section>
+              );
+            })}
           </div>
         )}
       </Card>
@@ -288,7 +461,7 @@ export function CollabWriter({
               onChange={(e) => setInput(e.target.value)}
               onSubmit={() => void send(input)}
               autoGrow
-              placeholder="다음엔 어떤 일이 생길까?"
+              placeholder="다음엔 어떤 일이 생길까? (예: 두번째 문단을 더 재미있게 고쳐줘)"
               disabled={sending}
               aria-label="이야기 입력"
               className="flex-1"
