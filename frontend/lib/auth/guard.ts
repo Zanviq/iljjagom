@@ -1,5 +1,6 @@
 import "server-only";
 
+import { cache } from "react";
 import { redirect } from "next/navigation";
 
 import { getAccessToken } from "@/lib/auth/server";
@@ -21,8 +22,11 @@ export function roleHome(role: Role): string {
 /**
  * 현재 사용자(GET /me). 토큰이 없거나 인증 실패(401)면 null.
  * (네트워크/서버 오류는 그대로 던져 상위에서 오류 화면을 보이게 한다.)
+ *
+ * React `cache`로 요청 단위 디듀프 — layout 가드와 page가 모두 호출해도
+ * 백엔드 `/me`(JWKS 검증+프로필 조회)는 한 번만 왕복한다.
  */
-export async function getCurrentMe(): Promise<Me | null> {
+export const getCurrentMe = cache(async (): Promise<Me | null> => {
   const token = await getAccessToken();
   if (!token) return null;
   try {
@@ -31,7 +35,7 @@ export async function getCurrentMe(): Promise<Me | null> {
     if (e instanceof ApiError && e.status === 401) return null;
     throw e;
   }
-}
+});
 
 /** 로그인 후 가야 할 목적지(온보딩 필요 여부 + 역할). */
 export async function resolveDestinationFromToken(
