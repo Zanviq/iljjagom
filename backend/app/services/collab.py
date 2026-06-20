@@ -9,6 +9,7 @@ from app.ai import chat, rag, safety, writer
 from app.ai.gemini import GeminiClient
 from app.ai.safety import check_input
 from app.ai.sanitize import sanitize_body
+from app.ai.skills.base import run_skill
 from app.ai.trace import Trace
 from app.deps import CurrentUser
 from app.errors import conflict, not_found
@@ -31,6 +32,19 @@ from app.store.base import Store
 
 # 기·승 free 챕터가 이 문단 수에 도달하면 협업 완료(→ 중간활동/다음 단계 게이트).
 COLLAB_TARGET_PARAGRAPHS = 4
+
+
+async def _skill(trace: Trace, name: str, args: dict, thought: str) -> dict | None:
+    """협업 동작을 스킬로 실행해 ai_steps 에 적재하고 observation 반환(05-기능수정 §04).
+
+    trace 세션이 없거나 스킬 실패 시 None → 호출부가 직접 호출로 폴백(동작·LLM 호출 수 동일).
+    """
+    if trace.ctx is None:
+        return None
+    try:
+        return await run_skill(trace.ctx, name, args, thought)
+    except Exception:
+        return None
 
 
 def _event_for(store: Store, book_id: str, idx: int) -> dict | None:
@@ -84,14 +98,19 @@ async def collab_turn(
                 store, gemini, book_id, chapter, event, paragraphs, target, message, trace
             )
 
-    # 3) 흐름/주제 점검(accept 면 제안 수용 → 바로 생성).
+    # 3) 흐름/주제 점검(accept 면 제안 수용 → 바로 생성). assess_flow 스킬.
     if not accept:
-        decision = await chat.assess_flow(gemini, store.get_bible(book_id).data, prev_body, objective, message)
+        decision = await _skill(
+            trace, "assess_flow",
+            {"book_id": book_id, "chapter_idx": idx, "intent": message}, "의도 점검",
+        )
+        if decision is None:
+            decision = await chat.assess_flow(
+                gemini, store.get_bible(book_id).data, prev_body, objective, message
+            )
         if decision.get("action") == "coach":
             text = decision.get("suggestion") or chat._coach_text(decision.get("reasons", []), objective)
             store.add_writing_turn(chapter.id, book_id, "writer", "coaching", text)
-            trace.step("의도 점검(지도)", "assess_flow", {"intent": message[:80]},
-                       {"action": "coach", "reasons": decision.get("reasons", [])})
             trace.end(status="done", summary=f"{idx}장 협업 지도")
             return CollabReply(
                 kind="coaching",
@@ -99,12 +118,19 @@ async def collab_turn(
                 chapter_complete=False,
             )
 
-    # 4) 문단 생성.
+    # 4) 문단 생성(write_paragraph 스킬: rag + writer 를 ai_steps 에 적재).
     bible = store.get_bible(book_id).data
-    context = await rag.retrieve_context(store, gemini, book_id, message, k=5)
-    raw = await writer.write_paragraph(
-        gemini, bible, event, [p.body for p in paragraphs], message, context
+    gen = await _skill(
+        trace, "write_paragraph",
+        {"book_id": book_id, "chapter_idx": idx, "intent": message}, "문단 생성",
     )
+    if gen is not None:
+        raw = gen.get("paragraph", "")
+    else:
+        context = await rag.retrieve_context(store, gemini, book_id, message, k=5)
+        raw = await writer.write_paragraph(
+            gemini, bible, event, [p.body for p in paragraphs], message, context
+        )
     body = sanitize_body(raw)  # 본문 정제(학생/08)
     if not body:
         trace.end(status="error", error="empty_paragraph")
@@ -132,15 +158,20 @@ async def collab_turn(
     complete = seq >= COLLAB_TARGET_PARAGRAPHS
     question = None
     if not complete:
-        question = await chat.next_paragraph_question(
-            gemini, bible, [p.body for p in paragraphs] + [body], event
+        nq = await _skill(
+            trace, "next_question", {"book_id": book_id, "chapter_idx": idx}, "진행 질문",
+        )
+        question = (
+            (nq or {}).get("question")
+            if nq is not None
+            else await chat.next_paragraph_question(
+                gemini, bible, [p.body for p in paragraphs] + [body], event
+            )
         )
         store.add_writing_turn(chapter.id, book_id, "writer", "question", question)
     else:
         await rag.index_text(store, gemini, book_id, chapter.id, full)  # 완료 시 1회 인덱스
 
-    trace.step("문단 생성", "write_paragraph", {"seq": seq, "intent": message[:80]},
-               {"chars": len(body), "chapterComplete": complete})
     trace.end(status="done", summary=f"{idx}장 협업 {seq}문단")
     return CollabReply(
         kind="paragraph",
@@ -195,8 +226,16 @@ async def _revise_paragraph_turn(
         return CollabReply(kind="error", message="고칠 문단을 찾지 못했어. 몇 번째 문단인지 다시 알려줄래?")
 
     directive = await chat.interpret_revision(gemini, message)
-    context = await rag.retrieve_context(store, gemini, book_id, current.body, k=5)
-    raw = await writer.revise_paragraph(gemini, bible, event, current.body, directive, context)
+    rev = await _skill(
+        trace, "revise_paragraph",
+        {"book_id": book_id, "chapter_idx": chapter.idx, "seq": target_seq, "directive": directive},
+        "문단 수정(교체)",
+    )
+    if rev is not None:
+        raw = rev.get("paragraph", "")
+    else:
+        context = await rag.retrieve_context(store, gemini, book_id, current.body, k=5)
+        raw = await writer.revise_paragraph(gemini, bible, event, current.body, directive, context)
     body = sanitize_body(raw)
     if not body:
         trace.end(status="error", error="empty_revision")
@@ -208,8 +247,6 @@ async def _revise_paragraph_turn(
     store.update_book(book_id)
     await rag.index_text(store, gemini, book_id, chapter.id, full)
 
-    trace.step("문단 수정(교체)", "revise_paragraph", {"seq": target_seq, "intent": message[:80]},
-               {"chars": len(body)})
     trace.end(status="done", summary=f"{chapter.idx}장 {target_seq}문단 교체")
     return CollabReply(
         kind="paragraph",

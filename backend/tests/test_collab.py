@@ -136,3 +136,20 @@ async def test_reorder_rejects_bad_order(client):
     r = await client.post(f"/books/{book_id}/chapters/1/paragraphs/reorder", headers=sh,
                           json={"order": [1, 2, 3]})  # 존재하지 않는 seq
     assert r.status_code == 409
+
+
+async def test_collab_uses_skills_and_traces(client):
+    """협업 한 턴이 write_paragraph·next_question 스킬로 실행되어 ai_steps 에 적재된다(§04)."""
+    from app.ai.skills import SKILLS
+    # 협업 스킬이 레지스트리에 등록됨.
+    for name in ("write_paragraph", "revise_paragraph", "assess_flow", "assess_edit", "next_question"):
+        assert name in SKILLS
+
+    sh, book_id = await _designed_book(client, email="kid_co11@test")
+    await _collab(client, sh, book_id, 1, "토끼가 숲으로 갔어")
+    store = get_store()
+    sessions = store.list_ai_sessions(role="writer")
+    steps = [s for sess in sessions for s in store.list_ai_steps(sess.id)]
+    skills_used = {s.skill for s in steps}
+    assert "write_paragraph" in skills_used
+    assert "next_question" in skills_used
