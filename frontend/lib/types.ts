@@ -124,6 +124,11 @@ export interface CreatePromptRequest {
   learningObjectives: string[];
   assessment: Assessment;
   language: string;
+  /* 04 기능개선 교사/02 생성 시 옵션 동봉(선택) */
+  gradeBand?: number | null;
+  chaptersPlanned?: number | null;
+  dueAt?: string | null;
+  safetyLevel?: SafetyLevel;
 }
 
 /* ── 교사 학생 데이터 열람 (04 기능개선 교사/03, §4 D·§7) — 읽기 전용 ── */
@@ -693,6 +698,28 @@ export interface UserOverview {
   }[];
   sessions: AiSession[];
   recentMessages: AdminMessage[];
+}
+
+/** 책 단계별 통합 타임라인(GET /admin/books/{id}/timeline, 관리자/01). */
+export interface TimelineChapter {
+  idx: number;
+  reviewStatus: ReviewStatus;
+  charCount: number;
+}
+export interface BookTimeline {
+  book: {
+    id: string;
+    title: string | null;
+    status: BookStatus;
+    createdAt?: string;
+    studentEmail?: string | null;
+  };
+  prompt?: Prompt | null;
+  chapters: TimelineChapter[];
+  sessions: AiSession[];
+  planMessages: PlanMessage[];
+  messages: AdminMessage[];
+  learning: LearningResult[];
 }
 
 /** 대화 페이지 사용자 묶음(GET /admin/messages?groupBy=user) */
