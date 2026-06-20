@@ -175,7 +175,10 @@ async def _produce(
                 question = await chat.guided_prompt(gemini, bible, event)
             except Exception:
                 question = "이 그림 속에서는 무슨 일이 벌어지고 있을까요?"
-            await queue.put(_sse("prompt", {"text": question}))
+            # 마크다운/이모지 제거(능동질문 말풍선에 ** 노출 방지, 이슈2 보강).
+            from app.ai.sanitize import sanitize_reply
+
+            await queue.put(_sse("prompt", {"text": sanitize_reply(question) or question}))
 
         # 3) 본문 토큰
         running = 0
