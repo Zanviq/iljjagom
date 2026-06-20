@@ -324,6 +324,25 @@ class InMemoryStore(Store):
             (p for p in self.paragraphs if p.chapter_id == chapter_id), key=lambda p: p.seq
         )
 
+    def update_paragraph(
+        self, chapter_id: str, seq: int, body: str, source: str = "revise"
+    ) -> ParagraphRecord | None:
+        for p in self.paragraphs:
+            if p.chapter_id == chapter_id and p.seq == seq:
+                p.body = body
+                p.source = source
+                return p
+        return None
+
+    def reorder_paragraphs(
+        self, chapter_id: str, ordered_ids: list[str]
+    ) -> list[ParagraphRecord]:
+        by_id = {p.id: p for p in self.paragraphs if p.chapter_id == chapter_id}
+        for i, pid in enumerate(ordered_ids):
+            if pid in by_id:
+                by_id[pid].seq = i + 1
+        return self.list_paragraphs(chapter_id)
+
     def add_writing_turn(
         self, chapter_id: str, book_id: str, role: str, kind: str, content: str,
         paragraph_id: str | None = None,

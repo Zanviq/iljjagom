@@ -398,6 +398,28 @@ class SupabaseStore(Store):
         )
         return [ParagraphRecord(**r) for r in rows]
 
+    def update_paragraph(
+        self, chapter_id: str, seq: int, body: str, source: str = "revise"
+    ) -> ParagraphRecord | None:
+        rows = self._rows(
+            self.client.table("chapter_paragraphs")
+            .update({"body": body, "source": source})
+            .eq("chapter_id", chapter_id)
+            .eq("seq", seq)
+            .execute()
+        )
+        return ParagraphRecord(**rows[0]) if rows else None
+
+    def reorder_paragraphs(
+        self, chapter_id: str, ordered_ids: list[str]
+    ) -> list[ParagraphRecord]:
+        # unique(chapter_id, seq) 충돌 방지: 2단계(임시 음수 → 최종 1..n).
+        for i, pid in enumerate(ordered_ids):
+            self.client.table("chapter_paragraphs").update({"seq": -(i + 1)}).eq("id", pid).execute()
+        for i, pid in enumerate(ordered_ids):
+            self.client.table("chapter_paragraphs").update({"seq": i + 1}).eq("id", pid).execute()
+        return self.list_paragraphs(chapter_id)
+
     def add_writing_turn(
         self, chapter_id: str, book_id: str, role: str, kind: str, content: str,
         paragraph_id: str | None = None,

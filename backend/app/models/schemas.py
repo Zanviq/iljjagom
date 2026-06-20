@@ -351,6 +351,8 @@ class CollabReply(CamelModel):
     question: str | None = None
     chapter_complete: bool = False
     message: str | None = None  # kind="error" 안내 문구
+    replaced_seq: int | None = None  # 대화수정으로 교체된 문단 번호(05-기능수정 §02)
+    suggestion: str | None = None  # 곰 작가의 대안 제안(있을 때만)
 
 
 class CollabTurnView(CamelModel):
@@ -370,6 +372,24 @@ class CollabState(CamelModel):
     paragraphs: list[CollabParagraphView] = []
     turns: list[CollabTurnView] = []
     chapter_complete: bool = False
+
+
+# --- 문단 직접편집·순서변경(05-기능수정 §02) ---
+class ParagraphEditRequest(CamelModel):
+    body: str
+
+
+class ParagraphEditResult(CamelModel):
+    paragraph: CollabParagraph
+    suggestion: str | None = None  # 편집이 과하면 곰 작가 대안
+
+
+class ParagraphReorderRequest(CamelModel):
+    order: list[int]  # 새 순서(현재 seq 들의 순열)
+
+
+class ParagraphReorderResult(CamelModel):
+    paragraphs: list[CollabParagraphView] = []
 
 
 # --- 학습 활동(P3) — FR-S8~S12 ---

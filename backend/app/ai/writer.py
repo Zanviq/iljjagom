@@ -233,3 +233,36 @@ async def revise_text(
         f"독자 요청: {directive}\n\n현재 본문:\n{current_body}\n\n고친 본문:"
     )
     return (await gemini.generate_text(gemini.settings.gemini_model_flash, prompt)).strip()
+
+
+async def revise_paragraph(
+    gemini: GeminiClient,
+    bible: dict[str, Any],
+    event: dict[str, Any],
+    current_paragraph: str,
+    directive: str,
+    rag_context: str = "",
+) -> str:
+    """협업 문단 '한 개'를 지시(directive)대로 고쳐 쓴다(05-기능수정 §02). 한 문단 유지.
+
+    챕터 전체가 아니라 대상 문단만 교체. 결말/secretArc 는 드러내지 않는다(기·승 단계).
+    """
+    if gemini.mock:
+        base = " ".join((current_paragraph or "").split()).rstrip(".!? ")
+        want = " ".join((directive or "").split()).rstrip(".!? ")
+        if want:
+            return f"{base}. 이번엔 {want}, 그래서 장면이 한결 또렷해졌어요."
+        return f"{base}. 그러자 이야기가 조금 더 또렷해졌어요."
+
+    brief = bible_brief(bible, event)
+    brief_block = f"{brief}\n\n" if brief else ""
+    prompt = (
+        "너는 어린이 동화 작가다. 아래 '현재 문단'을 학생 요청에 맞게 자연스럽게 고쳐 쓴다. "
+        "**딱 한 문단(2~4문장)** 으로 유지하고, 통짜로 늘리지 마라. "
+        "결말이나 앞으로의 줄거리는 미리 드러내지 않는다. 고친 한 문단만 출력한다.\n"
+        f"{_OUTPUT_RULE}\n"
+        f"{brief_block}"
+        f"참고(이전 내용):\n{rag_context or '(없음)'}\n\n"
+        f"학생 요청: {directive}\n\n현재 문단:\n{current_paragraph}\n\n고친 한 문단:"
+    )
+    return (await gemini.generate_text(gemini.settings.gemini_model_flash, prompt)).strip()

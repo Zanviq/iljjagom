@@ -15,7 +15,14 @@ from app.deps import (
     require_role,
 )
 from app.errors import conflict, validation_error
-from app.models.schemas import CollabRequest, ReviseRequest, ReviseResponse, serialize
+from app.models.schemas import (
+    CollabRequest,
+    ParagraphEditRequest,
+    ParagraphReorderRequest,
+    ReviseRequest,
+    ReviseResponse,
+    serialize,
+)
 from app.ratelimit import rate_limit
 from app.services import books, chapters, collab, midactivity
 from app.store.base import Store
@@ -98,6 +105,35 @@ async def collab_turn(
     if reply.chapter_complete and midactivity.giseung_done(store, book_id):
         background.add_task(chapters.prefetch_arc, store, gemini, book_id)
     return serialize(reply)
+
+
+# --- 문단 직접편집·순서변경(05-기능수정 §02) ---
+@router.patch("/books/{book_id}/chapters/{idx}/paragraphs/{seq}")
+async def edit_paragraph(
+    book_id: str,
+    idx: int,
+    seq: int,
+    req: ParagraphEditRequest,
+    user: CurrentUser = Depends(require_role("student", "admin")),
+    store: Store = Depends(get_store_dep),
+    gemini: GeminiClient = Depends(get_gemini),
+    _rl: None = Depends(rate_limit("collab", 60)),
+    _consent: CurrentUser = Depends(require_guardian_consent()),
+) -> dict:
+    return serialize(
+        await collab.edit_paragraph(store, gemini, user, book_id, idx, seq, req.body)
+    )
+
+
+@router.post("/books/{book_id}/chapters/{idx}/paragraphs/reorder")
+async def reorder_paragraphs(
+    book_id: str,
+    idx: int,
+    req: ParagraphReorderRequest,
+    user: CurrentUser = Depends(require_role("student", "admin")),
+    store: Store = Depends(get_store_dep),
+) -> dict:
+    return serialize(collab.reorder_paragraphs(store, user, book_id, idx, req.order))
 
 
 # --- 중간활동(P3, 학생/15 §3) ---

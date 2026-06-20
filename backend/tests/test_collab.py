@@ -89,3 +89,50 @@ async def test_emotional_risk_records_flag(client):
     await _collab(client, sh, book_id, 1, "죽고 싶어")
     flags = [f for f in get_store().list_safety_flags() if f.source == "collab"]
     assert len(flags) >= 1
+
+
+async def test_dialogue_edit_replaces_not_appends(client):
+    """'두번째 문단 고쳐줘' → 새 문단 추가가 아니라 2번 문단 교체(05-기능수정 §02)."""
+    sh, book_id = await _designed_book(client, email="kid_co7@test")
+    await _collab(client, sh, book_id, 1, "토끼가 숲으로 갔어")        # seq1
+    await _collab(client, sh, book_id, 1, "토끼가 폭포를 보았어")       # seq2
+    before = (await client.get(f"/books/{book_id}/chapters/1/collab", headers=sh)).json()
+    assert len(before["paragraphs"]) == 2
+    r = (await _collab(client, sh, book_id, 1, "두번째 문단을 더 재미있게 고쳐줘")).json()
+    assert r["kind"] == "paragraph"
+    assert r["replacedSeq"] == 2
+    after = (await client.get(f"/books/{book_id}/chapters/1/collab", headers=sh)).json()
+    assert len(after["paragraphs"]) == 2  # 덧붙지 않음
+    assert after["paragraphs"][1]["body"] == r["paragraph"]["body"]
+
+
+async def test_direct_edit_paragraph(client):
+    sh, book_id = await _designed_book(client, email="kid_co8@test")
+    await _collab(client, sh, book_id, 1, "토끼가 숲으로 갔어")
+    r = await client.patch(f"/books/{book_id}/chapters/1/paragraphs/1", headers=sh,
+                           json={"body": "토끼가 맑은 시냇물을 따라 깡총깡총 뛰어갔어요."})
+    assert r.status_code == 200
+    assert r.json()["paragraph"]["body"].startswith("토끼가 맑은")
+    state = (await client.get(f"/books/{book_id}/chapters/1/collab", headers=sh)).json()
+    assert state["paragraphs"][0]["body"].startswith("토끼가 맑은")
+    assert state["paragraphs"][0]["source"] == "revise"
+
+
+async def test_reorder_paragraphs(client):
+    sh, book_id = await _designed_book(client, email="kid_co9@test")
+    await _collab(client, sh, book_id, 1, "토끼가 숲으로 갔어")        # seq1
+    await _collab(client, sh, book_id, 1, "토끼가 폭포를 보았어")       # seq2
+    first_body = (await client.get(f"/books/{book_id}/chapters/1/collab", headers=sh)).json()["paragraphs"][0]["body"]
+    r = await client.post(f"/books/{book_id}/chapters/1/paragraphs/reorder", headers=sh,
+                          json={"order": [2, 1]})
+    assert r.status_code == 200
+    paras = r.json()["paragraphs"]
+    assert paras[1]["seq"] == 2 and paras[1]["body"] == first_body  # 1번이 2번으로
+
+
+async def test_reorder_rejects_bad_order(client):
+    sh, book_id = await _designed_book(client, email="kid_co10@test")
+    await _collab(client, sh, book_id, 1, "토끼가 숲으로 갔어")
+    r = await client.post(f"/books/{book_id}/chapters/1/paragraphs/reorder", headers=sh,
+                          json={"order": [1, 2, 3]})  # 존재하지 않는 seq
+    assert r.status_code == 409

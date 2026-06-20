@@ -5,6 +5,8 @@ mock 모드에서도 결말을 만들지 않고 인물·배경·분위기 질문
 """
 from __future__ import annotations
 
+import re
+
 from app.ai.brief import bible_brief
 from app.ai.gemini import GeminiClient
 from app.models.schemas import CharacterDraft, PlanReply
@@ -278,3 +280,71 @@ async def interpret_revision(gemini: GeminiClient, instruction: str) -> str:
         f"수정 요청: {cleaned}\n\n한 문장 지시:"
     )
     return (await gemini.generate_text(gemini.settings.gemini_model_flash_lite, prompt)).strip()
+
+
+# 협업 문단 '대화 수정' 의도 감지(05-기능수정 §02). 추가 LLM 왕복 없이 휴리스틱.
+_EDIT_KEYWORDS = ("고쳐", "고치", "수정", "바꿔", "바꾸", "다시 써", "다시써", "다시 쓰", "고쳐줘", "바꿔줘")
+_LAST_REFS = ("마지막", "방금", "이거", "이 문단", "위 문단", "지금 문단", "그 문단")
+_ORDINAL_WORDS = {
+    "첫 번째": 1, "첫번째": 1, "처음": 1, "첫째": 1,
+    "두 번째": 2, "두번째": 2, "둘째": 2,
+    "세 번째": 3, "세번째": 3, "셋째": 3,
+    "네 번째": 4, "네번째": 4, "넷째": 4,
+    "다섯 번째": 5, "다섯번째": 5, "다섯째": 5,
+}
+
+
+def detect_edit_target(message: str, num_paragraphs: int) -> int | None:
+    """대화 메시지가 '특정 문단 수정' 요청이면 대상 seq, 아니면 None(=새 문단으로 진행).
+
+    수정 키워드 + 문단 지시(번호/서수/'마지막'·'방금' 등)가 함께 있어야 교체로 본다.
+    """
+    text = message or ""
+    if num_paragraphs <= 0 or not any(k in text for k in _EDIT_KEYWORDS):
+        return None
+    m = re.search(r"(\d+)\s*번", text)
+    if m:
+        seq = int(m.group(1))
+        return seq if 1 <= seq <= num_paragraphs else None
+    for word, seq in _ORDINAL_WORDS.items():
+        if word in text:
+            return seq if seq <= num_paragraphs else num_paragraphs
+    if any(r in text for r in _LAST_REFS):
+        return num_paragraphs
+    return None
+
+
+async def assess_edit(
+    gemini: GeminiClient, bible: dict, prev_paragraph: str, next_paragraph: str,
+    new_body: str, objective: str | None,
+) -> dict:
+    """학생이 직접 고친 문단이 흐름/주제에서 과도하게 어긋나는지 판정(05-기능수정 §02).
+
+    반환 `{weird: bool, suggestion: str|None}`. 차단하지 않고 곰 작가의 대안 제안만 만든다.
+    """
+    if gemini.mock or not (new_body or "").strip():
+        return {"weird": False, "suggestion": None}
+    brief = bible_brief(bible)
+    brief_block = f"{brief}\n" if brief else ""
+    obj_line = f"이번 장 주제: {objective}\n" if objective else ""
+    prompt = (
+        "너는 어린이 글쓰기 코치다. 학생이 직접 고쳐 쓴 한 문단이 앞뒤 문단·이야기 설정과 "
+        "자연스럽게 이어지는지 본다. 대체로 괜찮으면 weird=false. 흐름이 크게 끊기거나 "
+        "설정과 동떨어졌을 때만 weird=true 로 하고, 학생을 먼저 칭찬한 뒤 한두 문장으로 부드럽게 "
+        "다른 방향을 제안한다(강요 아님). 결말/앞 줄거리는 언급하지 않는다.\n"
+        "아래 JSON 하나만 출력(설명·코드블록 금지).\n"
+        '{"weird":true|false,"suggestion":"weird 면 \'멋진 생각이야! 그런데 …\' 한두 문장, 아니면 null"}\n\n'
+        f"{brief_block}{obj_line}앞 문단: {prev_paragraph or '(없음)'}\n뒤 문단: {next_paragraph or '(없음)'}\n"
+        f"학생이 고친 문단: {new_body}\n\nJSON:"
+    )
+    try:
+        import json
+
+        raw = await gemini.generate_text(gemini.settings.gemini_model_flash_lite, prompt)
+        data = json.loads(_strip_json(raw))
+        if isinstance(data, dict) and isinstance(data.get("weird"), bool):
+            sug = data.get("suggestion")
+            return {"weird": data["weird"], "suggestion": sug if data["weird"] and sug else None}
+    except Exception:
+        pass
+    return {"weird": False, "suggestion": None}

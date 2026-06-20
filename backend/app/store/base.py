@@ -170,6 +170,20 @@ class Store(ABC):
     def list_paragraphs(self, chapter_id: str) -> list[ParagraphRecord]: ...
 
     @abstractmethod
+    def update_paragraph(
+        self, chapter_id: str, seq: int, body: str, source: str = "revise"
+    ) -> ParagraphRecord | None:
+        """기존 seq 문단을 교체(직접편집/대화수정, 05-기능수정 §02). 없으면 None."""
+        ...
+
+    @abstractmethod
+    def reorder_paragraphs(
+        self, chapter_id: str, ordered_ids: list[str]
+    ) -> list[ParagraphRecord]:
+        """주어진 id 순서대로 seq 를 1..n 재부여(드래그 순서변경). 정렬된 목록 반환."""
+        ...
+
+    @abstractmethod
     def add_writing_turn(
         self, chapter_id: str, book_id: str, role: str, kind: str, content: str,
         paragraph_id: str | None = None,
