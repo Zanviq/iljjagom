@@ -239,11 +239,17 @@ async def _run_design(
     """
     book = store.get_book(book_id)
     prompt = store.get_prompt(book.prompt_id) if book and book.prompt_id else None
-    student_messages = [m.content for m in store.list_plan_messages(book_id) if m.role == "student"]
+    plan_records = store.list_plan_messages(book_id)
+    student_messages = [m.content for m in plan_records if m.role == "student"]
     traits = chat._extract_draft(student_messages).traits
+    # Bible 입력에는 학생 답변뿐 아니라 곰(인터뷰어) 질문까지 화자 표기로 보존한다(§01).
+    # 무엇을 묻자 무엇을 답했는지 맥락이 살아 인물·배경·분위기 추출 품질이 올라간다.
+    plan_dialogue = [
+        f"{'학생' if m.role == 'student' else '곰'}: {m.content}" for m in plan_records
+    ]
 
     trace = Trace(store, gemini, gemini.settings, "designer", book_id, gemini.settings.gemini_model_pro)
-    bible = await designer.build_bible(gemini, prompt, student_messages, traits)
+    bible = await designer.build_bible(gemini, prompt, plan_dialogue, traits)
     bible["_planHash"] = plan_hash
     store.upsert_bible(book_id, bible)
     trace.step(

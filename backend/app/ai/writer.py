@@ -9,6 +9,7 @@ import asyncio
 from collections.abc import AsyncIterator
 from typing import Any
 
+from app.ai.brief import bible_brief
 from app.ai.gemini import GeminiClient
 
 
@@ -182,12 +183,16 @@ async def write_paragraph(
 
     tone = bible.get("world", {}).get("tone", "따뜻한")
     prev = "\n".join(prev_paragraphs[-3:]) or "(이번이 첫 문단)"
+    brief = bible_brief(bible, event)
+    brief_block = f"{brief}\n\n" if brief else ""
     prompt = (
         "너는 어린이 동화 작가다. 학생과 한 문단씩 함께 이야기를 짓는다. "
-        f"분위기는 {tone}. 학생의 의도를 살려 **딱 한 문단(2~4문장)** 만 쓴다. 통짜로 길게 쓰지 마라. "
+        f"분위기는 {tone}. 아래 [이야기 설정]의 인물·세계를 반영해 학생의 의도를 살려 "
+        "**딱 한 문단(2~4문장)** 만 쓴다. 통짜로 길게 쓰지 마라. "
         "결말이나 앞으로의 줄거리는 미리 드러내지 않는다.\n"
         f"{_OUTPUT_RULE}\n"
-        f"참고(설정/이전 내용):\n{rag_context}\n\n"
+        f"{brief_block}"
+        f"참고(이전 내용):\n{rag_context}\n\n"
         f"직전 문단들:\n{prev}\n\n학생의 의도: {student_intent}\n\n이어질 한 문단:"
     )
     text = await gemini.generate_text(gemini.settings.gemini_model_flash, prompt)

@@ -5,6 +5,7 @@ mock 모드에서도 결말을 만들지 않고 인물·배경·분위기 질문
 """
 from __future__ import annotations
 
+from app.ai.brief import bible_brief
 from app.ai.gemini import GeminiClient
 from app.models.schemas import CharacterDraft, PlanReply
 
@@ -171,15 +172,17 @@ async def assess_flow(
         return {"action": "coach", "reasons": reasons, "suggestion": _coach_text(reasons, objective)}
 
     obj_line = f"이번 장 학습 주제: {objective}\n" if objective else ""
+    brief = bible_brief(bible)
+    brief_block = f"{brief}\n" if brief else ""
     prompt = (
         "너는 어린이 작가를 돕는 다정한 글쓰기 코치다. 학생이 다음에 쓰고 싶다고 한 내용이 "
-        "(a) 직전 문단과 자연스럽게 이어지는지 (b) 이야기 주제에서 벗어나지 않는지 판단한다. "
+        "(a) 직전 문단과 자연스럽게 이어지는지 (b) 아래 [이야기 설정]의 인물·세계·주제에서 벗어나지 않는지 판단한다. "
         "이야기의 결말이나 앞으로의 줄거리는 절대 참조·언급하지 않는다. "
         "괜찮으면 그대로 진행하고, 어색하면 학생 의도를 먼저 긍정한 뒤 더 나은 방향을 근거와 함께 제안한다. "
         "반드시 아래 JSON 하나만 출력한다(설명·코드블록 금지).\n"
         '{"action":"generate|coach","reasons":["흐름"|"주제"],'
         '"suggestion":"coach 일 때 \'물론 그것도 좋아! 근데 …\' 한두 문장, generate 면 null"}\n\n'
-        f"{obj_line}직전 문단: {prev_paragraph or '(아직 없음)'}\n학생이 쓰고 싶은 것: {student_intent}\n\nJSON:"
+        f"{brief_block}{obj_line}직전 문단: {prev_paragraph or '(아직 없음)'}\n학생이 쓰고 싶은 것: {student_intent}\n\nJSON:"
     )
     try:
         raw = await gemini.generate_text(gemini.settings.gemini_model_flash_lite, prompt)
@@ -197,15 +200,23 @@ async def assess_flow(
 
 
 async def next_paragraph_question(
-    gemini: GeminiClient, bible: dict, paragraphs_so_far: list[str]
+    gemini: GeminiClient, bible: dict, paragraphs_so_far: list[str],
+    event: dict | None = None,
 ) -> str:
-    """방금 쓴 문단 뒤 진행 질문 1개(학생/15 §2.4). 결말 비공개."""
+    """방금 쓴 문단 뒤 진행 질문 1개(학생/15 §2.4). 결말 비공개.
+
+    이미 정해진 인물·세계(Bible 브리프)는 다시 묻지 않고 그 위에서 다음을 상상하게 한다(§01).
+    """
     chars = bible.get("characters", [])
     who = chars[0].get("name", "주인공") if chars else "주인공"
     if gemini.mock:
         return f"좋아! 이제 {who}에게 다음엔 무슨 일이 생길까?"
+    brief = bible_brief(bible, event)
+    brief_block = f"{brief}\n" if brief else ""
     prompt = (
         f"{_INTERVIEWER_SYSTEM}\n"
+        f"{brief_block}"
+        "위 [이야기 설정]의 인물·세계는 이미 정해졌으니 다시 묻지 말고, 그 설정 위에서 "
         "지금까지 함께 쓴 이야기 뒤에 이어질 내용을 학생이 상상해 답할 수 있는 '진행 질문' 한 문장을 만든다. "
         "결말이나 앞으로의 줄거리는 절대 묻지도 드러내지도 않는다.\n"
         f"지금까지 문단:\n{chr(10).join(paragraphs_so_far[-3:]) or '(아직 없음)'}\n\n진행 질문 한 문장:"

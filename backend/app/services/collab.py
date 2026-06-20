@@ -128,7 +128,9 @@ async def collab_turn(
     complete = seq >= COLLAB_TARGET_PARAGRAPHS
     question = None
     if not complete:
-        question = await chat.next_paragraph_question(gemini, bible, [p.body for p in paragraphs] + [body])
+        question = await chat.next_paragraph_question(
+            gemini, bible, [p.body for p in paragraphs] + [body], event
+        )
         store.add_writing_turn(chapter.id, book_id, "writer", "question", question)
     else:
         await rag.index_text(store, gemini, book_id, chapter.id, full)  # 완료 시 1회 인덱스
