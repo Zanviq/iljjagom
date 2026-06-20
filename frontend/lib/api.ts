@@ -24,8 +24,10 @@ import type {
   BoardPostCreated,
   BoardPostsResponse,
   BoardPostStatus,
+  BibleResponse,
   BookCreated,
   BookSummary,
+  ChaptersContentResponse,
   ClassSettingsPut,
   ClassSettingsResponse,
   ClassSummary,
@@ -39,13 +41,19 @@ import type {
   Learning,
   LearningResult,
   LearningResultCreate,
+  MidActivity,
   Letter,
   LetterReply,
   Me,
+  MessagesByUser,
   NotificationCreate,
   OnboardingRequest,
+  PlanMessagesResponse,
   PlanReply,
   Prompt,
+  PromptSubmissionsResponse,
+  StudentBooksResponse,
+  UserOverview,
   SafetyFlag,
   SafetyFlagDetail,
   SafetyFlagStatus,
@@ -240,6 +248,18 @@ export function closePrompt(
   });
 }
 
+/** 발제별 참여·작성 집계(04 기능개선 교사/05). */
+export function getPromptSubmissions(
+  token: string | null,
+  classId: string,
+  promptId: string,
+): Promise<PromptSubmissionsResponse> {
+  return apiFetch<PromptSubmissionsResponse>(
+    `/classes/${classId}/prompts/${promptId}/submissions`,
+    { token },
+  );
+}
+
 export function createPrompt(
   token: string | null,
   classId: string,
@@ -380,6 +400,25 @@ export function getLearning(
   bookId: string,
 ): Promise<Learning> {
   return apiFetch<Learning>(`/books/${bookId}/learning`, { token });
+}
+
+/** 중간활동 조회(책 접근자, 04 기능개선 학생/15 §3). 미구현이면 404 → 폴백. */
+export function getMidActivity(
+  token: string | null,
+  bookId: string,
+): Promise<MidActivity> {
+  return apiFetch<MidActivity>(`/books/${bookId}/mid-activity`, { token });
+}
+
+/** 중간활동 완료(책 소유 학생). 전·결 게이트 해제 + mid_activity_done 적재. */
+export function completeMidActivity(
+  token: string | null,
+  bookId: string,
+): Promise<{ required: boolean; done: boolean }> {
+  return apiFetch<{ required: boolean; done: boolean }>(
+    `/books/${bookId}/mid-activity/complete`,
+    { token, method: "POST" },
+  );
 }
 
 /** 인물 편지 (FR-S11). held=교사 확인 보류. */
@@ -576,6 +615,48 @@ export function getLearningResults(
   );
 }
 
+/* ── 교사 학생 데이터 열람 (04 기능개선 교사/03) — 읽기 전용 ── */
+
+/** 저장된 챕터 본문 전체(책 접근자). 스트림 미트리거. */
+export function getChaptersContent(
+  token: string | null,
+  bookId: string,
+): Promise<ChaptersContentResponse> {
+  return apiFetch<ChaptersContentResponse>(`/books/${bookId}/chapters`, {
+    token,
+  });
+}
+
+/** 기획 인터뷰 로그(책 접근자). */
+export function getPlanMessages(
+  token: string | null,
+  bookId: string,
+): Promise<PlanMessagesResponse> {
+  return apiFetch<PlanMessagesResponse>(`/books/${bookId}/plan-messages`, {
+    token,
+  });
+}
+
+/** 설계 결과 Bible(책 접근자, 교사는 secretArc 포함). */
+export function getBible(
+  token: string | null,
+  bookId: string,
+): Promise<BibleResponse> {
+  return apiFetch<BibleResponse>(`/books/${bookId}/bible`, { token });
+}
+
+/** 한 학생의 책 목록(담당 교사/admin). */
+export function getStudentBooks(
+  token: string | null,
+  classId: string,
+  studentId: string,
+): Promise<StudentBooksResponse> {
+  return apiFetch<StudentBooksResponse>(
+    `/classes/${classId}/students/${studentId}/books`,
+    { token },
+  );
+}
+
 /* ── 학급 게시판/발표 (04 기능개선 학생/15·14) ── */
 
 /** 완성 책을 학급 게시판에 발표 등록(책 status=="done"). */
@@ -671,6 +752,21 @@ export function deactivateAdminUser(
     `/admin/users/${id}/deactivate`,
     { token, method: "POST" },
   );
+}
+
+/** 대화 사용자 묶음(04 기능개선 관리자/01, groupBy=user). */
+export function getMessagesByUser(
+  token: string | null,
+): Promise<MessagesByUser> {
+  return apiFetch<MessagesByUser>("/admin/messages?groupBy=user", { token });
+}
+
+/** 한 사용자의 책·세션·대화 요약(04 기능개선 관리자/01). */
+export function getUserOverview(
+  token: string | null,
+  userId: string,
+): Promise<UserOverview> {
+  return apiFetch<UserOverview>(`/admin/users/${userId}/overview`, { token });
 }
 
 export function getAdminMessages(

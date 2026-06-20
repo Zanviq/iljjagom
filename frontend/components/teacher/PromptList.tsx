@@ -1,11 +1,13 @@
 "use client";
 
+import Link from "next/link";
 import { useState } from "react";
 
 import { Badge } from "@/components/ui/Badge";
-import { Button } from "@/components/ui/Button";
+import { Button, buttonClass } from "@/components/ui/Button";
 import { Card } from "@/components/ui/Card";
 import { Chip } from "@/components/ui/Chip";
+import { Icon } from "@/components/ui/Icon";
 import { ApiError, closePrompt } from "@/lib/api";
 import { getClientAccessToken } from "@/lib/auth/client";
 import type { AssessmentType, Prompt } from "@/lib/types";
@@ -134,19 +136,26 @@ function PromptCard({
         </p>
       )}
 
-      {!closed && (
-        <div className="mt-3">
+      <div className="mt-3 flex flex-wrap gap-2">
+        <Link
+          href={`/classes/${classId}/prompts/${prompt.id}`}
+          className={buttonClass("outline", "sm")}
+        >
+          <Icon name="users" size={15} />
+          학생 작성 보기
+        </Link>
+        {!closed && (
           <Button
             size="sm"
-            variant="outline"
+            variant="ghost"
             icon="lock"
             onClick={() => void close()}
             loading={busy}
           >
             발제 마감
           </Button>
-        </div>
-      )}
+        )}
+      </div>
     </Card>
   );
 }

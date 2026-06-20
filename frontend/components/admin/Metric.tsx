@@ -1,3 +1,13 @@
+import Link from "next/link";
+
+interface MetricProps {
+  label: React.ReactNode;
+  value: React.ReactNode;
+  unit?: React.ReactNode;
+  accent?: string;
+  flag?: boolean;
+}
+
 /**
  * 관리자 콘솔 지표 타일(new-design_version2 Metric). 값은 mono. flag면 danger + glow-red.
  */
@@ -7,13 +17,7 @@ export function Metric({
   unit,
   accent,
   flag = false,
-}: {
-  label: React.ReactNode;
-  value: React.ReactNode;
-  unit?: React.ReactNode;
-  accent?: string;
-  flag?: boolean;
-}) {
+}: MetricProps) {
   return (
     <div
       className="rounded-[var(--radius-card)] border bg-surface px-[18px] py-4"
@@ -46,6 +50,18 @@ export function Metric({
         ) : null}
       </p>
     </div>
+  );
+}
+
+/** 클릭 가능한 지표 타일 — 누르면 그 숫자를 구성하는 목록으로(관리자/01 죽은 숫자 제거). */
+export function MetricLink({ href, ...props }: { href: string } & MetricProps) {
+  return (
+    <Link
+      href={href}
+      className="block rounded-[var(--radius-card)] transition hover:-translate-y-0.5 hover:brightness-105"
+    >
+      <Metric {...props} />
+    </Link>
   );
 }
 

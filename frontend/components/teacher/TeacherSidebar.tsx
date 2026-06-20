@@ -105,6 +105,13 @@ export function TeacherSidebar({ me }: { me: Me }) {
         badge: openFlags,
       },
       {
+        key: "board-review",
+        label: "발표 승인",
+        icon: "megaphone",
+        href: `/classes/${classId}/board-review`,
+        active: pathname.endsWith("/board-review"),
+      },
+      {
         key: "settings",
         label: "학급 설정",
         icon: "sliders-horizontal",

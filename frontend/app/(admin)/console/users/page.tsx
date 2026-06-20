@@ -5,12 +5,17 @@ import { getAdminUsers } from "@/lib/api";
 import { getAccessToken } from "@/lib/auth/server";
 import type { AdminUser } from "@/lib/types";
 
-export default async function ConsoleUsersPage() {
+export default async function ConsoleUsersPage({
+  searchParams,
+}: {
+  searchParams: Promise<{ role?: string }>;
+}) {
+  const { role } = await searchParams;
   const token = await getAccessToken();
   let users: AdminUser[] | null = null;
   let error: string | null = null;
   try {
-    ({ users } = await getAdminUsers(token));
+    ({ users } = await getAdminUsers(token, role ? { role } : undefined));
   } catch (e) {
     error = e instanceof Error ? e.message : "사용자를 불러오지 못했어요.";
   }

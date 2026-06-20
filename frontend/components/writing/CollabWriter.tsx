@@ -270,7 +270,7 @@ export function CollabWriter({
             </p>
             <Button
               iconRight="arrow-right"
-              onClick={() => router.push(`/books/${bookId}/read`)}
+              onClick={() => router.push(`/books/${bookId}/mid-activity`)}
             >
               이야기 이어보기
             </Button>
