@@ -41,6 +41,7 @@ import type {
   Learning,
   LearningResult,
   LearningResultCreate,
+  MidActivity,
   Letter,
   LetterReply,
   Me,
@@ -399,6 +400,25 @@ export function getLearning(
   bookId: string,
 ): Promise<Learning> {
   return apiFetch<Learning>(`/books/${bookId}/learning`, { token });
+}
+
+/** 중간활동 조회(책 접근자, 04 기능개선 학생/15 §3). 미구현이면 404 → 폴백. */
+export function getMidActivity(
+  token: string | null,
+  bookId: string,
+): Promise<MidActivity> {
+  return apiFetch<MidActivity>(`/books/${bookId}/mid-activity`, { token });
+}
+
+/** 중간활동 완료(책 소유 학생). 전·결 게이트 해제 + mid_activity_done 적재. */
+export function completeMidActivity(
+  token: string | null,
+  bookId: string,
+): Promise<{ required: boolean; done: boolean }> {
+  return apiFetch<{ required: boolean; done: boolean }>(
+    `/books/${bookId}/mid-activity/complete`,
+    { token, method: "POST" },
+  );
 }
 
 /** 인물 편지 (FR-S11). held=교사 확인 보류. */

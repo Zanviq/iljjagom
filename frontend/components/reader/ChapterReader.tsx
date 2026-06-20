@@ -1,6 +1,7 @@
 "use client";
 
 import Link from "next/link";
+import { useRouter } from "next/navigation";
 import { useCallback, useEffect, useRef, useState } from "react";
 
 import { AskUserPanel } from "@/components/ai/AskUserPanel";
@@ -110,6 +111,7 @@ function ChapterStream({
   onRevised: () => void;
   onRetry: () => void;
 }) {
+  const router = useRouter();
   const [text, setText] = useState("");
   const [mode, setMode] = useState<ChapterMode | null>(null);
   const [illustration, setIllustration] = useState<SSEIllustration | null>(null);
@@ -220,9 +222,14 @@ function ChapterStream({
                 case "error":
                   // 재시도 가능 오류는 무시하고 아래 루프가 재구독하게 둔다.
                   if (!evt.data.retryable) {
-                    setStreamError(evt.data.message);
                     setStreaming(false);
                     doneRef.current = true;
+                    // 중간활동 미완료 게이트(15 §3): 전·결 진입 차단 → 중간활동으로.
+                    if (evt.data.code === "conflict") {
+                      router.replace(`/books/${bookId}/mid-activity`);
+                    } else {
+                      setStreamError(evt.data.message);
+                    }
                   }
                   break;
                 default:
@@ -256,7 +263,7 @@ function ChapterStream({
       cancelled = true;
       controller.abort();
     };
-  }, [token, bookId, chapterIdx, totalChaptersPlanned]);
+  }, [token, bookId, chapterIdx, totalChaptersPlanned, router]);
 
   const lookUp = useCallback(
     async (term: string) => {

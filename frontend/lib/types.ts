@@ -350,6 +350,19 @@ export interface Learning {
   letterCharacters?: LetterCharacter[];
 }
 
+/**
+ * 중간활동(04 기능개선 학생/15 §3). 기·승 협업 완료 → 전·결 진입 전 필수 게이트.
+ * 학생이 푸는 동안 백그라운드로 전·결을 선생성한다. 미완료면 전·결 stream 이
+ * error{code:"conflict"} 로 차단. 콘텐츠는 기·승 범위 학습목표 기반(quiz·essayBlanks 재사용).
+ */
+export interface MidActivity {
+  /** 기·승 완료+전·결 존재+미완료일 때만 true(=화면 노출 대상). */
+  required: boolean;
+  done: boolean;
+  quiz: QuizItem[];
+  essayBlanks: EssayBlank[];
+}
+
 /** POST /books/{id}/letters 응답 (FR-S11). letterId 추가(추가기능 03). */
 export interface LetterReply {
   status: "answered" | "held";
