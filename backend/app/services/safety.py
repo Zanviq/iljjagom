@@ -122,9 +122,11 @@ def list_book_letters(store: Store, user: CurrentUser, book_id: str) -> LettersR
     return LettersResponse(letters=[_letter_view(m) for m in letters])
 
 
-def _resolve_linked_flags(store: Store, user: CurrentUser, letter_id: str, note: str | None) -> None:
-    for f in store.list_safety_flags():
-        if f.letter_id == letter_id and f.status != "resolved":
+def _resolve_linked_flags(store: Store, user: CurrentUser, letter: LetterRecord, note: str | None) -> None:
+    # 편지의 book_id 로 범위를 좁혀 조회한다. 인자 없이 전체를 가져오면 limit(기본 100)에
+    # 걸려 신호가 누적된 운영 환경에서 연결 flag 가 resolve 되지 않을 수 있다.
+    for f in store.list_safety_flags(book_id=letter.book_id):
+        if f.letter_id == letter.id and f.status != "resolved":
             store.update_safety_flag(
                 f.id, status="resolved", reviewed_by=user.id, reviewed_at=now_iso(), note=note
             )
@@ -166,7 +168,7 @@ async def approve_letter(
         letter_id, status="approved", reply=final_reply, reply_source=reply_source,
         reviewed_by=user.id, reviewed_at=now_iso(),
     )
-    _resolve_linked_flags(store, user, letter_id, "편지 승인")
+    _resolve_linked_flags(store, user, letter, "편지 승인")
     return _letter_view(updated)
 
 
@@ -182,5 +184,5 @@ def reject_letter(
     updated = store.update_letter(
         letter_id, status="rejected", reviewed_by=user.id, reviewed_at=now_iso()
     )
-    _resolve_linked_flags(store, user, letter_id, note or "편지 반려")
+    _resolve_linked_flags(store, user, letter, note or "편지 반려")
     return _letter_view(updated)
