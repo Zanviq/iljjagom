@@ -14,6 +14,28 @@ from app.errors import register_exception_handlers
 logger = logging.getLogger("app.main")
 
 
+def _build_commit() -> str:
+    """실행 중인 코드의 git 커밋(짧은 해시) — 기동 시 1회 산출.
+
+    배포/재시작이 실제로 최신 코드를 로드했는지 `/health` 로 확정하기 위함이다
+    (워크트리 혼동·미재시작으로 옛 코드가 도는 사고 방지)."""
+    import subprocess
+    from pathlib import Path
+
+    try:
+        out = subprocess.run(
+            ["git", "rev-parse", "--short", "HEAD"],
+            cwd=Path(__file__).resolve().parent,
+            capture_output=True, text=True, timeout=3,
+        )
+        return out.stdout.strip() or "unknown"
+    except Exception:
+        return "unknown"
+
+
+_BUILD_COMMIT = _build_commit()
+
+
 async def _notify_loop(settings: Settings) -> None:
     """상시 가동 백그라운드 — 주기적으로 새 안전신호/오류 세션 감지 → 관리자 알림(06 §3.8).
 
@@ -93,6 +115,7 @@ def create_app() -> FastAPI:
         return {
             "status": "degraded" if degraded else "ok",
             "version": app.version,
+            "build": _BUILD_COMMIT,  # 실행 중인 git 커밋(재시작/배포 확인용)
             "env": settings.app_env,
             "storage": storage,
             "ai": ai,
