@@ -192,9 +192,12 @@ async def _produce(
             # 첫 집필(선생성 미완 진입): 전체 생성을 타임아웃으로 감싸 만든 뒤 저장·emit.
             # 스톨/실패/빈 본문이면 즉시 폴백 본문으로 저장·제공해 완독이 막히지 않게 한다(이슈a).
             # (선생성된 챕터는 served_stored 로 청크 스트리밍되므로 이 경로는 드문 폴백 경로.)
-            context = await rag.retrieve_context(
-                store, gemini, book_id, event.get("summary", ""), k=5
-            )
+            try:
+                context = await rag.retrieve_context(
+                    store, gemini, book_id, event.get("summary", ""), k=5
+                )
+            except Exception:
+                context = ""  # 인출(임베딩) 실패가 본문/폴백 경로를 건너뛰지 않게(완독 보장)
             try:
                 raw = await asyncio.wait_for(
                     _collect_chapter(gemini, bible, event, context, is_final),
@@ -204,9 +207,10 @@ async def _produce(
             except Exception:
                 body = ""
             if not body:
-                # 결말 장만 폴백으로 완독을 보장한다. 비-결말은 재시도 가능 에러로(AI 다운 시
-                # 책 전체가 조용히 폴백으로 채워지는 것 방지, 학생/09 재시도 UX 유지).
-                if not is_final:
+                # guided(전·결: 자동생성)·결말 장은 폴백으로 완독을 보장한다. guided 는 학생이
+                # 직접 쓰지 않으므로 생성이 지속 stall 하면 학생이 영영 진행 못 하던 블록을 해소한다.
+                # free(기·승)만 재시도 가능 에러로 둔다(협업 집필 — AI 다운 시 자동 폴백 방지, 학생/09).
+                if mode != "guided" and not is_final:
                     raise RuntimeError("empty_generation")
                 body = sanitize_body(writer.fallback_chapter(bible, event, is_final))
             words = writer.select_words(
@@ -215,7 +219,10 @@ async def _produce(
             store.update_chapter(
                 chapter.id, body=body, char_count=len(body), words=words, review_status="pending"
             )
-            await rag.index_text(store, gemini, book_id, chapter.id, body)
+            try:
+                await rag.index_text(store, gemini, book_id, chapter.id, body)
+            except Exception:
+                pass  # RAG 색인 실패는 읽기/완독을 막지 않는다(best-effort, 다음 기회 재색인)
             running = await _emit_text(queue, body, running, from_offset)
 
         # 3b) 완료/활동 갱신 — 첫 집필·선생성 진입(served_stored) 공통(완독은 1회만).
