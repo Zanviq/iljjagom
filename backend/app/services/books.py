@@ -1,6 +1,7 @@
 """책 서비스 — 생성/조회/기획대화/설계(Bible). FR-S1~S3."""
 from __future__ import annotations
 
+import asyncio
 import hashlib
 
 from app.ai import chat, designer, rag
@@ -426,5 +427,5 @@ async def _index_bible(store: Store, gemini: GeminiClient, book_id: str, bible: 
         texts.append(f"세계관: {world.strip()}")
     for ev in bible.get("events", []):
         texts.append(f"{ev.get('chapterIdx')}장 개요: {ev.get('summary', '')}")
-    for t in texts:
-        await rag.index_text(store, gemini, book_id, None, t)
+    # 각 텍스트 인덱싱은 독립적이라 병렬로 처리한다(인물·세계관·사건 수만큼의 직렬 대기 제거).
+    await asyncio.gather(*(rag.index_text(store, gemini, book_id, None, t) for t in texts))

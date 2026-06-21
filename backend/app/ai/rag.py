@@ -5,6 +5,8 @@ Bible/본문 청크에서 코사인 ANN 으로 가져온다.
 """
 from __future__ import annotations
 
+import asyncio
+
 from app.ai.gemini import GeminiClient
 from app.store.base import Store
 
@@ -13,8 +15,12 @@ async def index_text(
     store: Store, gemini: GeminiClient, book_id: str, chapter_id: str | None, content: str
 ) -> None:
     """텍스트 청크를 임베딩해 chapter_chunks 에 적재."""
-    for chunk in _split(content):
-        embedding = await gemini.embed(chunk)
+    chunks = _split(content)
+    if not chunks:
+        return
+    # 청크 임베딩은 서로 독립적이라 병렬로 모은 뒤 순서대로 적재한다(직렬 네트워크 대기 제거).
+    embeddings = await asyncio.gather(*(gemini.embed(chunk) for chunk in chunks))
+    for chunk, embedding in zip(chunks, embeddings):
         store.add_chunk(book_id, chapter_id, chunk, embedding)
 
 
