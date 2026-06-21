@@ -117,8 +117,9 @@ async def guided_prompt(
     summary = event.get("summary", "")
     if gemini.mock:
         # 결정적: 장면 요약 기반 1문장(결말 비공개).
-        chars = bible.get("characters", [])
-        who = chars[0].get("name", "주인공") if chars else "주인공"
+        chars = bible.get("characters", []) or []
+        first = chars[0] if chars else None
+        who = (first.get("name", "주인공") if isinstance(first, dict) else (str(first) if first else "주인공"))
         return f"{who}은(는) 지금 어떤 마음일까요? 그림 속 장면을 보고 상상해 볼까요?"
 
     prompt = (
@@ -209,8 +210,9 @@ async def next_paragraph_question(
 
     이미 정해진 인물·세계(Bible 브리프)는 다시 묻지 않고 그 위에서 다음을 상상하게 한다(§01).
     """
-    chars = bible.get("characters", [])
-    who = chars[0].get("name", "주인공") if chars else "주인공"
+    chars = bible.get("characters", []) or []
+    first = chars[0] if chars else None
+    who = (first.get("name", "주인공") if isinstance(first, dict) else (str(first) if first else "주인공"))
     if gemini.mock:
         return f"좋아! 이제 {who}에게 다음엔 무슨 일이 생길까?"
     brief = bible_brief(bible, event)

@@ -66,8 +66,16 @@ def _normalize_bible(
         )
     data["events"] = norm
     data["totalChaptersPlanned"] = total
-    data.setdefault("characters", [])
-    data.setdefault("world", {})
+    # world 가 문자열로 오면 dict 로 강제(다운스트림 .get 안전 — collab/집필 500 방지).
+    world = data.get("world")
+    if not isinstance(world, dict):
+        data["world"] = {"setting": world} if isinstance(world, str) and world.strip() else {}
+    # characters 는 dict 리스트로 정규화(항목이 문자열이면 name 으로).
+    chars = data.get("characters")
+    if not isinstance(chars, list):
+        data["characters"] = []
+    else:
+        data["characters"] = [c if isinstance(c, dict) else {"name": str(c)} for c in chars]
     data.setdefault("learningObjectives", objectives)
     return data
 

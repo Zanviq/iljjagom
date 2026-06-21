@@ -13,6 +13,25 @@ from app.ai.brief import bible_brief
 from app.ai.gemini import GeminiClient
 
 
+def _world(bible: dict[str, Any]) -> dict[str, Any]:
+    """Bible 의 world 를 dict 로 안전 반환. 실 Gemini 가 world 를 문자열로 줄 때
+    `.get()` AttributeError(협업 500)를 방지한다."""
+    w = bible.get("world")
+    return w if isinstance(w, dict) else {}
+
+
+def _hero(bible: dict[str, Any]) -> str:
+    """주인공 이름 안전 추출(characters 항목이 dict/문자열 어느 쪽이어도 처리)."""
+    chars = bible.get("characters") or []
+    if chars:
+        first = chars[0]
+        if isinstance(first, dict):
+            return first.get("name") or "주인공"
+        if isinstance(first, str) and first.strip():
+            return first.strip()
+    return "주인공"
+
+
 def fallback_chapter(
     bible: dict[str, Any], event: dict[str, Any], is_final: bool = False
 ) -> str:
@@ -23,8 +42,11 @@ def fallback_chapter(
 def build_prompt(
     bible: dict[str, Any], event: dict[str, Any], rag_context: str, is_final: bool = False
 ) -> str:
-    chars = ", ".join(c.get("name", "") for c in bible.get("characters", []))
-    tone = bible.get("world", {}).get("tone", "따뜻한")
+    chars = ", ".join(
+        (c.get("name", "") if isinstance(c, dict) else str(c))
+        for c in bible.get("characters", []) or []
+    )
+    tone = _world(bible).get("tone", "따뜻한")
     objective = event.get("objective")
     obj_line = f"이 장에서 자연스럽게 담을 학습 내용: {objective}\n" if objective else ""
     if is_final:
@@ -57,10 +79,7 @@ _OUTPUT_RULE = (
 def _mock_chapter_text(
     bible: dict[str, Any], event: dict[str, Any], is_final: bool = False
 ) -> str:
-    hero = "주인공"
-    chars = bible.get("characters", [])
-    if chars:
-        hero = chars[0].get("name", "주인공")
+    hero = _hero(bible)
     objective = event.get("objective") or "새로운 것"
     if is_final:
         arc = (bible.get("secretArc") or {}).get("outline", "모두가 성장했어요")
@@ -201,14 +220,13 @@ async def write_paragraph(
 
     초등 2~4문장. 결말/secretArc 는 미리 드러내지 않는다(기·승 단계). 호출자가 sanitize.
     """
-    chars = bible.get("characters", [])
-    hero = chars[0].get("name", "주인공") if chars else "주인공"
+    hero = _hero(bible)
     if gemini.mock:
         intent = " ".join((student_intent or "").split()).rstrip(".!? ")
         lead = f"{hero}은(는) {intent}." if intent else f"{hero}은(는) 한 걸음 더 나아갔어요."
         return f"{lead} 그러자 이야기에 작은 변화가 살며시 찾아왔어요."
 
-    tone = bible.get("world", {}).get("tone", "따뜻한")
+    tone = _world(bible).get("tone", "따뜻한")
     prev = "\n".join(prev_paragraphs[-3:]) or "(이번이 첫 문단)"
     brief = bible_brief(bible, event)
     brief_block = f"{brief}\n\n" if brief else ""
@@ -255,7 +273,7 @@ async def revise_text(
         "결말을 새로 만들지 말고, 이 장면의 흐름은 유지한 채 요청만 반영한다. "
         "고친 전체 본문만 출력한다.\n"
         f"{_OUTPUT_RULE}\n"
-        f"분위기 참고: {bible.get('world', {}).get('tone', '따뜻한')}\n"
+        f"분위기 참고: {_world(bible).get('tone', '따뜻한')}\n"
         f"설정 참고:\n{rag_context}\n\n"
         f"독자 요청: {directive}\n\n현재 본문:\n{current_body}\n\n고친 본문:"
     )

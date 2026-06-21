@@ -28,3 +28,24 @@ def test_normalize_handles_malformed_total():
     out = _normalize_bible({"events": []}, ["증발"], 6)  # total 누락
     assert out["totalChaptersPlanned"] == 6
     assert len(out["events"]) == 6
+
+
+def test_normalize_coerces_string_world_and_characters():
+    # 실 Gemini 가 world 를 문자열, characters 를 문자열 리스트로 주는 경우(협업 500 원인) 정규화.
+    out = _normalize_bible(
+        {"world": "큰 산속 울창한 숲", "characters": ["폴짝이", {"name": "깡총이"}], "events": []},
+        ["증발"], 6,
+    )
+    assert isinstance(out["world"], dict)
+    assert out["world"]["setting"] == "큰 산속 울창한 숲"
+    assert all(isinstance(c, dict) for c in out["characters"])
+    assert out["characters"][0]["name"] == "폴짝이"
+
+
+def test_build_prompt_survives_malformed_bible():
+    # world/characters 가 문자열이어도 build_prompt 가 AttributeError 없이 동작해야 한다.
+    from app.ai.writer import build_prompt
+
+    bible = {"world": "숲", "characters": ["토끼"], "title": "t"}
+    p = build_prompt(bible, {"summary": "s", "objective": "증발"}, "")
+    assert "따뜻한" in p  # tone 기본값 적용(크래시 없음)

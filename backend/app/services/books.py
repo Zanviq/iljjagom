@@ -374,9 +374,11 @@ async def _index_bible(store: Store, gemini: GeminiClient, book_id: str, bible: 
     for c in bible.get("characters", []):
         traits = ", ".join(c.get("traits", []))
         texts.append(f"인물 {c.get('name')}: {traits}. 외형 {c.get('appearance', '')}")
-    world = bible.get("world", {})
-    if world:
+    world = bible.get("world")
+    if isinstance(world, dict) and world:
         texts.append(f"세계관: {world.get('setting', '')} / 분위기 {world.get('tone', '')}")
+    elif isinstance(world, str) and world.strip():
+        texts.append(f"세계관: {world.strip()}")
     for ev in bible.get("events", []):
         texts.append(f"{ev.get('chapterIdx')}장 개요: {ev.get('summary', '')}")
     for t in texts:
