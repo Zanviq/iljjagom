@@ -443,9 +443,23 @@ async def prefetch_chapter(
 async def post_stream_tasks(
     store: Store, gemini: GeminiClient, book_id: str, idx: int
 ) -> None:
-    """스트림 종료 후: 현재 장 검수 → 다음 장 선생성(순차). BackgroundTask 진입점."""
+    """스트림 종료 후: 현재 장 검수 → 다음 장 선생성 → (결 완료 시) 마무리 퀴즈 선생성.
+
+    BackgroundTask 진입점. 마지막 장(결)을 다 읽은 순간 마무리 학습 퀴즈를 백그라운드로 미리
+    만들어, '학습하러 가기' 진입 시 실 AI 퀴즈 생성 딜레이가 없게 한다.
+    """
     await run_first_draft_review(store, gemini, book_id, idx)
     await prefetch_chapter(store, gemini, book_id, idx + 1)
+    # 결(마지막 장) 완료 → 마무리 학습 교재(어휘·실 퀴즈) 선생성.
+    try:
+        bible_rec = store.get_bible(book_id)
+        total = bible_rec.data.get("totalChaptersPlanned") if bible_rec else None
+        if total and idx >= total:
+            from app.services import learning
+
+            await learning.prefetch_learning(store, gemini, book_id)
+    except Exception:
+        logger.exception("마무리 퀴즈 선생성 실패 book=%s", book_id)
 
 
 async def prefetch_arc(store: Store, gemini: GeminiClient, book_id: str) -> None:

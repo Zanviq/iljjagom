@@ -192,6 +192,24 @@ async def collab_turn(
     )
 
 
+def _character_names(bible: dict) -> list[str]:
+    chars = bible.get("characters", []) or []
+    return [c.get("name") for c in chars if isinstance(c, dict) and c.get("name")]
+
+
+def _opening_question(store: Store, book_id: str, idx: int) -> str:
+    """첫 진입 곰 작가 여는 말 — bible 인물명·장 번호로 동적 생성(고정 문구 금지).
+
+    1장은 시작을, 2장+는 '이어가기'를 권해 장끼리 단절돼 보이지 않게 한다(LLM 호출 없음).
+    """
+    rec = store.get_bible(book_id)
+    names = _character_names(rec.data) if rec else []
+    who = "·".join(names[:2]) if names else "우리 주인공"
+    if idx <= 1:
+        return f"{who}의 이야기, 어떻게 시작할까? 떠오르는 첫 장면을 말해 줘!"
+    return f"지금까지 이어온 {who}의 이야기, {idx}장에서는 무슨 일이 생길까? 다음 장면을 말해 줘!"
+
+
 def collab_state(store: Store, user: CurrentUser, book_id: str, idx: int) -> CollabState:
     book = get_book_or_404(store, book_id)
     assert_can_access_book(store, user, book)
@@ -200,7 +218,10 @@ def collab_state(store: Store, user: CurrentUser, book_id: str, idx: int) -> Col
         raise not_found("챕터를 찾을 수 없습니다.")
     paragraphs = store.list_paragraphs(chapter.id)
     turns = store.list_writing_turns(chapter.id)
+    # 대화가 아직 없을 때만 여는 말 제공(있으면 기존 흐름 유지).
+    opening = _opening_question(store, book_id, idx) if not turns else ""
     return CollabState(
+        opening_question=opening,
         # 본문 문단·대화는 평문으로 정제해 내보낸다(신규는 무영향, 옛 마크다운 데이터도 깨끗히, 이슈2).
         paragraphs=[
             CollabParagraphView(seq=p.seq, body=sanitize_body(p.body), source=p.source)

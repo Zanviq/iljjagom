@@ -630,16 +630,26 @@ export function postEvents(
   });
 }
 
+/** 학습 결과 저장 시 발행하는 브라우저 이벤트(마무리 요약 체크 갱신용, 07). */
+export const LEARNING_SAVED_EVENT = "ijg:learning-saved";
+
 /** 학습 결과 저장(책 소유 학생/admin). type∈quiz|essay|emotion. */
-export function postLearningResult(
+export async function postLearningResult(
   token: string | null,
   bookId: string,
   body: LearningResultCreate,
 ): Promise<{ id: string; type: string; createdAt: string }> {
-  return apiFetch<{ id: string; type: string; createdAt: string }>(
+  const res = await apiFetch<{ id: string; type: string; createdAt: string }>(
     `/books/${bookId}/learning-results`,
     { token, method: "POST", body },
   );
+  // 저장 성공 → 마무리 요약(LearningFinish)이 즉시 체크를 갱신하도록 알린다.
+  if (typeof window !== "undefined") {
+    window.dispatchEvent(
+      new CustomEvent(LEARNING_SAVED_EVENT, { detail: { type: res.type } }),
+    );
+  }
+  return res;
 }
 
 /** 학습 결과 조회(책 접근 가능자). */

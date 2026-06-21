@@ -6,7 +6,7 @@ import { useEffect, useState } from "react";
 import { Button } from "@/components/ui/Button";
 import { Card } from "@/components/ui/Card";
 import { Icon } from "@/components/ui/Icon";
-import { ApiError, getLearningResults, postBoardPost } from "@/lib/api";
+import { ApiError, getLearningResults, LEARNING_SAVED_EVENT, postBoardPost } from "@/lib/api";
 import { getClientAccessToken } from "@/lib/auth/client";
 import type { BoardPostStatus } from "@/lib/types";
 
@@ -41,7 +41,7 @@ export function LearningFinish({
 
   useEffect(() => {
     let active = true;
-    (async () => {
+    async function refresh() {
       try {
         const token = await getClientAccessToken();
         const { results } = await getLearningResults(token, bookId);
@@ -54,9 +54,13 @@ export function LearningFinish({
       } catch {
         // 요약 조회 실패는 마무리 흐름을 막지 않는다.
       }
-    })();
+    }
+    void refresh();
+    // 퀴즈·독후감·감정 곡선 저장 시 즉시 체크 갱신(페이지 새로고침 없이, 07).
+    window.addEventListener(LEARNING_SAVED_EVENT, refresh);
     return () => {
       active = false;
+      window.removeEventListener(LEARNING_SAVED_EVENT, refresh);
     };
   }, [bookId]);
 

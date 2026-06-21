@@ -44,7 +44,12 @@ export default async function WritePage({
 
   return (
     <div className="mx-auto w-full max-w-[1100px] px-6 pb-16 pt-6">
-      <CollabWriter bookId={bookId} chapterIdx={target.idx} />
+      <CollabWriter
+        bookId={bookId}
+        chapterIdx={target.idx}
+        title={book.title}
+        totalChaptersPlanned={book.totalChaptersPlanned}
+      />
     </div>
   );
 }

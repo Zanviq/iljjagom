@@ -28,8 +28,8 @@ import type {
   CollabTurn,
 } from "@/lib/types";
 
-const INTRO_QUESTION =
-  "이 이야기, 어떻게 시작할까? 떠오르는 첫 장면을 말해 줘!";
+// 백엔드(openingQuestion)가 비었을 때만 쓰는 최소 폴백. 평소엔 bible·장 기반 동적 문구를 쓴다.
+const INTRO_FALLBACK = "다음 이야기를 함께 써 볼까? 떠오르는 장면을 말해 줘!";
 
 /** 직전 지도(coaching) — 수용/고수 시 유발 메시지를 다시 보낸다. */
 interface Coaching {
@@ -47,15 +47,20 @@ interface Coaching {
 export function CollabWriter({
   bookId,
   chapterIdx,
+  title,
+  totalChaptersPlanned,
 }: {
   bookId: string;
   chapterIdx: number;
+  title?: string | null;
+  totalChaptersPlanned?: number | null;
 }) {
   const router = useRouter();
   const [token, setToken] = useState<string | null>(null);
   const [loading, setLoading] = useState(true);
   const [paragraphs, setParagraphs] = useState<CollabStateParagraph[]>([]);
   const [turns, setTurns] = useState<CollabTurn[]>([]);
+  const [openingQuestion, setOpeningQuestion] = useState<string>("");
   const [coaching, setCoaching] = useState<Coaching | null>(null);
   const [chapterComplete, setChapterComplete] = useState(false);
   const [input, setInput] = useState("");
@@ -88,6 +93,7 @@ export function CollabWriter({
         setParagraphs(state.paragraphs);
         setTurns(state.turns);
         setChapterComplete(state.chapterComplete);
+        setOpeningQuestion(state.openingQuestion ?? "");
       } catch (e) {
         if (!active) return;
         if (e instanceof ApiError && (e.status === 404 || e.status === 0)) {
@@ -264,7 +270,19 @@ export function CollabWriter({
   // 화면 높이에 따라 두 박스가 유연하게(세로로) 늘고 줄도록 — 고정 정사각 방지(06 §화면조절).
   const PANEL_H = "clamp(420px, 70vh, 820px)";
   return (
-    <div className="grid items-start gap-[22px] [grid-template-columns:1fr] md:[grid-template-columns:1.55fr_1fr]">
+    <>
+      {/* 현재 장 표시 — 몇 장을 쓰고 있는지 항상 보이게(자유집필). */}
+      <div className="mb-4 flex flex-wrap items-center gap-2.5">
+        <span className="inline-flex items-center gap-1.5 rounded-full bg-primary px-3 py-1 text-[length:var(--text-sm)] font-extrabold text-on-primary">
+          <Icon name="feather" size={15} />
+          {chapterIdx}장{totalChaptersPlanned ? ` / 전체 ${totalChaptersPlanned}장` : ""}
+        </span>
+        <span className="text-[length:var(--text-sm)] text-ink-3">
+          {title ? `${title} · ` : ""}곰 작가와 함께 쓰는 중
+        </span>
+      </div>
+
+      <div className="grid items-start gap-[22px] [grid-template-columns:1fr] md:[grid-template-columns:1.55fr_1fr]">
       {/* 좌: 본문 누적(섹션 카드) */}
       <Card padding="lg" style={{ minHeight: PANEL_H, overflow: "visible" }}>
         <p className="ijg-eyebrow mb-4" style={{ color: "var(--primary-text)" }}>
@@ -412,7 +430,9 @@ export function CollabWriter({
         <div className="flex flex-1 flex-col gap-4 overflow-y-auto p-[22px]">
           {turns.length === 0 && (
             <ChatBubble from="ai" name="곰 작가">
-              <span className="whitespace-pre-wrap">{INTRO_QUESTION}</span>
+              <span className="whitespace-pre-wrap">
+                {openingQuestion || INTRO_FALLBACK}
+              </span>
             </ChatBubble>
           )}
           {turns.map((m, i) => (
@@ -515,6 +535,7 @@ export function CollabWriter({
           </form>
         )}
       </Card>
-    </div>
+      </div>
+    </>
   );
 }

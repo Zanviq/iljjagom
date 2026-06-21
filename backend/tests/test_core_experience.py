@@ -22,7 +22,7 @@ def test_illustration_prompt_identity_and_order():
         {"id": "a", "name": "별이", "appearance": "노란 머리의 소녀"},
     ]
     p = _build_image_prompt("숲속 장면", chars)
-    assert "같은 외형" in p  # 일관성 지시
+    assert "같은 종류·외형" in p  # 종류+외형 일관성 지시(06)
     # id 정렬(a 먼저) + 구조화 appearance 풀어쓰기
     assert p.index("별이") < p.index("토끼")
     assert "흰 털" in p and "분홍 눈" in p

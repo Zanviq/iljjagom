@@ -274,6 +274,8 @@ export interface CollabState {
   paragraphs: CollabStateParagraph[];
   turns: CollabTurn[];
   chapterComplete: boolean;
+  /** 첫 진입 시 곰 작가 여는 말(bible·장 기반 동적). 대화가 있으면 빈 문자열. */
+  openingQuestion?: string;
 }
 
 /** POST /books/{id}/plan/messages 응답 */

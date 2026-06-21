@@ -379,6 +379,8 @@ class CollabState(CamelModel):
     paragraphs: list[CollabParagraphView] = []
     turns: list[CollabTurnView] = []
     chapter_complete: bool = False
+    # 첫 진입 시 곰 작가의 여는 말(bible·장 기반 동적, 고정 문구 아님). 대화가 있으면 빈 문자열.
+    opening_question: str = ""
 
 
 # --- 문단 직접편집·순서변경(05-기능수정 §02) ---

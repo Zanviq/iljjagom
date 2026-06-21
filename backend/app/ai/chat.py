@@ -6,6 +6,7 @@ mock 모드에서도 결말을 만들지 않고 인물·배경·분위기 질문
 from __future__ import annotations
 
 import re
+from typing import Any
 
 from app.ai.brief import bible_brief
 from app.ai.gemini import GeminiClient
@@ -276,24 +277,57 @@ def _strip_json(raw: str) -> str:
 
 
 async def persona_reply(
-    gemini: GeminiClient, character_name: str, traits: list[str], letter_body: str
+    gemini: GeminiClient,
+    character_name: str,
+    traits: list[str],
+    letter_body: str,
+    *,
+    species: str | None = None,
+    appearance: str | None = None,
+    world: Any = None,
+    story_title: str | None = None,
+    story_context: str | None = None,
 ) -> str:
-    """인물 페르소나로 학생 편지에 답장한다(FR-S11). 결말/줄거리는 절대 누설하지 않는다."""
+    """인물 페르소나로 학생 편지에 답장한다(FR-S11).
+
+    인물의 종류·생김새·성격과 이야기 배경·함께 겪은 일(story_context)을 담아, 그 인물이
+    '진짜로' 답장하듯 구체적으로 쓴다. 이야기의 결말/앞으로의 줄거리는 절대 누설하지 않는다.
+    """
     if gemini.mock:
         return (
             f"안녕, 나는 {character_name}이야. 너의 편지를 받아서 정말 기뻤어! "
-            "너의 마음이 따뜻하게 느껴졌어. 우리 이야기의 다음 장면도 함께 기대해 보자. 고마워!"
+            "너의 마음이 따뜻하게 느껴졌어. 우리가 함께한 이야기를 떠올리니 참 좋다. 고마워!"
         )
 
     trait_line = ", ".join(traits) if traits else "다정한"
+    setting = ""
+    if isinstance(world, dict):
+        setting = world.get("setting") or ""
+    elif isinstance(world, str):
+        setting = world
+    ctx_lines = []
+    if species:
+        ctx_lines.append(f"너의 종류: {species}")
+    if appearance:
+        ctx_lines.append(f"너의 생김새: {appearance}")
+    if setting:
+        ctx_lines.append(f"이야기 배경: {setting}")
+    if story_context:
+        ctx_lines.append(f"우리가 함께 겪은 이야기:\n{story_context}")
+    ctx_block = ("\n".join(ctx_lines) + "\n") if ctx_lines else ""
+    title = story_title or "우리 이야기"
     prompt = (
-        f"너는 어린이 동화 속 인물 '{character_name}'({trait_line} 성격)이다. "
-        "어린 독자가 너에게 쓴 편지에 그 인물의 말투로 다정하게 답장한다. "
+        f"너는 어린이 동화 '{title}' 속 인물 '{character_name}'이다. "
+        f"성격: {trait_line}.\n"
+        f"{ctx_block}"
+        "이 인물의 말투와 성격 그대로, 어린 독자가 너에게 쓴 편지에 다정하게 답장한다. "
+        "위 '함께 겪은 이야기' 속 장면이나 우리 사이의 추억을 자연스럽게 한 가지 떠올리며 "
+        "구체적으로 답한다(편지 내용에 진심으로 반응할 것). "
         "이야기의 결말이나 앞으로의 줄거리는 절대 말하지 않는다. "
         "초등학생이 읽기 쉬운 한국어로 서너 문장만 쓴다.\n"
         f"독자의 편지: {letter_body}\n\n{character_name}의 답장:"
     )
-    return (await gemini.generate_text(gemini.settings.gemini_model_flash_lite, prompt)).strip()
+    return (await gemini.generate_text(gemini.settings.gemini_model_flash, prompt)).strip()
 
 
 async def interpret_revision(gemini: GeminiClient, instruction: str) -> str:

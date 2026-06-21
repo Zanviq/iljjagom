@@ -28,6 +28,7 @@ from app.models.schemas import (
 )
 from app.services import words
 from app.services.books import assert_can_access_book, assert_owner_student, get_book_or_404
+from app.services.prefetch import acquire_prefetch, release_prefetch
 from app.store.base import Store
 
 # 감정 팔레트(학생/11 입력 활동). 학생이 장마다 직접 고른다.
@@ -52,9 +53,14 @@ def _story_text(chapters: list) -> str:
 LEARNING_SET = "learning_set"  # 생성 교재 캐시(학생 자기보고 결과와 구분)
 
 
+# 캐시 스키마 버전 — 생성 로직이 바뀌면(예: 템플릿→실 AI 퀴즈, 07) 올려서 옛 캐시를 무효화한다.
+# v2: 본문 기반·학년 맞춤 실 AI 퀴즈 도입(고정 템플릿 캐시 폐기).
+_CACHE_VERSION = "v2"
+
+
 def _source_sig(chapters: list) -> str:
-    """캐시 키 — 학생 진입 챕터의 idx:char_count. 추가 집필·revise 시 변동 → 자동 무효화."""
-    return "|".join(f"{c.idx}:{c.char_count}" for c in chapters)
+    """캐시 키 — 버전 + 학생 진입 챕터의 idx:char_count. 추가 집필·revise·버전업 시 자동 무효화."""
+    return _CACHE_VERSION + "|" + "|".join(f"{c.idx}:{c.char_count}" for c in chapters)
 
 
 async def build_learning(
@@ -92,6 +98,39 @@ async def build_learning(
         except Exception:
             pass
     return result
+
+
+async def prefetch_learning(store: Store, gemini: GeminiClient, book_id: str) -> None:
+    """결(마지막 장) 완료 직후 마무리 학습 교재(어휘·실 퀴즈 등)를 백그라운드 생성·캐시.
+
+    학생이 '학습하러 가기' 를 누르기 전에 미리 만들어, 실 AI 퀴즈 생성 지연을 대기에서 없앤다.
+    멱등·단일성(이미 최신 캐시면 skip).
+    """
+    book = store.get_book(book_id)
+    if not book:
+        return
+    chapters = [
+        c for c in store.list_chapters(book_id)
+        if c.char_count > 0 and not getattr(c, "prefetched", False)
+    ]
+    if not chapters:
+        return
+    sig = _source_sig(chapters)
+    for a in store.list_learning_artifacts(book_id=book_id, type=LEARNING_SET):
+        if a.data.get("sourceSig") == sig:
+            return  # 이미 준비됨
+    if not acquire_prefetch(book_id, "learning"):
+        return
+    try:
+        result = await _generate_learning(store, gemini, book, chapters)
+        try:
+            store.add_learning_artifact(book_id, LEARNING_SET, {"sourceSig": sig, **serialize(result)})
+        except Exception:
+            pass
+    except Exception:
+        pass
+    finally:
+        release_prefetch(book_id, "learning")
 
 
 async def _generate_learning(
@@ -197,13 +236,25 @@ async def write_letter(
         return LetterResponse(status="held", reply=None, letter_id=letter.id)
 
     bible_rec = store.get_bible(book_id)
-    characters = bible_rec.data.get("characters", []) if bible_rec else []
-    character = next((c for c in characters if c.get("name") == to), None)
+    bible = bible_rec.data if bible_rec else {}
+    characters = bible.get("characters", []) if isinstance(bible.get("characters"), list) else []
+    character = next((c for c in characters if isinstance(c, dict) and c.get("name") == to), None)
     if not character:
         raise validation_error("그 인물을 찾을 수 없어요.", {"field": "to"})
 
+    # 이야기 배경·함께 겪은 일을 페르소나에 전달(결말 비공개). 본문 일부를 추억 맥락으로.
+    story_context = _story_text(
+        [c for c in store.list_chapters(book_id) if c.char_count > 0 and not getattr(c, "prefetched", False)]
+    )[:1500]
+    ap = character.get("appearance")
+    appearance = ap if isinstance(ap, str) else (", ".join(str(v) for v in ap.values()) if isinstance(ap, dict) else None)
     reply = await chat.persona_reply(
-        gemini, character.get("name", to), character.get("traits", []), body
+        gemini, character.get("name", to), character.get("traits", []), body,
+        species=character.get("species") or character.get("kind"),
+        appearance=appearance,
+        world=bible.get("world"),
+        story_title=bible.get("title"),
+        story_context=story_context or None,
     )
     letter = store.add_letter(
         book_id, user.id, to, body, status="answered", reply=reply, reply_source="ai"

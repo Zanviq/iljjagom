@@ -12,6 +12,19 @@ from app.ai.gemini import GeminiClient
 from app.store.records import PromptRecord
 
 DEFAULT_TOTAL_CHAPTERS = 6
+MIN_TOTAL_CHAPTERS = 2
+MAX_TOTAL_CHAPTERS = 12
+
+
+def _resolve_total(prompt: PromptRecord | None) -> int:
+    """교사가 발제에서 고른 장수(chapters_planned)를 권위값으로. 없으면 기본 6장.
+
+    이 값으로 앞 절반=기·승(자유), 뒤 절반=전·결(유도) 가 갈리고 마지막 장 번호가 정해진다.
+    """
+    cp = getattr(prompt, "chapters_planned", None) if prompt else None
+    if isinstance(cp, int) and cp > 0:
+        return max(MIN_TOTAL_CHAPTERS, min(cp, MAX_TOTAL_CHAPTERS))
+    return DEFAULT_TOTAL_CHAPTERS
 
 
 def _distribute_objectives(objectives: list[str], total: int) -> list[dict[str, Any]]:
@@ -43,10 +56,10 @@ def _normalize_bible(
     """
     if not isinstance(data, dict):
         data = {}
-    raw_total = data.get("totalChaptersPlanned")
     events_in = data.get("events") if isinstance(data.get("events"), list) else []
-    total = raw_total if isinstance(raw_total, int) and raw_total > 0 else (len(events_in) or default_total)
-    total = max(2, min(int(total), 12))  # 합리 범위로 제한
+    # 교사가 고른 장수(default_total)를 권위값으로 강제한다 — LLM 이 다른 수를 내도 무시.
+    # 그래야 기·승(앞 절반)/전·결(뒤 절반) 분할과 마지막 장 번호가 교사 설정과 정확히 일치한다.
+    total = max(2, min(int(default_total), 12))
 
     by_idx: dict[int, dict] = {}
     for e in events_in:
@@ -92,7 +105,7 @@ async def build_bible(
 ) -> dict[str, Any]:
     topic = prompt.topic if prompt else "자유 주제"
     objectives = prompt.learning_objectives if prompt else []
-    total = DEFAULT_TOTAL_CHAPTERS
+    total = _resolve_total(prompt)  # 교사 선택 장수(기·승/전·결 절반·마지막 장 결정)
 
     if gemini.mock:
         return {
@@ -102,6 +115,7 @@ async def build_bible(
                 {
                     "id": "hero",
                     "name": "주인공",
+                    "species": "어린이",
                     "traits": character_traits or ["용감함"],
                     "appearance": "밝은 표정의 어린이",
                 }
@@ -122,6 +136,9 @@ async def build_bible(
         "너는 어린이 책 한 권의 설계자다. 아래 정보를 바탕으로 책의 Bible(JSON)을 만들어라. "
         "JSON 키: title, totalChaptersPlanned(int), characters[], world, events[], "
         "learningObjectives[], secretArc(후반 큰줄기, 아동 비공개). "
+        "characters 의 각 항목은 id, name, species(사람/동물 등 종류: 예 '토끼','개구리','어린이'), "
+        "traits[], appearance(생김새·색·복장·특징) 를 가진다. 기획 대화에 나온 인물의 종류를 "
+        "그대로 species 에 적는다(없으면 어울리게 정한다). "
         "events 의 각 항목은 chapterIdx, mode(free|guided), objective, summary 를 가진다. "
         f"앞 절반은 free(자유), 뒤 절반은 guided(유도). 총 {total}개 챕터.\n\n"
         f"주제: {topic}\n학습목표:\n{objectives_text}\n기획 대화:\n{plan_text}\n\nJSON만 출력:"

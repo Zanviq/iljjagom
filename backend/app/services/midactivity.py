@@ -15,6 +15,7 @@ from app.services import policy
 from app.services.books import assert_can_access_book, assert_owner_student, get_book_or_404
 from app.services.collab import COLLAB_TARGET_PARAGRAPHS
 from app.services.learning import _source_sig
+from app.services.prefetch import acquire_prefetch, release_prefetch
 from app.store.base import Store
 
 MID_ACTIVITY = "mid_activity"
@@ -147,21 +148,28 @@ async def get_mid_activity(
             )
 
     # 미스 → 기·승 본문 내용 이해 + 학습목표를 학년 수준에 맞춰 실 퀴즈 생성(실패 시 템플릿).
+    quiz, essay = await _generate_mid_content(store, gemini, book_id, bible, giseung)
+    _store_mid_artifact(store, book_id, sig, quiz, essay)
+    return MidActivityResponse(required=not done, done=done, quiz=quiz, essay_blanks=essay)
+
+
+async def _generate_mid_content(store: Store, gemini: GeminiClient, book_id: str, bible: dict, giseung: list):
+    """중간활동 콘텐츠(실 퀴즈 + 독후감 빈칸) 생성 — get_mid_activity·prefetch 공용."""
     objectives = [e.get("objective") for e in _free_events(store, book_id, bible=bible) if e.get("objective")]
     story_text = "\n\n".join(
         f"[{c.idx}장]\n{sanitize_body(c.body).strip()}" for c in giseung if (c.body or "").strip()
     )
-    grade = policy.resolve_grade(store, book=book)
+    grade = policy.resolve_grade(store, book_id=book_id)
     quiz = await quizgen.generate_quiz(
-        gemini,
-        story_text=story_text,
-        objectives=[o for o in objectives if o],
-        grade=grade,
-        count=5,
-        seed=f"{book_id}:mid",
+        gemini, story_text=story_text, objectives=[o for o in objectives if o],
+        grade=grade, count=5, seed=f"{book_id}:mid",
     )
     essay = [EssayBlank(prompt="여기까지 이야기에서 가장 기억에 남는 장면은 무엇인가요?",
                         hints=["인물", "사건"])]
+    return quiz, essay
+
+
+def _store_mid_artifact(store: Store, book_id: str, sig: str, quiz, essay) -> None:
     try:
         store.add_learning_artifact(book_id, MID_ACTIVITY, {
             "sourceSig": sig,
@@ -170,7 +178,38 @@ async def get_mid_activity(
         })
     except Exception:
         pass
-    return MidActivityResponse(required=not done, done=done, quiz=quiz, essay_blanks=essay)
+
+
+async def prefetch_mid_quiz(store: Store, gemini: GeminiClient, book_id: str) -> None:
+    """기·승 완료 직후 중간 퀴즈를 백그라운드 생성·캐시(학생이 풀기 전에 준비). 멱등·단일성.
+
+    실 AI 퀴즈 생성 지연을 학생 대기에서 분리한다(딜레이 제거).
+    """
+    bible_rec = store.get_bible(book_id)
+    bible = bible_rec.data if bible_rec else {}
+    chapters = store.list_chapters(book_id)
+    para_counts: dict[str, int] = {}
+    for p in store.list_paragraphs_for_book(book_id):
+        para_counts[p.chapter_id] = para_counts.get(p.chapter_id, 0) + 1
+    if not (
+        giseung_done(store, book_id, bible=bible, chapters=chapters, para_counts=para_counts)
+        and _guided_events(store, book_id, bible=bible)
+    ):
+        return
+    giseung = _giseung_chapters(store, book_id, bible=bible, chapters=chapters)
+    sig = _source_sig(giseung)
+    for a in store.list_learning_artifacts(book_id=book_id, type=MID_ACTIVITY):
+        if a.data.get("sourceSig") == sig:
+            return  # 이미 준비됨
+    if not acquire_prefetch(book_id, "mid_quiz"):
+        return
+    try:
+        quiz, essay = await _generate_mid_content(store, gemini, book_id, bible, giseung)
+        _store_mid_artifact(store, book_id, sig, quiz, essay)
+    except Exception:
+        pass
+    finally:
+        release_prefetch(book_id, "mid_quiz")
 
 
 def complete_mid_activity(store: Store, user, book_id: str) -> MidActivityResponse:

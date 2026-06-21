@@ -101,9 +101,10 @@ async def collab_turn(
     _consent: CurrentUser = Depends(require_guardian_consent()),
 ) -> dict:
     reply = await collab.collab_turn(store, gemini, user, book_id, idx, req.message, req.accept)
-    # 기·승 완료 순간 → 전·결 백그라운드 선생성(중간활동 푸는 동안, 학생/15 §3).
+    # 기·승 완료 순간 → 전·결 + 중간 퀴즈 백그라운드 선생성(중간활동 푸는 동안, 학생/15 §3).
     if reply.chapter_complete and midactivity.giseung_done(store, book_id):
         background.add_task(chapters.prefetch_arc, store, gemini, book_id)
+        background.add_task(midactivity.prefetch_mid_quiz, store, gemini, book_id)
     return serialize(reply)
 
 

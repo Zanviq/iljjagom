@@ -28,27 +28,55 @@ def is_placeholder_url(url: str | None) -> bool:
 def _character_identity(c: dict) -> str:
     """인물 외형 고정 식별 문구 — 매 장 동일 텍스트(외형 일관, C5).
 
+    종류(species)를 가장 먼저 박아 Imagen 이 엉뚱한 동물로 그리지 않게 한다(예: 토끼/개구리).
     appearance 가 구조화 dict({hair,eyes,outfit,distinctive,...})면 항목을 풀어 쓰고,
-    문자열이면 그대로 사용한다.
+    문자열이면 그대로 사용한다. traits 도 덧붙여 인물 정체성을 강화한다.
     """
     name = c.get("name", "")
+    species = c.get("species") or c.get("kind") or ""
     ap = c.get("appearance")
     if isinstance(ap, dict):
         parts = [ap.get(k) for k in ("hair", "eyes", "outfit", "ageLook", "distinctive")]
         desc = ", ".join(p for p in parts if p)
     else:
         desc = ap or ""
-    return f"{name}({desc})" if desc else name
+    traits = c.get("traits") or []
+    trait_str = ", ".join(str(t) for t in traits[:3]) if isinstance(traits, list) else ""
+    head = f"{name}({species})" if species else name
+    tail = ", ".join(b for b in (desc, trait_str) if b)
+    return f"{head} — {tail}" if tail else head
+
+
+def _species_list(characters: list[dict]) -> str:
+    """등장인물 종류 목록(예: '토끼, 개구리') — 다른 동물 등장 차단 문구에 쓴다."""
+    seen: list[str] = []
+    for c in characters:
+        sp = c.get("species") or c.get("kind")
+        if sp and sp not in seen:
+            seen.append(str(sp))
+    return ", ".join(seen)
 
 
 def _build_image_prompt(summary: str, characters: list[dict]) -> str:
     # 인물 순서 안정화(id 기준) → 장마다 동일 입력. 과밀 방지로 상위 3명.
     ordered = sorted(characters, key=lambda c: str(c.get("id", c.get("name", ""))))
-    who = "; ".join(_character_identity(c) for c in ordered[:3])
+    shown = ordered[:3]
+    who = "; ".join(_character_identity(c) for c in shown)
+    species = _species_list(shown)
+    # 종류가 명시된 경우, 그 동물/사람만 그리고 다른 종은 금지(거북이 등 환각·복제 방지).
+    only_line = (
+        f"이 장면에 등장하는 것은 오직 다음뿐이다: {species}. 목록에 없는 사람이나 동물(예: 거북이, "
+        "강아지 등)은 절대 그리지 않는다. 같은 인물을 여러 마리로 복제하지 않는다(각 인물은 한 번만). "
+        if species else
+        "장면에는 위에 적은 등장인물만 그린다. 목록에 없는 인물·동물은 추가하지 않고, 같은 인물을 "
+        "여러 번 복제하지 않는다. "
+    )
     return (
         "어린이 동화책 삽화, 따뜻하고 부드러운 색감, 안전한 그림체. "
-        "같은 인물은 항상 같은 외형(머리·눈·복장·특징)으로 일관되게 그린다. "
-        f"등장인물: {who}. 장면: {summary}. "
+        "같은 인물은 항상 같은 종류·외형(머리·눈·복장·특징)으로 일관되게 그린다. "
+        f"등장인물: {who}. "
+        f"{only_line}"
+        f"장면: {summary}. "
         # 글자 박힘 방지(이미지 안에 텍스트/영어/캡션 금지) — 한국어+영어로 강하게 지시.
         "그림 안에 글자·문자·단어·숫자·자막·말풍선·서명·워터마크를 절대 넣지 않는다. "
         "No text, no letters, no words, no captions, no writing, no watermark, no signature anywhere in the image."
