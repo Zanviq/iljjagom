@@ -1,5 +1,8 @@
 # 일짜곰 (iljjagom)
 
+<!-- 배너 이미지: documents/screenshots/banner.png 로 저장하면 표시됩니다(없으면 생략 가능). -->
+<!-- ![일짜곰](documents/screenshots/banner.png) -->
+
 > 아이가 직접 이야기를 만들고, AI가 결말을 비밀로 펼치며, 교사가 학급 단위로 학습 목표를 발제해 교과 수업에 쓰는 **어린이 도서 플랫폼**.
 
 핵심 가설은 단순하다 — **내가 만든 이야기라서 결말이 궁금해 끝까지 읽고, 읽으면서 배운다.**
@@ -16,6 +19,38 @@
 2. **교사 발제 개별화** — 교사가 학습 목표를 내면 학급 30명이 *각자 다른 이야기*로 *같은 목표*를 거친다.
 3. **본문·삽화 동시 생성** — 유도 모드는 삽화를 먼저 보여 호기심을 자극하고, 본문은 글자 단위로 흐른다.
 4. **읽기 = 배움** — 완독하면 낱말·퀴즈·감정 곡선·인물 편지·독후감으로 이어진다.
+
+---
+
+## 화면 미리보기
+
+> 아래 이미지는 `documents/screenshots/` 폴더의 파일을 불러온다. 아직 이미지를 넣지 않았다면
+> 깨진 링크로 보일 수 있다 — 캡처를 **표에 적힌 파일명 그대로** 그 폴더에 저장하면 표시된다.
+> 각 화면이 무엇을 담아야 하는지는 [`documents/screenshots/README.md`](documents/screenshots/README.md) 참고.
+
+### 학생
+
+| 홈(내 책장) | 기획 대화 |
+| --- | --- |
+| ![학생 홈](documents/screenshots/student-01-home.png) | ![기획 대화](documents/screenshots/student-02-plan.png) |
+| **자유집필 협업(기·승)** | **중간활동(퀴즈)** |
+| ![자유집필 협업](documents/screenshots/student-03-collab.png) | ![중간활동](documents/screenshots/student-04-mid-activity.png) |
+| **전·결 읽기(삽화+본문)** | **학습 활동(낱말·퀴즈·감정·편지)** |
+| ![전결 읽기](documents/screenshots/student-05-read.png) | ![학습 활동](documents/screenshots/student-06-learn.png) |
+
+### 교사
+
+| 학급 목록 | 발제 만들기 |
+| --- | --- |
+| ![학급 목록](documents/screenshots/teacher-01-classes.png) | ![발제 만들기](documents/screenshots/teacher-02-prompt.png) |
+| **대시보드(정량 지표)** | **학생 작업 열람** |
+| ![대시보드](documents/screenshots/teacher-03-dashboard.png) | ![학생 작업 열람](documents/screenshots/teacher-04-student-work.png) |
+
+### 관리자
+
+| 관리자 콘솔 |
+| --- |
+| ![관리자 콘솔](documents/screenshots/admin-01-console.png) |
 
 ---
 
@@ -37,9 +72,9 @@
 iljjagom/
 ├─ backend/        # FastAPI — AI 파이프라인·데이터·인증 (자세히: backend/README.md)
 ├─ frontend/       # Next.js 16 웹 (자세히: frontend/README.md)
-├─ scripts/        # 개발 도구 (worktree 셋업 등)
 └─ documents/
-   └─ instructions/  # 📚 프로젝트 종합 문서 (개요·아키텍처·기능·API·흐름·디자인·운영)
+   ├─ instructions/  # 📚 프로젝트 종합 문서 (개요·아키텍처·기능·API·흐름·디자인·운영)
+   └─ screenshots/   # README 화면 미리보기 이미지 (파일명 규칙: screenshots/README.md)
 ```
 
 ---
