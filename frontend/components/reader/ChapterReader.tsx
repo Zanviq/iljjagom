@@ -146,6 +146,14 @@ function ChapterStream({
   const doneRef = useRef(false);
   // 체류 측정용: 도달 단계(opened→read→done).
   const reachedRef = useRef<"opened" | "read" | "done">("opened");
+  // 수정요청 폴링 취소 플래그: 언마운트/챕터 이동 시 백그라운드 폴링을 중단한다.
+  const cancelledRef = useRef(false);
+  useEffect(() => {
+    cancelledRef.current = false;
+    return () => {
+      cancelledRef.current = true;
+    };
+  }, [chapterIdx]);
 
   // 본문이 공개되면 체류 도달 단계를 'read'로 올린다(자유=즉시, 유도=탭 후).
   useEffect(() => {
@@ -325,6 +333,7 @@ function ChapterStream({
     let sawRevising = false;
     for (let i = 0; i < 90; i++) {
       await sleep(2000);
+      if (cancelledRef.current) return; // 언마운트/챕터 이동 시 중단(setState 경고 방지)
       try {
         const book = await getBook(token, bookId);
         const ch = book.chapters.find((c) => c.idx === chapterIdx);
@@ -334,6 +343,7 @@ function ChapterStream({
           continue;
         }
         if (ch.reviewStatus === "ok" && (sawRevising || i >= 3)) {
+          setRevising(false); // 재마운트 전이라도 UI가 "고치고 있어요…"에 멈추지 않도록 명시
           onRevised(); // 부모가 key 변경 → 재마운트 → 수정 반영된 저장본 재구독
           return;
         }
