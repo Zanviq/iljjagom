@@ -8,6 +8,7 @@ from __future__ import annotations
 
 from collections import Counter
 
+from app.ai.gemini import GeminiClient
 from app.deps import CurrentUser
 from app.services import books, midactivity
 from app.store import get_store
@@ -89,13 +90,13 @@ def test_list_books_batches_per_book():
     assert store.calls["get_bible"] <= 2
 
 
-def test_get_mid_activity_single_bible_fetch():
+async def test_get_mid_activity_single_bible_fetch():
     store = _CountingStore(get_store())
     kid = "kid-07c"
     book_id = _make_book(store, kid)
     store.calls.clear()
 
-    midactivity.get_mid_activity(store, _user(kid), book_id)
+    await midactivity.get_mid_activity(store, GeminiClient(), _user(kid), book_id)
 
     # bible·챕터·문단을 1회씩만 조회(헬퍼 간 재사용).
     assert store.calls["get_bible"] == 1

@@ -48,3 +48,26 @@ def resolve_coaching_level(store: Store, book_id: str | None = None) -> str:
             if lvl in _COACHING_LEVELS:
                 return lvl
     return "light"
+
+
+def resolve_grade(store: Store, book_id: str | None = None, book=None) -> int | None:
+    """학년 수준 해석(퀴즈 난이도 맞춤): 발제 권장학년(grade_band) > 학생 프로필 학년 > None.
+
+    book 레코드를 넘기면 재조회를 생략한다. 없으면 None(생성측이 기본 난이도 사용).
+    """
+    rec = book
+    if rec is None and book_id:
+        rec = store.get_book(book_id)
+    if not rec:
+        return None
+    if getattr(rec, "prompt_id", None):
+        p = store.get_prompt(rec.prompt_id)
+        gb = getattr(p, "grade_band", None) if p else None
+        if isinstance(gb, int) and gb > 0:
+            return gb
+    sid = getattr(rec, "student_id", None)
+    prof = store.get_profile(sid) if sid else None
+    g = getattr(prof, "grade", None) if prof else None
+    if isinstance(g, int) and g > 0:
+        return g
+    return None

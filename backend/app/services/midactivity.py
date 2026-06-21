@@ -6,11 +6,15 @@
 """
 from __future__ import annotations
 
+from app.ai import quiz as quizgen
+from app.ai.gemini import GeminiClient
+from app.ai.sanitize import sanitize_body
 from app.errors import not_found
 from app.models.schemas import EssayBlank, MidActivityResponse, QuizItem
+from app.services import policy
 from app.services.books import assert_can_access_book, assert_owner_student, get_book_or_404
 from app.services.collab import COLLAB_TARGET_PARAGRAPHS
-from app.services.learning import _build_quiz, _source_sig
+from app.services.learning import _source_sig
 from app.store.base import Store
 
 MID_ACTIVITY = "mid_activity"
@@ -111,7 +115,9 @@ def gate_blocked(
     )
 
 
-def get_mid_activity(store: Store, user, book_id: str) -> MidActivityResponse:
+async def get_mid_activity(
+    store: Store, gemini: GeminiClient, user, book_id: str
+) -> MidActivityResponse:
     book = get_book_or_404(store, book_id)
     assert_can_access_book(store, user, book)
 
@@ -140,9 +146,20 @@ def get_mid_activity(store: Store, user, book_id: str) -> MidActivityResponse:
                 essay_blanks=[EssayBlank(**e) for e in a.data.get("essayBlanks", [])],
             )
 
-    # 미스 → 기·승 범위 학습목표로 퀴즈/독후감 생성 후 캐시.
+    # 미스 → 기·승 본문 내용 이해 + 학습목표를 학년 수준에 맞춰 실 퀴즈 생성(실패 시 템플릿).
     objectives = [e.get("objective") for e in _free_events(store, book_id, bible=bible) if e.get("objective")]
-    quiz = _build_quiz([o for o in objectives if o], f"{book_id}:mid")
+    story_text = "\n\n".join(
+        f"[{c.idx}장]\n{sanitize_body(c.body).strip()}" for c in giseung if (c.body or "").strip()
+    )
+    grade = policy.resolve_grade(store, book=book)
+    quiz = await quizgen.generate_quiz(
+        gemini,
+        story_text=story_text,
+        objectives=[o for o in objectives if o],
+        grade=grade,
+        count=5,
+        seed=f"{book_id}:mid",
+    )
     essay = [EssayBlank(prompt="여기까지 이야기에서 가장 기억에 남는 장면은 무엇인가요?",
                         hints=["인물", "사건"])]
     try:

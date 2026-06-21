@@ -6,11 +6,13 @@
 from __future__ import annotations
 
 import asyncio
-import random
 
 from app.ai import chat
+from app.ai import quiz as quizgen
 from app.ai.gemini import GeminiClient
+from app.ai.quiz import _make_quiz_item  # noqa: F401 — 하위호환 재노출(test_quiz_shuffle)
 from app.ai.safety import check_input
+from app.ai.sanitize import sanitize_body
 from app.deps import CurrentUser
 from app.errors import validation_error
 from app.models.schemas import (
@@ -32,29 +34,19 @@ from app.store.base import Store
 _EMOTION_LABELS = ["설렘", "호기심", "긴장", "용기", "슬픔", "감동", "뿌듯함"]
 
 
-def _make_quiz_item(obj: str, seed_key: str) -> QuizItem:
-    """정답 위치를 결정적(book_id+문항 시드)으로 셔플 → 캐싱·mock 결정성 유지하며 분산(학생/10)."""
-    correct = f"{obj}을(를) 보여주는 장면"
-    choices = [correct, "이야기와 관계없는 이야기", "전혀 다른 과목 내용"]
-    random.Random(seed_key).shuffle(choices)
-    return QuizItem(
-        question=f"이 이야기에서 '{obj}'와(과) 가장 관련 있는 것은 무엇일까요?",
-        choices=choices,
-        answer_index=choices.index(correct),
-    )
-
-
 def _build_quiz(objectives: list[str], book_id: str) -> list[QuizItem]:
-    quiz = [_make_quiz_item(obj, f"{book_id}:{i}") for i, obj in enumerate(objectives[:5])]
-    # 쏠림 가드: 정답이 전부 같은 인덱스면 마지막 문항만 한 칸 회전(전부 0 방지).
-    if len(quiz) > 1 and len({q.answer_index for q in quiz}) == 1:
-        last = quiz[-1]
-        rot = (last.answer_index + 1) % len(last.choices)
-        last.choices[last.answer_index], last.choices[rot] = (
-            last.choices[rot], last.choices[last.answer_index],
-        )
-        last.answer_index = rot
-    return quiz
+    """하위호환 래퍼 — 결정적 템플릿 퀴즈(폴백·mock). 실 퀴즈는 quizgen.generate_quiz."""
+    return quizgen.build_template_quiz(objectives, book_id)
+
+
+def _story_text(chapters: list) -> str:
+    """본문(장별)을 이어 퀴즈 생성용 텍스트로. 자유 챕터도 chapters.body 가 재조립돼 있다."""
+    parts: list[str] = []
+    for c in chapters:
+        body = sanitize_body(c.body).strip() if c.body else ""
+        if body:
+            parts.append(f"[{c.idx}장]\n{body}")
+    return "\n\n".join(parts)
 
 
 LEARNING_SET = "learning_set"  # 생성 교재 캐시(학생 자기보고 결과와 구분)
@@ -123,12 +115,22 @@ async def _generate_learning(
     )
     vocab: list[Word] = [r for r in results if isinstance(r, Word)]
 
-    # 2) 퀴즈: 학습목표(이벤트별 objective, 없으면 발제 목표)에서 생성. 정답 위치 결정적 분산.
+    # 2) 퀴즈: 본문 내용 이해 + 학습목표 적용을 학년 수준에 맞춰 실 생성(실패 시 템플릿 강등).
     objectives = [e.get("objective") for e in bible.get("events", []) if e.get("objective")]
     if not objectives and book.prompt_id:
         prompt = store.get_prompt(book.prompt_id)
         objectives = list(prompt.learning_objectives) if prompt else []
-    quiz = _build_quiz([o for o in objectives if o], book_id)
+    from app.services import policy
+
+    grade = policy.resolve_grade(store, book=book)
+    quiz = await quizgen.generate_quiz(
+        gemini,
+        story_text=_story_text(chapters),
+        objectives=[o for o in objectives if o],
+        grade=grade,
+        count=5,
+        seed=book_id,
+    )
 
     # 3) 독후감 빈칸: 인물/제목 기반 일반 프롬프트.
     char_names = [c.get("name", "") for c in bible.get("characters", []) if c.get("name")]

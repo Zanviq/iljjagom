@@ -142,8 +142,9 @@ async def get_mid_activity(
     book_id: str,
     user: CurrentUser = Depends(get_current_user),
     store: Store = Depends(get_store_dep),
+    gemini: GeminiClient = Depends(get_gemini),
 ) -> dict:
-    return serialize(midactivity.get_mid_activity(store, user, book_id))
+    return serialize(await midactivity.get_mid_activity(store, gemini, user, book_id))
 
 
 @router.post("/books/{book_id}/mid-activity/complete")
