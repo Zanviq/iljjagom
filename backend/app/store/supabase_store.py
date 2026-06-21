@@ -763,10 +763,13 @@ class SupabaseStore(Store):
         return q.execute().count or 0
 
     def usage_counts(self) -> dict[str, Any]:
+        # 선생성(prefetched) 챕터는 학생이 아직 진입하지 않은 분량이므로 진척 집계에서 제외한다
+        # (books/teacher/learning/chapters 의 진척 집계와 동일한 기준).
         chapters_written = (
             self.client.table("chapters")
             .select("*", count="exact", head=True)
             .gt("char_count", 0)
+            .eq("prefetched", False)
             .execute()
             .count
             or 0
