@@ -261,10 +261,12 @@ export function CollabWriter({
     return <Loading card>이야기를 준비하는 중이에요…</Loading>;
   }
 
+  // 화면 높이에 따라 두 박스가 유연하게(세로로) 늘고 줄도록 — 고정 정사각 방지(06 §화면조절).
+  const PANEL_H = "clamp(420px, 70vh, 820px)";
   return (
     <div className="grid items-start gap-[22px] [grid-template-columns:1fr] md:[grid-template-columns:1.55fr_1fr]">
       {/* 좌: 본문 누적(섹션 카드) */}
-      <Card padding="lg" style={{ minHeight: 460, overflow: "visible" }}>
+      <Card padding="lg" style={{ minHeight: PANEL_H, overflow: "visible" }}>
         <p className="ijg-eyebrow mb-4" style={{ color: "var(--primary-text)" }}>
           우리가 쓰는 이야기
         </p>
@@ -396,13 +398,14 @@ export function CollabWriter({
         )}
       </Card>
 
-      {/* 우: AI 대화 + 입력 */}
+      {/* 우: AI 대화 + 입력 — 화면 높이에 맞춰 늘고, 긴 이야기에선 따라오도록 sticky. */}
       <Card
         padding="none"
+        className="md:sticky md:top-6"
         style={{
           display: "flex",
           flexDirection: "column",
-          height: 460,
+          height: PANEL_H,
           overflow: "hidden",
         }}
       >

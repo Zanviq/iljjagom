@@ -126,9 +126,11 @@ export function PlanChat({ bookId }: { bookId: string }) {
     }
   }
 
+  // 대화창이 화면 높이에 맞춰 유연하게(세로로) 늘고 줄도록 — 고정 정사각 방지(화면조절).
+  const PANEL_H = "clamp(420px, 70vh, 820px)";
   return (
     <div className="grid items-start gap-[22px] [grid-template-columns:1fr] md:[grid-template-columns:1.55fr_1fr]">
-      <Card padding="none" style={{ display: "flex", flexDirection: "column", height: 460, overflow: "hidden" }}>
+      <Card padding="none" style={{ display: "flex", flexDirection: "column", height: PANEL_H, overflow: "hidden" }}>
         <div className="flex flex-1 flex-col gap-4 overflow-y-auto p-[22px]">
           {messages.map((m, i) => (
             <ChatBubble
