@@ -1,7 +1,7 @@
 # 일짜곰 (iljjagom)
 
-<!-- 배너 이미지: documents/screenshots/banner.png 로 저장하면 표시됩니다(없으면 생략 가능). -->
-<!-- ![일짜곰](documents/screenshots/banner.png) -->
+<!-- 배너 이미지: documents/screenshots/banner.png 로 저장하면 아래에 표시됩니다. -->
+![일짜곰](documents/screenshots/banner.png)
 
 > 아이가 직접 이야기를 만들고, AI가 결말을 비밀로 펼치며, 교사가 학급 단위로 학습 목표를 발제해 교과 수업에 쓰는 **어린이 도서 플랫폼**입니다.
 
@@ -22,35 +22,13 @@
 
 ---
 
-## 화면 미리보기
+## 화면 구성
 
-> 아래 이미지는 `documents/screenshots/` 폴더의 파일을 불러옵니다. 아직 이미지를 넣지 않았다면
-> 깨진 링크로 보일 수 있으며, 캡처를 **표에 적힌 파일명 그대로** 그 폴더에 저장하면 표시됩니다.
-> 각 화면이 무엇을 담아야 하는지는 [`documents/screenshots/README.md`](documents/screenshots/README.md) 를 참고하세요.
+역할별 주요 화면입니다. (실제 화면 캡처는 `documents/screenshots/` 에 모읍니다 — 파일명·내용 규칙은 [screenshots/README.md](documents/screenshots/README.md) 참고.)
 
-### 학생
-
-| 홈(내 책장) | 기획 대화 |
-| --- | --- |
-| ![학생 홈](documents/screenshots/student-01-home.png) | ![기획 대화](documents/screenshots/student-02-plan.png) |
-| **자유집필 협업(기·승)** | **중간활동(퀴즈)** |
-| ![자유집필 협업](documents/screenshots/student-03-collab.png) | ![중간활동](documents/screenshots/student-04-mid-activity.png) |
-| **전·결 읽기(삽화+본문)** | **학습 활동(낱말·퀴즈·감정·편지)** |
-| ![전결 읽기](documents/screenshots/student-05-read.png) | ![학습 활동](documents/screenshots/student-06-learn.png) |
-
-### 교사
-
-| 학급 목록 | 발제 만들기 |
-| --- | --- |
-| ![학급 목록](documents/screenshots/teacher-01-classes.png) | ![발제 만들기](documents/screenshots/teacher-02-prompt.png) |
-| **대시보드(정량 지표)** | **학생 작업 열람** |
-| ![대시보드](documents/screenshots/teacher-03-dashboard.png) | ![학생 작업 열람](documents/screenshots/teacher-04-student-work.png) |
-
-### 관리자
-
-| 관리자 콘솔 |
-| --- |
-| ![관리자 콘솔](documents/screenshots/admin-01-console.png) |
+- **학생**: 홈(내 책장) → 기획 대화 → 자유집필 협업(기·승) → 중간활동(퀴즈·독후감) → 전·결 읽기(삽화+본문) → 학습 활동(낱말·퀴즈·감정 곡선·인물 편지) → 학급 발표
+- **교사**: 학급 목록 → 발제 만들기(주제·학습 목표·이야기 길이·AI 지도 강도) → 대시보드(정량 지표) → 학생 작업 열람(본문·기획·설계·학습 결과·편지)
+- **관리자**: 운영 콘솔(지표·세션·사용량 모니터링)
 
 ---
 
