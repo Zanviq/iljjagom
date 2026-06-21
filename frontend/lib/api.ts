@@ -123,7 +123,18 @@ export async function apiFetch<T>(
   if (res.status === 204) return undefined as T;
 
   const text = await res.text();
-  const payload = text ? JSON.parse(text) : null;
+  let payload = null;
+  try {
+    payload = text ? JSON.parse(text) : null;
+  } catch {
+    // 2xx인데 본문이 JSON이 아닌 경우(프록시가 끼운 HTML 오류 페이지, 잘린 응답 등)
+    // 원시 SyntaxError가 새어 나가지 않도록 ApiError로 정규화한다.
+    throw new ApiError(
+      res.ok ? 502 : res.status,
+      "internal_error",
+      "서버 응답을 해석할 수 없어요. 잠시 후 다시 시도해 주세요.",
+    );
+  }
 
   if (!res.ok) {
     const err = payload?.error ?? {};
