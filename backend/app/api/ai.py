@@ -31,6 +31,7 @@ from app.models.schemas import (
 )
 from app.ratelimit import rate_limit
 from app.services import overseer as overseer_svc
+from app.services.admin import _STAGE_LABEL
 from app.services.books import assert_can_access_book
 from app.store.base import Store
 from app.store.records import AiSessionRecord, AiStepRecord
@@ -75,13 +76,7 @@ async def list_sessions(
     return serialize(AiSessionsResponse(sessions=views))
 
 
-# role → 사람이 읽는 단계 라벨(관리자/01 §5).
-_STAGE_LABEL = {
-    "designer": "설계(Bible)", "writer": "집필", "editor": "편집(수정)",
-    "chat": "학습 대화", "tutor": "학습 대화", "overseer": "총괄(곰 작가)", "letter": "편지 검수",
-}
-
-
+# role → 사람이 읽는 단계 라벨은 services.admin 의 _STAGE_LABEL 을 단일 출처로 공유한다.
 def _stage_label(role: str | None) -> str | None:
     return _STAGE_LABEL.get(role or "", role)
 
