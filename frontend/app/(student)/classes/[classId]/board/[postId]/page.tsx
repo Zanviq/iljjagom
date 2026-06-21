@@ -1,6 +1,7 @@
 import Link from "next/link";
 import { notFound } from "next/navigation";
 
+import { BoardCover } from "@/components/board/BoardCover";
 import { Badge } from "@/components/ui/Badge";
 import { Card } from "@/components/ui/Card";
 import { Icon } from "@/components/ui/Icon";
@@ -64,6 +65,12 @@ export default async function BoardPostDetailPage({
           </Badge>
         )}
       </div>
+
+      {s.coverIllustration && (
+        <div className="mb-6">
+          <BoardCover url={s.coverIllustration} alt={post.title || "이야기 표지"} height={260} />
+        </div>
+      )}
 
       {post.intro && (
         <Card padding="lg" className="mb-6">
