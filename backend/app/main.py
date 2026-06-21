@@ -14,23 +14,73 @@ from app.errors import register_exception_handlers
 logger = logging.getLogger("app.main")
 
 
+def _read_git_head(start: "object") -> str | None:
+    """git 바이너리 없이 .git 을 직접 읽어 현재 커밋(짧은 해시)을 구한다.
+
+    일반 저장소(.git 디렉터리)와 worktree(.git 파일 = `gitdir: ...`) 둘 다 처리한다.
+    서버 프로세스 환경에 git 이 PATH 에 없어도 동작한다."""
+    from pathlib import Path
+
+    p = Path(start).resolve()
+    git_path = None
+    for d in [p, *p.parents]:
+        cand = d / ".git"
+        if cand.exists():
+            git_path = cand
+            break
+    if git_path is None:
+        return None
+    try:
+        if git_path.is_file():
+            # worktree: ".git" 파일이 실제 gitdir 를 가리킨다.
+            line = git_path.read_text(encoding="utf-8").strip()
+            git_dir = Path(line.split("gitdir:", 1)[1].strip())
+        else:
+            git_dir = git_path
+        head = (git_dir / "HEAD").read_text(encoding="utf-8").strip()
+        if head.startswith("ref:"):
+            ref = head.split("ref:", 1)[1].strip()
+            # worktree 는 refs 가 commondir 에 있으므로 commondir 도 시도.
+            candidates = [git_dir / ref]
+            commondir = git_dir / "commondir"
+            if commondir.exists():
+                common = (git_dir / commondir.read_text(encoding="utf-8").strip()).resolve()
+                candidates.append(common / ref)
+                candidates.append(common / "packed-refs")
+            candidates.append(git_dir / "packed-refs")
+            for c in candidates:
+                if c.exists() and c.name != "packed-refs":
+                    return c.read_text(encoding="utf-8").strip()[:7]
+                if c.exists():  # packed-refs 에서 ref 라인 검색
+                    for ln in c.read_text(encoding="utf-8").splitlines():
+                        if ln.endswith(ref):
+                            return ln.split()[0][:7]
+            return None
+        return head[:7]  # detached HEAD
+    except Exception:
+        return None
+
+
 def _build_commit() -> str:
     """실행 중인 코드의 git 커밋(짧은 해시) — 기동 시 1회 산출.
 
     배포/재시작이 실제로 최신 코드를 로드했는지 `/health` 로 확정하기 위함이다
-    (워크트리 혼동·미재시작으로 옛 코드가 도는 사고 방지)."""
+    (워크트리 혼동·미재시작으로 옛 코드가 도는 사고 방지). git 바이너리 우선,
+    실패 시 .git 직접 읽기로 폴백."""
     import subprocess
     from pathlib import Path
 
+    here = Path(__file__).resolve().parent
     try:
         out = subprocess.run(
             ["git", "rev-parse", "--short", "HEAD"],
-            cwd=Path(__file__).resolve().parent,
-            capture_output=True, text=True, timeout=3,
+            cwd=here, capture_output=True, text=True, timeout=3,
         )
-        return out.stdout.strip() or "unknown"
+        if out.returncode == 0 and out.stdout.strip():
+            return out.stdout.strip()
     except Exception:
-        return "unknown"
+        pass
+    return _read_git_head(here) or "unknown"
 
 
 _BUILD_COMMIT = _build_commit()
