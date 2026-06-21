@@ -76,6 +76,10 @@ def _normalize_bible(
         data["characters"] = []
     else:
         data["characters"] = [c if isinstance(c, dict) else {"name": str(c)} for c in chars]
+    # secretArc 가 문자열로 오면 dict 로 강제(결말 장 폴백/집필/검수의 .get 안전 — 결말 500 방지).
+    arc = data.get("secretArc")
+    if not isinstance(arc, dict):
+        data["secretArc"] = {"hidden": True, "outline": arc} if isinstance(arc, str) and arc.strip() else {}
     data.setdefault("learningObjectives", objectives)
     return data
 

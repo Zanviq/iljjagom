@@ -56,7 +56,9 @@ async def review_chapter(
     obj_line = f"이 장의 학습 목표: {objective}\n" if objective else ""
     final_line = ""
     if is_final:
-        arc = (bible.get("secretArc") or {}).get("outline", "")
+        from app.ai.writer import secret_arc
+
+        arc = secret_arc(bible).get("outline", "")
         final_line = (
             "이 장은 마지막 장이다. 이야기의 큰 흐름이 자연스럽게 매듭지어졌는지 확인하고, "
             f"부족하면 결말을 다듬어 완성한다(큰 흐름: {arc}).\n"

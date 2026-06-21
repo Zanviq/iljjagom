@@ -49,3 +49,23 @@ def test_build_prompt_survives_malformed_bible():
     bible = {"world": "숲", "characters": ["토끼"], "title": "t"}
     p = build_prompt(bible, {"summary": "s", "objective": "증발"}, "")
     assert "따뜻한" in p  # tone 기본값 적용(크래시 없음)
+
+
+def test_normalize_coerces_string_secret_arc():
+    # 실 Gemini 가 secretArc 를 문자열로 주는 경우(결말 장 폴백 500 원인) dict 로 정규화.
+    out = _normalize_bible({"secretArc": "모두가 함께 성장한다", "events": []}, ["증발"], 6)
+    assert isinstance(out["secretArc"], dict)
+    assert out["secretArc"]["outline"] == "모두가 함께 성장한다"
+
+
+def test_final_fallback_and_prompt_survive_string_secret_arc():
+    # secretArc 가 문자열이어도 결말 장 폴백/집필 프롬프트가 AttributeError 없이 동작해야 한다.
+    # (10차 6장 라이브 500 의 실제 원인: fallback_chapter -> _mock_chapter_text 의 secretArc.get)
+    from app.ai.writer import build_prompt, fallback_chapter
+
+    bible = {"world": "숲", "characters": ["토끼"], "title": "t", "secretArc": "비밀 결말 줄거리"}
+    event = {"summary": "s", "objective": "증발"}
+    body = fallback_chapter(bible, event, is_final=True)
+    assert body and "끝" in body  # 결말 폴백 본문 생성(크래시 없음)
+    p = build_prompt(bible, event, "", is_final=True)
+    assert "비밀 결말 줄거리" in p  # secretArc 문자열이 outline 으로 회수됨

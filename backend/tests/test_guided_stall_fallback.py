@@ -76,6 +76,31 @@ async def test_guided_final_chapter_falls_back_on_stall(monkeypatch):
     assert ch.body and ch.char_count > 0
 
 
+async def test_guided_final_chapter_falls_back_on_ai_unavailable(monkeypatch):
+    """결말 guided 장: 본문 생성이 503 ai_unavailable 예외로 즉시 실패해도 폴백으로 완독.
+
+    프론트 캡처(10차): stall 이 아니라 prompt 직후 ~1초 내 본문 token 0 + ai_unavailable
+    error 로 종료. 실 Gemini 가 stream 이터레이션 중 503 을 던지는 경로를 모사한다.
+    """
+    from app.errors import ai_unavailable
+
+    store, gemini, book_id = _setup_book(total=6)
+
+    async def _boom(*a, **k):
+        raise ai_unavailable("AI 제공자 오류입니다.")
+        yield  # async generator 형태 유지
+
+    monkeypatch.setattr(writer, "stream_chapter", _boom)
+
+    events = await _drain(store, gemini, book_id, 6)
+    kinds = [e for e, _ in events]
+    assert "error" not in kinds, f"결말 장이 예외 실패 시 폴백 없이 에러로 끝남: {events}"
+    done = next(d for e, d in events if e == "done")
+    assert done["charCount"] > 0
+    ch = store.get_chapter(book_id, 6)
+    assert ch.body and ch.char_count > 0
+
+
 async def test_guided_middle_chapter_falls_back_on_stall(monkeypatch):
     """중간 guided 장(비-결말): 생성 stall 이 지속되면 영구 블록 방지 위해 폴백."""
     store, gemini, book_id = _setup_book(total=6)  # 4장 = 중간 guided

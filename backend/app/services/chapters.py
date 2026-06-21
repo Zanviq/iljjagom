@@ -8,6 +8,7 @@ from __future__ import annotations
 
 import asyncio
 import json
+import logging
 from collections.abc import AsyncIterator
 
 from app.ai import chat, editor, imagen, rag, safety, writer
@@ -19,6 +20,8 @@ from app.deps import CurrentUser
 from app.services.books import assert_can_access_book, get_book_or_404
 from app.services.prefetch import acquire_prefetch, release_prefetch
 from app.store.base import Store
+
+logger = logging.getLogger("app.services.chapters")
 
 HEARTBEAT_SECS = 15.0
 # 생성 타임아웃(C2): 첫 토큰까지 / 토큰 사이 최대 간격.
@@ -247,6 +250,8 @@ async def _produce(
             )
         )
     except Exception:
+        # 실제 예외를 traceback 과 함께 남긴다(바깥 except 가 원인을 가리지 않도록 — 진단용).
+        logger.exception("_produce 실패 book=%s idx=%s", book_id, idx)
         # retryAfter: 프론트 지수 백오프 정합용 권장 재시도 간격(초). 생성 지연은 선생성(06)으로 흡수.
         await queue.put(
             _sse("error", {

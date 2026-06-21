@@ -32,6 +32,18 @@ def _hero(bible: dict[str, Any]) -> str:
     return "주인공"
 
 
+def secret_arc(bible: dict[str, Any]) -> dict[str, Any]:
+    """Bible 의 secretArc 를 dict 로 안전 반환. 실 Gemini 가 secretArc 를 문자열로 줄 때
+    `(arc or {}).get(...)` 가 문자열에 .get → AttributeError(결말 장 폴백/집필 크래시)를 막는다.
+    문자열이면 outline 으로 승격한다."""
+    a = bible.get("secretArc")
+    if isinstance(a, dict):
+        return a
+    if isinstance(a, str) and a.strip():
+        return {"outline": a}
+    return {}
+
+
 def fallback_chapter(
     bible: dict[str, Any], event: dict[str, Any], is_final: bool = False
 ) -> str:
@@ -51,7 +63,7 @@ def build_prompt(
     obj_line = f"이 장에서 자연스럽게 담을 학습 내용: {objective}\n" if objective else ""
     if is_final:
         # 마지막 장: 비공개 후반 큰줄기(secretArc)를 회수해 자연스럽게 매듭짓는다.
-        arc = (bible.get("secretArc") or {}).get("outline", "")
+        arc = secret_arc(bible).get("outline", "")
         ending_line = (
             "이 장은 이야기의 마지막 장이다. 다음 큰 흐름을 자연스럽게 매듭지어 결말을 완성한다: "
             f"{arc}\n"
@@ -82,7 +94,7 @@ def _mock_chapter_text(
     hero = _hero(bible)
     objective = event.get("objective") or "새로운 것"
     if is_final:
-        arc = (bible.get("secretArc") or {}).get("outline", "모두가 성장했어요")
+        arc = secret_arc(bible).get("outline", "모두가 성장했어요")
         return (
             f"{hero}은(는) 그동안 배운 '{objective}'을(를) 모두 떠올렸어요. "
             f"마침내 모든 실마리가 하나로 모였어요.\n"
