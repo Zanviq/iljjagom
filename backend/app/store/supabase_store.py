@@ -398,6 +398,16 @@ class SupabaseStore(Store):
         )
         return [ParagraphRecord(**r) for r in rows]
 
+    def list_paragraphs_for_book(self, book_id: str) -> list[ParagraphRecord]:
+        rows = self._rows(
+            self.client.table("chapter_paragraphs")
+            .select("*")
+            .eq("book_id", book_id)
+            .order("seq")
+            .execute()
+        )
+        return [ParagraphRecord(**r) for r in rows]
+
     def update_paragraph(
         self, chapter_id: str, seq: int, body: str, source: str = "revise"
     ) -> ParagraphRecord | None:

@@ -324,6 +324,12 @@ class InMemoryStore(Store):
             (p for p in self.paragraphs if p.chapter_id == chapter_id), key=lambda p: p.seq
         )
 
+    def list_paragraphs_for_book(self, book_id: str) -> list[ParagraphRecord]:
+        return sorted(
+            (p for p in self.paragraphs if p.book_id == book_id),
+            key=lambda p: (p.chapter_id, p.seq),
+        )
+
     def update_paragraph(
         self, chapter_id: str, seq: int, body: str, source: str = "revise"
     ) -> ParagraphRecord | None:

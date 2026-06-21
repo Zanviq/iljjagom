@@ -17,46 +17,69 @@ MID_ACTIVITY = "mid_activity"
 MID_DONE_EVENT = "mid_activity_done"
 
 
-def _free_events(store: Store, book_id: str) -> list[dict]:
+def _resolve_bible(store: Store, book_id: str, bible: dict | None) -> dict:
+    """bible(=BibleRecord.data) 가 주어지면 재조회 없이 그대로 쓴다(중복 조회 완화, 06 §7)."""
+    if bible is not None:
+        return bible
     rec = store.get_bible(book_id)
-    if not rec:
-        return []
-    return [e for e in rec.data.get("events", []) if e.get("mode", "free") == "free"]
+    return rec.data if rec else {}
 
 
-def _guided_events(store: Store, book_id: str) -> list[dict]:
-    rec = store.get_bible(book_id)
-    if not rec:
-        return []
-    return [e for e in rec.data.get("events", []) if e.get("mode") == "guided"]
+def _free_events(store: Store, book_id: str, *, bible: dict | None = None) -> list[dict]:
+    data = _resolve_bible(store, book_id, bible)
+    return [e for e in data.get("events", []) if e.get("mode", "free") == "free"]
 
 
-def _chapter_complete(store: Store, chapter) -> bool:
-    """협업 챕터는 목표 문단 도달 시 완료. 비협업(SSE 통짜)은 본문 있으면 완료."""
-    pc = len(store.list_paragraphs(chapter.id))
+def _guided_events(store: Store, book_id: str, *, bible: dict | None = None) -> list[dict]:
+    data = _resolve_bible(store, book_id, bible)
+    return [e for e in data.get("events", []) if e.get("mode") == "guided"]
+
+
+def _chapter_complete(store: Store, chapter, *, para_count: int | None = None) -> bool:
+    """협업 챕터는 목표 문단 도달 시 완료. 비협업(SSE 통짜)은 본문 있으면 완료.
+
+    para_count 를 넘기면 문단 재조회를 생략한다(N+1 완화, 06 §7).
+    """
+    pc = para_count if para_count is not None else len(store.list_paragraphs(chapter.id))
     if pc == 0:
         return chapter.char_count > 0
     return pc >= COLLAB_TARGET_PARAGRAPHS
 
 
-def _giseung_chapters(store: Store, book_id: str) -> list:
+def _giseung_chapters(store: Store, book_id: str, *, bible: dict | None = None, chapters=None) -> list:
     """기·승(free) 중 실제 본문이 있는 챕터(진입한 것)."""
-    free_idx = {e.get("chapterIdx") for e in _free_events(store, book_id)}
+    free_idx = {e.get("chapterIdx") for e in _free_events(store, book_id, bible=bible)}
+    chs = chapters if chapters is not None else store.list_chapters(book_id)
     return [
-        c for c in store.list_chapters(book_id)
+        c for c in chs
         if c.idx in free_idx and c.char_count > 0 and not getattr(c, "prefetched", False)
     ]
 
 
-def giseung_done(store: Store, book_id: str) -> bool:
-    """기·승 모든 free 챕터가 완료(협업 목표 문단 도달/본문 존재)면 True."""
-    free = _free_events(store, book_id)
+def giseung_done(
+    store: Store,
+    book_id: str,
+    *,
+    bible: dict | None = None,
+    chapters=None,
+    para_counts: dict[str, int] | None = None,
+) -> bool:
+    """기·승 모든 free 챕터가 완료(협업 목표 문단 도달/본문 존재)면 True.
+
+    bible/chapters/para_counts(chapter_id→문단수) 를 넘기면 재조회를 생략한다(N+1 완화, 06 §7).
+    """
+    data = _resolve_bible(store, book_id, bible)
+    free = _free_events(store, book_id, bible=data)
     if not free:
         return False
-    by_idx = {c.idx: c for c in store.list_chapters(book_id)}
+    chs = chapters if chapters is not None else store.list_chapters(book_id)
+    by_idx = {c.idx: c for c in chs}
     for e in free:
         c = by_idx.get(e.get("chapterIdx"))
-        if not c or not _chapter_complete(store, c):
+        if not c:
+            return False
+        pc = para_counts.get(c.id) if para_counts is not None else None
+        if not _chapter_complete(store, c, para_count=pc):
             return False
     return True
 
@@ -68,11 +91,22 @@ def is_done(store: Store, book_id: str) -> bool:
         return False
 
 
-def gate_blocked(store: Store, book_id: str) -> bool:
-    """전·결(guided) 진입 게이트 — 기·승 완료 + 전·결 존재 + 중간활동 미완료면 막는다."""
+def gate_blocked(
+    store: Store,
+    book_id: str,
+    *,
+    bible: dict | None = None,
+    chapters=None,
+    para_counts: dict[str, int] | None = None,
+) -> bool:
+    """전·결(guided) 진입 게이트 — 기·승 완료 + 전·결 존재 + 중간활동 미완료면 막는다.
+
+    bible/chapters/para_counts 를 넘기면 재조회를 생략한다(bible 1회만 조회, 06 §7).
+    """
+    data = _resolve_bible(store, book_id, bible)
     return (
-        giseung_done(store, book_id)
-        and bool(_guided_events(store, book_id))
+        giseung_done(store, book_id, bible=data, chapters=chapters, para_counts=para_counts)
+        and bool(_guided_events(store, book_id, bible=data))
         and not is_done(store, book_id)
     )
 
@@ -81,13 +115,21 @@ def get_mid_activity(store: Store, user, book_id: str) -> MidActivityResponse:
     book = get_book_or_404(store, book_id)
     assert_can_access_book(store, user, book)
 
-    free_done = giseung_done(store, book_id)
-    has_guided = bool(_guided_events(store, book_id))
+    # bible/chapters/문단수를 1회씩만 조회해 헬퍼들에 재사용(중복 조회 제거, 06 §7).
+    bible_rec = store.get_bible(book_id)
+    bible = bible_rec.data if bible_rec else {}
+    chapters = store.list_chapters(book_id)
+    para_counts: dict[str, int] = {}
+    for p in store.list_paragraphs_for_book(book_id):
+        para_counts[p.chapter_id] = para_counts.get(p.chapter_id, 0) + 1
+
+    free_done = giseung_done(store, book_id, bible=bible, chapters=chapters, para_counts=para_counts)
+    has_guided = bool(_guided_events(store, book_id, bible=bible))
     done = is_done(store, book_id)
     if not free_done or not has_guided:
         return MidActivityResponse(required=False, done=done)
 
-    giseung = _giseung_chapters(store, book_id)
+    giseung = _giseung_chapters(store, book_id, bible=bible, chapters=chapters)
     sig = _source_sig(giseung)
     # 캐시 조회(13 키 규칙, type="mid_activity").
     for a in store.list_learning_artifacts(book_id=book_id, type=MID_ACTIVITY):
@@ -99,7 +141,7 @@ def get_mid_activity(store: Store, user, book_id: str) -> MidActivityResponse:
             )
 
     # 미스 → 기·승 범위 학습목표로 퀴즈/독후감 생성 후 캐시.
-    objectives = [e.get("objective") for e in _free_events(store, book_id) if e.get("objective")]
+    objectives = [e.get("objective") for e in _free_events(store, book_id, bible=bible) if e.get("objective")]
     quiz = _build_quiz([o for o in objectives if o], f"{book_id}:mid")
     essay = [EssayBlank(prompt="여기까지 이야기에서 가장 기억에 남는 장면은 무엇인가요?",
                         hints=["인물", "사건"])]

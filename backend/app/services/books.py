@@ -83,11 +83,26 @@ def create_book(store: Store, user: CurrentUser, prompt_id: str) -> Book:
 
 
 # --- GET /books (내 책 목록/이어 읽기) ---
-def _resume_for(store: Store, rec, chapters=None) -> tuple[int | None, str | None, str | None]:
+def _paragraph_counts(store: Store, book_id: str) -> dict[str, int]:
+    """책의 모든 문단을 1회 조회해 chapter_id→문단수로 집계(챕터별 N+1 제거, 06 §7)."""
+    counts: dict[str, int] = {}
+    for p in store.list_paragraphs_for_book(book_id):
+        counts[p.chapter_id] = counts.get(p.chapter_id, 0) + 1
+    return counts
+
+
+def _resume_for(
+    store: Store,
+    rec,
+    chapters=None,
+    *,
+    bible: dict | None = None,
+    para_counts: dict[str, int] | None = None,
+) -> tuple[int | None, str | None, str | None]:
     """이어가기 목적지(05-기능수정 §03): (현재 챕터 idx, mode, stage).
 
     plan → collab(미완 free) → mid_activity(기·승 후 필수) → read(전·결) → done 순.
-    chapters 를 넘기면 재조회하지 않는다(목록 N+1 완화, 06 §7).
+    chapters/bible/para_counts(chapter_id→문단수) 를 넘기면 재조회하지 않는다(N+1 완화, 06 §7).
     """
     from app.services import midactivity
     from app.services.collab import COLLAB_TARGET_PARAGRAPHS
@@ -100,12 +115,18 @@ def _resume_for(store: Store, rec, chapters=None) -> tuple[int | None, str | Non
     )
     if not chapters:
         return None, None, None
+
+    def _pc(c) -> int:
+        if para_counts is not None:
+            return para_counts.get(c.id, 0)
+        return len(store.list_paragraphs(c.id))
+
     # 미완 free 챕터(기·승) → 협업 이어쓰기.
     for c in chapters:
-        if c.mode == "free" and len(store.list_paragraphs(c.id)) < COLLAB_TARGET_PARAGRAPHS:
+        if c.mode == "free" and _pc(c) < COLLAB_TARGET_PARAGRAPHS:
             return c.idx, "free", "collab"
     # 기·승 끝 + 중간활동 필수·미완 → 중간활동.
-    if midactivity.gate_blocked(store, rec.id):
+    if midactivity.gate_blocked(store, rec.id, bible=bible, chapters=chapters, para_counts=para_counts):
         guided = next((c for c in chapters if c.mode == "guided"), chapters[-1])
         return guided.idx, "guided", "mid_activity"
     if rec.status == "done":
@@ -131,7 +152,17 @@ def list_books(store: Store, user: CurrentUser) -> BooksResponse:
             1 for c in chapters
             if c.char_count > 0 and not getattr(c, "prefetched", False)
         )
-        idx, mode, stage = _resume_for(store, rec, chapters)
+        # 기획 단계는 챕터/문단/bible 없이 즉시 결정 → 불필요 조회 생략.
+        if rec.status == "planning":
+            idx, mode, stage = 1, "free", "plan"
+        else:
+            para_counts = _paragraph_counts(store, rec.id)  # 책 단위 1회 조회
+            bible_rec = store.get_bible(rec.id)  # 1회만(gate_blocked 내부 중복 제거)
+            idx, mode, stage = _resume_for(
+                store, rec, chapters,
+                bible=bible_rec.data if bible_rec else {},
+                para_counts=para_counts,
+            )
         summaries.append(
             BookSummary(
                 id=rec.id,
@@ -153,17 +184,23 @@ def get_book_detail(store: Store, user: CurrentUser, book_id: str) -> BookDetail
     book = get_book_or_404(store, book_id)
     assert_can_access_book(store, user, book)
     raw_chapters = store.list_chapters(book_id)  # 1회 조회 후 재사용(06 §7)
+    para_counts = _paragraph_counts(store, book_id)  # 챕터별 문단조회 N+1 제거(06 §7)
     chapters = [
         ChapterMeta(
             idx=c.idx,
             mode=c.mode,
             review_status=c.review_status,
             has_illustration=bool(c.illustration_path),
-            paragraph_count=len(store.list_paragraphs(c.id)),
+            paragraph_count=para_counts.get(c.id, 0),
         )
         for c in raw_chapters
     ]
-    cur_idx, _mode, _stage = _resume_for(store, book, raw_chapters)  # 이어가기 시작 장(06 §6)
+    bible_rec = store.get_bible(book_id) if book.status != "planning" else None
+    cur_idx, _mode, _stage = _resume_for(  # 이어가기 시작 장(06 §6)
+        store, book, raw_chapters,
+        bible=bible_rec.data if bible_rec else {},
+        para_counts=para_counts,
+    )
     return BookDetail(
         id=book.id,
         status=book.status,

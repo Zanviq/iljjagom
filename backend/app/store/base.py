@@ -170,6 +170,11 @@ class Store(ABC):
     def list_paragraphs(self, chapter_id: str) -> list[ParagraphRecord]: ...
 
     @abstractmethod
+    def list_paragraphs_for_book(self, book_id: str) -> list[ParagraphRecord]:
+        """책의 모든 문단을 1회 조회(챕터별 N+1 완화, 06 §7). 챕터별 집계는 호출측에서."""
+        ...
+
+    @abstractmethod
     def update_paragraph(
         self, chapter_id: str, seq: int, body: str, source: str = "revise"
     ) -> ParagraphRecord | None:
