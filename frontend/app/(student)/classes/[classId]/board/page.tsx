@@ -1,5 +1,6 @@
 import Link from "next/link";
 
+import { BoardCover } from "@/components/board/BoardCover";
 import { Badge } from "@/components/ui/Badge";
 import { Card } from "@/components/ui/Card";
 import { EmptyState } from "@/components/ui/EmptyState";
@@ -85,6 +86,9 @@ function BoardCard({
   return (
     <Link href={`/classes/${classId}/board/${post.id}`} className="block">
       <Card interactive padding="lg" style={{ display: "flex", flexDirection: "column", gap: 12 }}>
+        {s.coverIllustration && (
+          <BoardCover url={s.coverIllustration} alt={post.title || "이야기 표지"} height={140} />
+        )}
         <div className="flex items-start justify-between gap-2.5">
           <span
             className="flex h-10 w-10 items-center justify-center rounded-[10px]"
