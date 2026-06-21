@@ -224,11 +224,12 @@ def class_dashboard(
     for b in store.list_books_for_class(class_id):
         rep.setdefault(b.student_id, b)
 
+    profiles = store.get_profiles(student_ids)  # 학생 프로필 일괄 조회(N+1 회피)
     students: list[DashboardStudent] = []
     books_done = 0
     vocab_count = 0
     for sid in student_ids:
-        profile = store.get_profile(sid)
+        profile = profiles.get(sid)
         email = profile.email if profile else ""
         book = rep.get(sid)
         if not book:
@@ -380,6 +381,9 @@ def prompt_submissions(
         raise not_found("발제를 찾을 수 없습니다.")
 
     books = store.list_books_for_prompt(prompt_id)
+    enrolled_ids = store.list_student_ids(class_id)
+    # 책 소유자 + 미시작 학생 프로필을 한 번에 조회(N+1 회피).
+    profiles = store.get_profiles(list({b.student_id for b in books} | set(enrolled_ids)))
     submissions: list[PromptSubmission] = []
     started_ids: set[str] = set()
     finished = 0
@@ -390,7 +394,7 @@ def prompt_submissions(
         chapters = [c for c in store.list_chapters(b.id) if not getattr(c, "prefetched", False)]
         written = [c for c in chapters if c.char_count > 0]
         arts = store.list_learning_artifacts(book_id=b.id)
-        prof = store.get_profile(b.student_id)
+        prof = profiles.get(b.student_id)
         submissions.append(PromptSubmission(
             student_id=b.student_id, student_email=prof.email if prof else "",
             book_id=b.id, title=b.title, status=b.status,
@@ -403,11 +407,10 @@ def prompt_submissions(
             last_activity_at=b.updated_at or b.created_at,
         ))
 
-    enrolled_ids = store.list_student_ids(class_id)
     not_started = []
     for sid in enrolled_ids:
         if sid not in started_ids:
-            prof = store.get_profile(sid)
+            prof = profiles.get(sid)
             not_started.append(PromptSubmissionStudent(
                 student_id=sid, student_email=prof.email if prof else ""
             ))

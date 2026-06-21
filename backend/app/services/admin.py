@@ -195,11 +195,8 @@ def list_messages(
 
 
 def _email_cache(store: Store, user_ids: set[str]) -> dict[str, str | None]:
-    out: dict[str, str | None] = {}
-    for uid in user_ids:
-        prof = store.get_profile(uid)
-        out[uid] = prof.email if prof else None
-    return out
+    profiles = store.get_profiles(list(user_ids))
+    return {uid: (profiles[uid].email if uid in profiles else None) for uid in user_ids}
 
 
 def list_messages_by_user(store: Store, limit: int = 1000) -> MessagesByUser:
