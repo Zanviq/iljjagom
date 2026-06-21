@@ -9,7 +9,8 @@ import { getClientAccessToken } from "./auth/client";
 import type { EventType, TrackEvent } from "./types";
 
 const FLUSH_MS = 10_000;
-const MAX_BATCH = 5;
+const MAX_BATCH = 5; // 이만큼 쌓이면 즉시 flush
+const FLUSH_LIMIT = 50; // 한 번의 flush 에서 보낼 최대 이벤트 수(폭주 방지)
 
 const queue: TrackEvent[] = [];
 let timer: ReturnType<typeof setTimeout> | null = null;
@@ -51,9 +52,16 @@ export async function flush(beacon = false) {
     timer = null;
   }
   if (queue.length === 0) return;
-  const batch = queue.splice(0, 50);
+  // 토큰을 먼저 확보한 뒤 큐를 비운다. 토큰 조회가 실패하면 이벤트를 떼지 않아
+  // 다음 flush 에서 재시도된다(전송 자체 실패는 설계상 손실 허용).
+  let token: string | null;
   try {
-    const token = await getClientAccessToken();
+    token = await getClientAccessToken();
+  } catch {
+    return;
+  }
+  const batch = queue.splice(0, FLUSH_LIMIT);
+  try {
     if (beacon) {
       await fetch(`${API_BASE_URL}/events`, {
         method: "POST",
