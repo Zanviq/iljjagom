@@ -44,8 +44,13 @@ export interface ClassSummary {
 /* ── 학급 설정 컨트롤러 (04 기능개선 교사/02, §4 D·§7) ── */
 export type SafetyLevel = "relaxed" | "standard" | "strict";
 
+/** 자유집필 AI 지도 강도(06 §5): off=간섭 없음, light=흐름만, standard=흐름+주제 */
+export type CoachingLevel = "off" | "light" | "standard";
+
 export interface ClassSettings {
   safetyLevel: SafetyLevel;
+  /** 자유집필 곰작가 간섭 강도(기본 light) */
+  coachingLevel?: CoachingLevel;
   /** 학생 기능 on/off (boardAutoPublish·intermediateActivities·… 백엔드가 키 등록) */
   featureToggles: Record<string, boolean>;
 }
@@ -206,6 +211,8 @@ export interface Book {
   classId: string;
   chapters: ChapterSummary[];
   totalChaptersPlanned: number;
+  /** 읽기 진입 시 시작할 장(이어가기, 06 §6). */
+  currentChapterIdx?: number | null;
 }
 
 /**

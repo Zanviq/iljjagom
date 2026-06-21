@@ -86,10 +86,12 @@ def list_learning_results(store: Store, user: CurrentUser, book_id: str) -> Lear
     book = get_book_or_404(store, book_id)
     assert_can_access_book(store, user, book)
     rows = store.list_learning_artifacts(book_id=book_id)
+    # 생성 교재 캐시(learning_set)·중간활동 캐시(mid_activity)는 학생 자기보고 결과가 아니므로 제외.
+    _CACHE_TYPES = {"learning_set", "mid_activity"}
     return LearningResultsResponse(
         results=[
             LearningResult(id=r.id, type=r.type, data=r.data, created_at=r.created_at)
             for r in rows
-            if r.type != "learning_set"  # 생성 교재 캐시는 학생 자기보고 결과가 아님(학생/13)
+            if r.type not in _CACHE_TYPES
         ]
     )

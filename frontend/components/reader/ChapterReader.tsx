@@ -28,11 +28,20 @@ interface Props {
   bookId: string;
   title: string | null;
   totalChaptersPlanned: number;
+  // 이어가기 시작 장(06 §6) — 중간활동 후 1장으로 되돌아가는 버그 방지. 없으면 1.
+  initialChapterIdx?: number;
 }
 
-export function ChapterReader({ bookId, title, totalChaptersPlanned }: Props) {
+export function ChapterReader({
+  bookId,
+  title,
+  totalChaptersPlanned,
+  initialChapterIdx,
+}: Props) {
   const [token, setToken] = useState<string | null | undefined>(undefined);
-  const [chapterIdx, setChapterIdx] = useState(1);
+  const [chapterIdx, setChapterIdx] = useState(
+    initialChapterIdx && initialChapterIdx > 0 ? initialChapterIdx : 1,
+  );
   // 수정요청(revise) 완료 시 값을 바꿔 ChapterStream을 재마운트 → 저장본(수정 반영) 재구독.
   const [reloadNonce, setReloadNonce] = useState(0);
 
@@ -646,12 +655,14 @@ function Illustration({ url, alt }: { url: string; alt: string }) {
   }
 
   return (
+    // 4:3 종횡비 박스 + object-contain: 삽화 전체를 잘림 없이 보여준다(06 §2).
     // eslint-disable-next-line @next/next/no-img-element
     <img
       src={url}
       alt={alt}
       onError={() => setFailed(true)}
-      className="mb-4 max-h-[28rem] w-full rounded-[var(--radius-card)] object-cover shadow-[var(--elev-md)]"
+      className="mb-4 aspect-[4/3] w-full rounded-[var(--radius-card)] object-contain shadow-[var(--elev-md)]"
+      style={{ background: "var(--surface-2)" }}
     />
   );
 }

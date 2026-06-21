@@ -9,6 +9,7 @@ import { ApiError, putClassSettings } from "@/lib/api";
 import { getClientAccessToken } from "@/lib/auth/client";
 import type {
   ClassSettingsResponse,
+  CoachingLevel,
   SafetyLevel,
 } from "@/lib/types";
 
@@ -16,6 +17,13 @@ const SAFETY_OPTIONS: { value: SafetyLevel; label: string; hint: string }[] = [
   { value: "relaxed", label: "느슨", hint: "표현을 폭넓게 허용" },
   { value: "standard", label: "표준", hint: "권장 기본값" },
   { value: "strict", label: "엄격", hint: "민감한 표현을 강하게 차단" },
+];
+
+// 자유집필에서 곰작가가 학생 글에 끼어드는 정도(06 §5).
+const COACHING_OPTIONS: { value: CoachingLevel; label: string; hint: string }[] = [
+  { value: "off", label: "끄기", hint: "끼어들지 않고 그대로 써요" },
+  { value: "light", label: "약하게", hint: "흐름이 끊길 때만 살짝 (권장)" },
+  { value: "standard", label: "표준", hint: "흐름·학습 주제까지 챙겨요" },
 ];
 
 /** featureToggles 키 → 한국어 라벨(미등록 키는 키 그대로 표시). */
@@ -41,6 +49,9 @@ export function ClassSettingsForm({
   const eff = initial.value;
   const [safetyLevel, setSafetyLevel] = useState<SafetyLevel>(
     eff.safetyLevel ?? initial.defaults.safetyLevel ?? "standard",
+  );
+  const [coachingLevel, setCoachingLevel] = useState<CoachingLevel>(
+    eff.coachingLevel ?? initial.defaults.coachingLevel ?? "light",
   );
   // 기본값 키 + 현재값 키 합집합으로 토글 목록 구성.
   const toggleKeys = Array.from(
@@ -70,6 +81,7 @@ export function ClassSettingsForm({
       const token = await getClientAccessToken();
       await putClassSettings(token, classId, {
         safetyLevel,
+        coachingLevel,
         featureToggles: toggles,
       });
       setSaved(true);
@@ -112,6 +124,51 @@ export function ClassSettingsForm({
                 className="flex flex-col items-start gap-0.5 rounded-[var(--radius-control)] px-4 py-2.5"
                 style={{
                   minWidth: 130,
+                  cursor: "pointer",
+                  background: selected ? "var(--primary)" : "var(--surface-2)",
+                  color: selected ? "var(--on-primary)" : "var(--text-2)",
+                  border: selected
+                    ? "var(--border) solid transparent"
+                    : "var(--border) solid var(--line)",
+                }}
+              >
+                <span className="font-extrabold">{o.label}</span>
+                <span
+                  className="text-[length:var(--text-xs)]"
+                  style={{ color: selected ? "var(--on-primary)" : "var(--text-3)" }}
+                >
+                  {o.hint}
+                </span>
+              </button>
+            );
+          })}
+        </div>
+      </Card>
+
+      <Card padding="lg" style={{ display: "flex", flexDirection: "column", gap: 14 }}>
+        <div>
+          <h2 className="text-[length:var(--text-md)] font-extrabold text-ink">
+            AI 지도 강도
+          </h2>
+          <p className="mt-0.5 text-[length:var(--text-sm)] text-ink-2">
+            자유집필에서 곰작가가 학생 글에 끼어드는 정도를 정해요.
+          </p>
+        </div>
+        <div className="flex flex-wrap gap-2.5">
+          {COACHING_OPTIONS.map((o) => {
+            const selected = coachingLevel === o.value;
+            return (
+              <button
+                key={o.value}
+                type="button"
+                onClick={() => {
+                  setCoachingLevel(o.value);
+                  setSaved(false);
+                }}
+                aria-pressed={selected}
+                className="flex flex-col items-start gap-0.5 rounded-[var(--radius-control)] px-4 py-2.5"
+                style={{
+                  minWidth: 150,
                   cursor: "pointer",
                   background: selected ? "var(--primary)" : "var(--surface-2)",
                   color: selected ? "var(--on-primary)" : "var(--text-2)",

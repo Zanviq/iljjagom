@@ -101,14 +101,20 @@ async def collab_turn(
 
     # 3) 흐름/주제 점검은 일반 메시지(accept=None)만. "제안대로"(true)·"이대로 갈래요"(false)는
     #    모두 흐름 점검 없이 바로 생성한다 — false=학생 의도 고수(아동 주도성, 05 §2.1 규칙3).
-    if accept is None:
+    # 교사가 정한 지도 강도(06 §5): off 면 점검을 아예 생략(간섭 0), light=흐름만, standard=흐름+주제.
+    from app.services.policy import resolve_coaching_level
+
+    coaching_level = resolve_coaching_level(store, book_id)
+    if accept is None and coaching_level != "off":
         decision = await _skill(
             trace, "assess_flow",
-            {"book_id": book_id, "chapter_idx": idx, "intent": message}, "의도 점검",
+            {"book_id": book_id, "chapter_idx": idx, "intent": message,
+             "coaching_level": coaching_level}, "의도 점검",
         )
         if decision is None:
             decision = await chat.assess_flow(
-                gemini, store.get_bible(book_id).data, prev_body, objective, message
+                gemini, store.get_bible(book_id).data, prev_body, objective, message,
+                coaching_level=coaching_level,
             )
         if decision.get("action") == "coach":
             text = sanitize_reply(

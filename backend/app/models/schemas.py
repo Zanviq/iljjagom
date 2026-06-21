@@ -289,6 +289,8 @@ class BookDetail(CamelModel):
     class_id: str | None = None
     chapters: list[ChapterMeta] = []
     total_chapters_planned: int | None = None
+    # 읽기 진입 시 시작할 장(이어가기) — 중간활동 후 1장으로 되돌아가는 버그 방지(06 §6).
+    current_chapter_idx: int | None = None
 
 
 # --- 기획 인터뷰 ---

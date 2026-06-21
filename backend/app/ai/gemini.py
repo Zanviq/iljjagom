@@ -155,8 +155,16 @@ class GeminiClient:
             return None
 
         def _call() -> bytes | None:
+            # 종횡비 4:3(가로) 고정 — 읽기 화면 카드 비율과 맞춰 잘림 방지(06 §2).
+            cfg = None
+            try:
+                from google.genai import types
+
+                cfg = types.GenerateImagesConfig(number_of_images=1, aspect_ratio="4:3")
+            except Exception:
+                cfg = None
             resp = self._client.models.generate_images(
-                model=self.settings.imagen_model, prompt=prompt
+                model=self.settings.imagen_model, prompt=prompt, config=cfg
             )
             images = getattr(resp, "generated_images", None) or []
             if not images:

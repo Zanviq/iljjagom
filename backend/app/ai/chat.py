@@ -158,32 +158,56 @@ def _coach_text(reasons: list[str], objective: str | None) -> str:
 
 async def assess_flow(
     gemini: GeminiClient, bible: dict, prev_paragraph: str, objective: str | None,
-    student_intent: str,
+    student_intent: str, coaching_level: str = "light",
 ) -> dict:
     """학생 의도가 (a)흐름(직전 문단과 자연스러운가)·(b)주제에 맞는지 판정(학생/15 §2.4).
 
     반환 `{action:'generate'|'coach', reasons:[...], suggestion:str|None}`.
     결말/secretArc 는 참조·노출하지 않는다(기·승 단계). 지도는 제안일 뿐 강제가 아니다.
+
+    coaching_level(06 §5) 로 간섭 강도 조절:
+    - off: 점검 생략(항상 generate).
+    - light(기본): 흐름이 '명백히' 끊길 때만 coach. 주제 일탈은 아동 창의성으로 허용(간섭 완화).
+    - standard: 흐름 + 주제 모두 점검(종전 동작).
     """
+    if coaching_level == "off":
+        return {"action": "generate", "reasons": [], "suggestion": None}
+    check_topic = coaching_level == "standard"
+
     if gemini.mock:
         # 결정적 휴리스틱: 첫 문단이거나 직전 문단과 공통 내용어가 있으면 흐름 OK → generate.
         if not (prev_paragraph or "").strip():
             return {"action": "generate", "reasons": [], "suggestion": None}
         if _content_tokens(prev_paragraph) & _content_tokens(student_intent):
             return {"action": "generate", "reasons": [], "suggestion": None}
+        # light/standard 모두 흐름 단절은 coach. (mock 은 주제 판정 안 함)
         reasons = ["흐름"]
         return {"action": "coach", "reasons": reasons, "suggestion": _coach_text(reasons, objective)}
 
-    obj_line = f"이번 장 학습 주제: {objective}\n" if objective else ""
+    obj_line = f"이번 장 학습 주제: {objective}\n" if (objective and check_topic) else ""
     brief = bible_brief(bible)
     brief_block = f"{brief}\n" if brief else ""
+    if check_topic:
+        criteria = (
+            "(a) 직전 문단과 자연스럽게 이어지는지 (b) 아래 [이야기 설정]의 인물·세계·주제에서 "
+            "크게 벗어나지 않는지 판단한다. "
+        )
+        reasons_hint = '["흐름"|"주제"]'
+    else:
+        # light: 흐름만. 주제/창의성은 폭넓게 허용해 간섭을 줄인다.
+        criteria = (
+            "직전 문단과 '명백히' 이어지지 않아 이야기가 갑자기 끊길 때만 살짝 돕는다. "
+            "엉뚱하거나 새로운 상상은 아이의 창의성이니 그대로 존중해 generate 한다. "
+        )
+        reasons_hint = '["흐름"]'
     prompt = (
         "너는 어린이 작가를 돕는 다정한 글쓰기 코치다. 학생이 다음에 쓰고 싶다고 한 내용이 "
-        "(a) 직전 문단과 자연스럽게 이어지는지 (b) 아래 [이야기 설정]의 인물·세계·주제에서 벗어나지 않는지 판단한다. "
+        f"{criteria}"
+        "되도록 generate 를 우선하고, 정말 어색할 때만 coach 한다. "
         "이야기의 결말이나 앞으로의 줄거리는 절대 참조·언급하지 않는다. "
-        "괜찮으면 그대로 진행하고, 어색하면 학생 의도를 먼저 긍정한 뒤 더 나은 방향을 근거와 함께 제안한다. "
+        "coach 일 때는 학생 의도를 먼저 긍정한 뒤 더 나은 방향을 부드럽게 제안한다. "
         "반드시 아래 JSON 하나만 출력한다(설명·코드블록 금지).\n"
-        '{"action":"generate|coach","reasons":["흐름"|"주제"],'
+        '{"action":"generate|coach","reasons":' + reasons_hint + ","
         '"suggestion":"coach 일 때 \'물론 그것도 좋아! 근데 …\' 한두 문장, generate 면 null"}\n\n'
         f"{brief_block}{obj_line}직전 문단: {prev_paragraph or '(아직 없음)'}\n학생이 쓰고 싶은 것: {student_intent}\n\nJSON:"
     )
@@ -195,6 +219,12 @@ async def assess_flow(
         if isinstance(data, dict) and data.get("action") in ("generate", "coach"):
             data.setdefault("reasons", [])
             data.setdefault("suggestion", None)
+            # light 모드에서 모델이 '주제' 이유를 내도 무시(흐름만 인정) — 간섭 완화 보장.
+            if not check_topic and data.get("action") == "coach":
+                rs = [r for r in (data.get("reasons") or []) if r == "흐름"]
+                if not rs:
+                    return {"action": "generate", "reasons": [], "suggestion": None}
+                data["reasons"] = rs
             return data
     except Exception:
         pass

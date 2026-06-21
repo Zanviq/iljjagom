@@ -28,8 +28,11 @@ class AssessFlow(Skill):
         bible, event, chapter = resolve(ctx.store, book_id, idx)
         paras = ctx.store.list_paragraphs(chapter.id) if chapter else []
         prev_body = paras[-1].body if paras else ""
+        from app.services.policy import resolve_coaching_level
+
+        level = args.get("coaching_level") or resolve_coaching_level(ctx.store, book_id)
         decision = await chat.assess_flow(
-            ctx.gemini, bible, prev_body, event.get("objective"), intent
+            ctx.gemini, bible, prev_body, event.get("objective"), intent, coaching_level=level
         )
         ctx.log_tokens(ctx.model_for("chat"), estimate_tokens(intent + prev_body), 0)
         return decision

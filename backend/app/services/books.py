@@ -83,17 +83,21 @@ def create_book(store: Store, user: CurrentUser, prompt_id: str) -> Book:
 
 
 # --- GET /books (내 책 목록/이어 읽기) ---
-def _resume_for(store: Store, rec) -> tuple[int | None, str | None, str | None]:
+def _resume_for(store: Store, rec, chapters=None) -> tuple[int | None, str | None, str | None]:
     """이어가기 목적지(05-기능수정 §03): (현재 챕터 idx, mode, stage).
 
     plan → collab(미완 free) → mid_activity(기·승 후 필수) → read(전·결) → done 순.
+    chapters 를 넘기면 재조회하지 않는다(목록 N+1 완화, 06 §7).
     """
     from app.services import midactivity
     from app.services.collab import COLLAB_TARGET_PARAGRAPHS
 
     if rec.status == "planning":
         return 1, "free", "plan"
-    chapters = sorted(store.list_chapters(rec.id), key=lambda c: c.idx)
+    chapters = sorted(
+        chapters if chapters is not None else store.list_chapters(rec.id),
+        key=lambda c: c.idx,
+    )
     if not chapters:
         return None, None, None
     # 미완 free 챕터(기·승) → 협업 이어쓰기.
@@ -122,11 +126,12 @@ def list_books(store: Store, user: CurrentUser) -> BooksResponse:
     for rec in records:
         # chaptersDone = 학생이 진입해 본문이 있는(char_count>0) 챕터 수.
         # 선생성(prefetch)만 된 미진입 챕터는 제외(진척 과대 방지, 학생/06).
+        chapters = store.list_chapters(rec.id)  # 책당 1회만 조회(N+1 완화, 06 §7)
         done = sum(
-            1 for c in store.list_chapters(rec.id)
+            1 for c in chapters
             if c.char_count > 0 and not getattr(c, "prefetched", False)
         )
-        idx, mode, stage = _resume_for(store, rec)
+        idx, mode, stage = _resume_for(store, rec, chapters)
         summaries.append(
             BookSummary(
                 id=rec.id,
@@ -147,6 +152,7 @@ def list_books(store: Store, user: CurrentUser) -> BooksResponse:
 def get_book_detail(store: Store, user: CurrentUser, book_id: str) -> BookDetail:
     book = get_book_or_404(store, book_id)
     assert_can_access_book(store, user, book)
+    raw_chapters = store.list_chapters(book_id)  # 1회 조회 후 재사용(06 §7)
     chapters = [
         ChapterMeta(
             idx=c.idx,
@@ -155,8 +161,9 @@ def get_book_detail(store: Store, user: CurrentUser, book_id: str) -> BookDetail
             has_illustration=bool(c.illustration_path),
             paragraph_count=len(store.list_paragraphs(c.id)),
         )
-        for c in store.list_chapters(book_id)
+        for c in raw_chapters
     ]
+    cur_idx, _mode, _stage = _resume_for(store, book, raw_chapters)  # 이어가기 시작 장(06 §6)
     return BookDetail(
         id=book.id,
         status=book.status,
@@ -165,6 +172,7 @@ def get_book_detail(store: Store, user: CurrentUser, book_id: str) -> BookDetail
         class_id=book.classroom_id,
         chapters=chapters,
         total_chapters_planned=book.total_chapters_planned,
+        current_chapter_idx=cur_idx,
     )
 
 

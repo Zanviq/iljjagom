@@ -98,7 +98,7 @@ export default async function PromptDetailPage({
             </thead>
             <tbody>
               {submissions.map((s) => (
-                <SubmissionRow key={s.studentId} classId={classId} sub={s} />
+                <SubmissionRow key={s.bookId} classId={classId} sub={s} />
               ))}
             </tbody>
           </table>

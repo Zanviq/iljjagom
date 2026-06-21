@@ -37,6 +37,7 @@ export default async function ReadPage({
       bookId={bookId}
       title={book.title}
       totalChaptersPlanned={book.totalChaptersPlanned}
+      initialChapterIdx={book.currentChapterIdx ?? undefined}
     />
   );
 }

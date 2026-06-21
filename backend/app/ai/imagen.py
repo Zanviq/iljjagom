@@ -48,7 +48,10 @@ def _build_image_prompt(summary: str, characters: list[dict]) -> str:
     return (
         "어린이 동화책 삽화, 따뜻하고 부드러운 색감, 안전한 그림체. "
         "같은 인물은 항상 같은 외형(머리·눈·복장·특징)으로 일관되게 그린다. "
-        f"등장인물: {who}. 장면: {summary}"
+        f"등장인물: {who}. 장면: {summary}. "
+        # 글자 박힘 방지(이미지 안에 텍스트/영어/캡션 금지) — 한국어+영어로 강하게 지시.
+        "그림 안에 글자·문자·단어·숫자·자막·말풍선·서명·워터마크를 절대 넣지 않는다. "
+        "No text, no letters, no words, no captions, no writing, no watermark, no signature anywhere in the image."
     )
 
 

@@ -30,3 +30,21 @@ def resolve_safety_level(store: Store, book_id: str | None = None) -> str:
         if lvl in _LEVELS:
             return lvl
     return "standard"
+
+
+_COACHING_LEVELS = ("off", "light", "standard")
+
+
+def resolve_coaching_level(store: Store, book_id: str | None = None) -> str:
+    """자유집필 AI 지도 강도 해석(06 §5): 학급(class_settings.coachingLevel) > 기본(light).
+
+    off=점검 생략, light=흐름만(주제 일탈 허용), standard=흐름+주제. 기본은 간섭 완화 위해 light.
+    """
+    if book_id:
+        book = store.get_book(book_id)
+        if book and book.classroom_id:
+            cs = store.get_class_settings(book.classroom_id)
+            lvl = (cs.value or {}).get("coachingLevel") if cs else None
+            if lvl in _COACHING_LEVELS:
+                return lvl
+    return "light"
