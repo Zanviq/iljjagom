@@ -36,6 +36,11 @@ class Store(ABC):
     def get_profile(self, user_id: str) -> ProfileRecord | None: ...
 
     @abstractmethod
+    def get_profiles(self, user_ids: list[str]) -> dict[str, ProfileRecord]:
+        """여러 프로필을 한 번에 조회해 {id: record} 로 반환(목록 화면의 N+1 회피)."""
+        ...
+
+    @abstractmethod
     def upsert_profile(self, profile: ProfileRecord) -> ProfileRecord: ...
 
     @abstractmethod

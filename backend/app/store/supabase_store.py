@@ -64,6 +64,15 @@ class SupabaseStore(Store):
         )
         return ProfileRecord(**row) if row else None
 
+    def get_profiles(self, user_ids: list[str]) -> dict[str, ProfileRecord]:
+        ids = list({uid for uid in user_ids if uid})
+        if not ids:
+            return {}
+        rows = self._rows(
+            self.client.table("profiles").select("*").in_("id", ids).execute()
+        )
+        return {r["id"]: ProfileRecord(**r) for r in rows}
+
     def upsert_profile(self, profile: ProfileRecord) -> ProfileRecord:
         # status 는 보내지 않아 기존 값/DB 기본(active) 보존(관리자 deactivate 덮어쓰기 방지).
         payload = {

@@ -73,6 +73,9 @@ class InMemoryStore(Store):
     def get_profile(self, user_id: str) -> ProfileRecord | None:
         return self.profiles.get(user_id)
 
+    def get_profiles(self, user_ids: list[str]) -> dict[str, ProfileRecord]:
+        return {uid: self.profiles[uid] for uid in set(user_ids) if uid in self.profiles}
+
     def upsert_profile(self, profile: ProfileRecord) -> ProfileRecord:
         if not profile.created_at:
             profile.created_at = now_iso()
