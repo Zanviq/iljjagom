@@ -69,7 +69,18 @@ async def list_sessions(
     sessions = store.list_ai_sessions(
         book_id=book_id, status=status, role=role, since=since, until=until, limit=limit
     )
-    views = [_enrich_session(store, s) for s in sessions]
+    # 책·프로필을 미리 일괄 조회해 세션마다의 get_book/get_profile N+1 을 제거한다.
+    books = {
+        bid: b
+        for bid in {s.book_id for s in sessions if s.book_id}
+        if (b := store.get_book(bid))
+    }
+    owner_ids = {
+        (books[s.book_id].student_id if s.book_id in books else s.user_id)
+        for s in sessions
+    }
+    profiles = store.get_profiles([oid for oid in owner_ids if oid])
+    views = [_enrich_session(store, s, books=books, profiles=profiles) for s in sessions]
     # userId 필터(세션의 책 소유 학생 기준).
     if user_id:
         views = [v for v in views if v.user_id == user_id]
@@ -81,13 +92,20 @@ def _stage_label(role: str | None) -> str | None:
     return _STAGE_LABEL.get(role or "", role)
 
 
-def _enrich_session(store: Store, s: AiSessionRecord) -> AiSessionView:
+def _enrich_session(
+    store: Store,
+    s: AiSessionRecord,
+    *,
+    books: dict | None = None,
+    profiles: dict | None = None,
+) -> AiSessionView:
     view = _session_view(s)
     view.stage = _stage_label(s.role)
     # 책 소유 학생 → userId/userEmail + 책 제목·상태. book 없는 세션은 session.user_id 로.
+    # books/profiles 캐시가 주어지면 그것을 쓰고, 없으면(단건 호출) 직접 조회한다.
     owner_id = None
     if s.book_id:
-        book = store.get_book(s.book_id)
+        book = books.get(s.book_id) if books is not None else store.get_book(s.book_id)
         if book:
             owner_id = book.student_id
             view.book_title = book.title
@@ -96,7 +114,7 @@ def _enrich_session(store: Store, s: AiSessionRecord) -> AiSessionView:
         owner_id = s.user_id
     if owner_id:
         view.user_id = owner_id
-        prof = store.get_profile(owner_id)
+        prof = profiles.get(owner_id) if profiles is not None else store.get_profile(owner_id)
         view.user_email = prof.email if prof else None
     steps = store.list_ai_steps(s.id)
     view.step_count = len(steps)
