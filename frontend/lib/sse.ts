@@ -78,15 +78,16 @@ export async function streamChapter(opts: StreamChapterOptions): Promise<void> {
     if (done) break;
     buffer += decoder.decode(value, { stream: true });
 
-    // 이벤트는 빈 줄(\n\n)로 구분된다.
-    let sep: number;
-    while ((sep = buffer.indexOf("\n\n")) !== -1) {
+    // 이벤트는 빈 줄로 구분된다. 프록시/서버가 CRLF(\r\n\r\n)를 쓸 수 있어 둘 다 허용.
+    let m: RegExpMatchArray | null;
+    while ((m = buffer.match(/\r?\n\r?\n/)) !== null) {
+      const sep = m.index!;
       const chunk = buffer.slice(0, sep);
-      buffer = buffer.slice(sep + 2);
+      buffer = buffer.slice(sep + m[0].length);
 
       let eventName = "message";
       const dataLines: string[] = [];
-      for (const line of chunk.split("\n")) {
+      for (const line of chunk.split(/\r?\n/)) {
         if (line.startsWith(":")) continue; // 하트비트 코멘트
         if (line.startsWith("event:")) eventName = line.slice(6).trim();
         else if (line.startsWith("data:")) dataLines.push(line.slice(5).trim());
