@@ -1,6 +1,8 @@
 # === 일짜곰 프로젝트 비공개 작업 공간 ===
 # for-claude 폴더는 GitHub에 올라가면 안 된다 (작업 기록/기획/지침 전체)
 documents/for-claude/
+# 에이전트 팀 운영 폴더도 비공개 (지침/작업 메모/핸드오프/버전기록)
+documents/for-claude-agents-team/
 
 # Obsidian 보관용 메타데이터
 .obsidian/
